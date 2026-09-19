@@ -50,7 +50,7 @@ func main() {
 		fmt.Println("  (none)")
 	}
 
-	fmt.Println("\nPackage dependencies:")
+	fmt.Println("\nPackage call dependencies:")
 	dependencies := query.Dependencies(g, graph.NodePackage)
 	if len(dependencies) == 0 {
 		fmt.Println("  (none)")
