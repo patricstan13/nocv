@@ -44,6 +44,43 @@ func TestAddNodeRejectsMissingParent(t *testing.T) {
 	}
 }
 
+func TestAncestorOfKind(t *testing.T) {
+	g := New()
+	pkgID := PackageID("example.com/project")
+	structID := ChildID(pkgID, "Service")
+	methodID := ChildID(structID, "Create")
+	for _, node := range []Node{
+		{ID: pkgID, Kind: NodePackage, Name: "project"},
+		{ID: structID, Kind: NodeStruct, Name: "Service", Parent: pkgID},
+		{ID: methodID, Kind: NodeFunction, Name: "Create", Parent: structID},
+	} {
+		if err := g.AddNode(node); err != nil {
+			t.Fatalf("AddNode(%q): %v", node.ID, err)
+		}
+	}
+
+	for _, test := range []struct {
+		name string
+		id   SymbolID
+		kind NodeKind
+		want SymbolID
+		ok   bool
+	}{
+		{name: "nearest struct", id: methodID, kind: NodeStruct, want: structID, ok: true},
+		{name: "package", id: methodID, kind: NodePackage, want: pkgID, ok: true},
+		{name: "self", id: structID, kind: NodeStruct, want: structID, ok: true},
+		{name: "missing kind", id: methodID, kind: NodeInterface},
+		{name: "missing node", id: "missing", kind: NodePackage},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got, ok := g.AncestorOfKind(test.id, test.kind)
+			if got != test.want || ok != test.ok {
+				t.Fatalf("AncestorOfKind(%q, %s) = (%q, %v), want (%q, %v)", test.id, test.kind, got, ok, test.want, test.ok)
+			}
+		})
+	}
+}
+
 func TestCallsEdgesAggregateEvidenceAndSupportBothDirections(t *testing.T) {
 	g := New()
 	pkgID := PackageID("example.com/project")

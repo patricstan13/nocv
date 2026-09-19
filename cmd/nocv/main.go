@@ -7,6 +7,7 @@ import (
 
 	"nocv/goanalyzer"
 	"nocv/graph"
+	"nocv/query"
 )
 
 func main() {
@@ -47,6 +48,23 @@ func main() {
 	}
 	if !printed {
 		fmt.Println("  (none)")
+	}
+
+	fmt.Println("\nPackage dependencies:")
+	dependencies := query.Dependencies(g, graph.NodePackage)
+	if len(dependencies) == 0 {
+		fmt.Println("  (none)")
+	}
+	var previous graph.SymbolID
+	for _, dependency := range dependencies {
+		if dependency.From != previous {
+			if previous != "" {
+				fmt.Println()
+			}
+			fmt.Println(dependency.From)
+			previous = dependency.From
+		}
+		fmt.Printf("  -> %s\n", dependency.To)
 	}
 }
 

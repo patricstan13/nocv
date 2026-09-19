@@ -162,6 +162,26 @@ func (g *Graph) Children(parent SymbolID) []SymbolID {
 	return append([]SymbolID(nil), g.children[parent]...)
 }
 
+// AncestorOfKind returns the nearest node at or above id with one of the
+// requested kinds. A node is considered its own ancestor for this operation.
+func (g *Graph) AncestorOfKind(id SymbolID, kinds ...NodeKind) (SymbolID, bool) {
+	requested := make(map[NodeKind]bool, len(kinds))
+	for _, kind := range kinds {
+		requested[kind] = true
+	}
+	current, ok := g.nodes[id]
+	for ok {
+		if requested[current.Kind] {
+			return current.ID, true
+		}
+		if current.Parent == "" {
+			break
+		}
+		current, ok = g.nodes[current.Parent]
+	}
+	return "", false
+}
+
 // Nodes returns copies of all nodes, sorted by ID.
 func (g *Graph) Nodes() []*Node {
 	ids := make([]string, 0, len(g.nodes))
