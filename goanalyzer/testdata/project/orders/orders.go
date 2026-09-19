@@ -53,3 +53,11 @@ func ConvertOnly(value rune) string {
 type Box[T any] struct{}
 
 func (b *Box[T]) Get() {}
+
+func Outer() {
+	fn := func() {
+		Validate()
+	}
+
+	_ = fn
+}

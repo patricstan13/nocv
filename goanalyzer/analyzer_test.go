@@ -38,6 +38,7 @@ func TestLoadDiscoversStructuralHierarchy(t *testing.T) {
 		"example.com/shop/orders::NewService":        {graph.NodeFunction, "NewService", "example.com/shop/orders"},
 		"example.com/shop/orders::Box":               {graph.NodeStruct, "Box", "example.com/shop/orders"},
 		"example.com/shop/orders::Box::Get":          {graph.NodeFunction, "Get", "example.com/shop/orders::Box"},
+		"example.com/shop/orders::Outer":             {graph.NodeFunction, "Outer", "example.com/shop/orders"},
 	}
 
 	if got := len(g.Nodes()); got != len(want) {
@@ -68,6 +69,7 @@ func TestLoadDiscoversStructuralHierarchy(t *testing.T) {
 		"example.com/shop/orders::Validate",
 		"example.com/shop/orders::ExternalOnly",
 		"example.com/shop/orders::ConvertOnly",
+		"example.com/shop/orders::Outer",
 	})
 	assertChildren(t, g, "example.com/shop/orders::Repository", []graph.SymbolID{
 		"example.com/shop/orders::Repository::Save",
@@ -118,6 +120,13 @@ func TestLoadDiscoversCalls(t *testing.T) {
 	incoming := g.Incoming("example.com/shop/orders::Repository::Save", graph.EdgeCalls)
 	if len(incoming) != 1 || incoming[0].From != "example.com/shop/orders::Service::Create" {
 		t.Fatalf("incoming calls to Repository.Save = %#v, want one from Service.Create", incoming)
+	}
+
+	if edges := g.Outgoing(
+		"example.com/shop/orders::Outer",
+		graph.EdgeCalls,
+	); len(edges) != 0 {
+		t.Fatalf("Outer unexpectedly has calls: %#v", edges)
 	}
 
 	for _, id := range []graph.SymbolID{
