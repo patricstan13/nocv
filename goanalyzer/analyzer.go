@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"go/types"
 	"sort"
 	"strings"
 
@@ -24,7 +25,7 @@ func Load(ctx context.Context, dir string, patterns ...string) (*graph.Graph, er
 	pkgs, err := packages.Load(&packages.Config{
 		Context: ctx,
 		Dir:     dir,
-		Mode:    packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles | packages.NeedSyntax,
+		Mode:    packages.LoadSyntax,
 		Tests:   false,
 	}, patterns...)
 	if err != nil {
@@ -36,9 +37,15 @@ func Load(ctx context.Context, dir string, patterns ...string) (*graph.Graph, er
 
 	sort.Slice(pkgs, func(i, j int) bool { return pkgs[i].PkgPath < pkgs[j].PkgPath })
 	g := graph.New()
+	symbols := make(map[types.Object]graph.SymbolID)
 	for _, pkg := range pkgs {
-		if err := addPackage(g, pkg); err != nil {
+		if err := addPackage(g, pkg, symbols); err != nil {
 			return nil, fmt.Errorf("analyze package %s: %w", pkg.PkgPath, err)
+		}
+	}
+	for _, pkg := range pkgs {
+		if err := addCalls(g, pkg, symbols); err != nil {
+			return nil, fmt.Errorf("analyze calls in package %s: %w", pkg.PkgPath, err)
 		}
 	}
 	return g, nil
@@ -63,7 +70,7 @@ type sourceFile struct {
 	file *ast.File
 }
 
-func addPackage(g *graph.Graph, pkg *packages.Package) error {
+func addPackage(g *graph.Graph, pkg *packages.Package, symbols map[types.Object]graph.SymbolID) error {
 	files := orderedFiles(pkg)
 	pkgID := graph.PackageID(pkg.PkgPath)
 	location := graph.Location{}
@@ -91,7 +98,7 @@ func addPackage(g *graph.Graph, pkg *packages.Package) error {
 				if typeSpec.Assign.IsValid() { // aliases are not new structural declarations
 					continue
 				}
-				if err := addType(g, pkg.Fset, pkgID, typeSpec); err != nil {
+				if err := addType(g, pkg, pkgID, typeSpec, symbols); err != nil {
 					return err
 				}
 			}
@@ -116,9 +123,11 @@ func addPackage(g *graph.Graph, pkg *packages.Package) error {
 				}
 				parent = candidate
 			}
-			if err := addFunction(g, pkg.Fset, parent, fn.Name.Name, fn.Name.Pos()); err != nil {
+			functionID, err := addFunction(g, pkg.Fset, parent, fn.Name.Name, fn.Name.Pos())
+			if err != nil {
 				return err
 			}
+			registerSymbol(symbols, pkg.TypesInfo.Defs[fn.Name], functionID)
 		}
 	}
 	return nil
@@ -137,7 +146,13 @@ func orderedFiles(pkg *packages.Package) []sourceFile {
 	return files
 }
 
-func addType(g *graph.Graph, fset *token.FileSet, pkgID graph.SymbolID, spec *ast.TypeSpec) error {
+func addType(
+	g *graph.Graph,
+	pkg *packages.Package,
+	pkgID graph.SymbolID,
+	spec *ast.TypeSpec,
+	symbols map[types.Object]graph.SymbolID,
+) error {
 	var kind graph.NodeKind
 	switch spec.Type.(type) {
 	case *ast.StructType:
@@ -154,7 +169,7 @@ func addType(g *graph.Graph, fset *token.FileSet, pkgID graph.SymbolID, spec *as
 		Kind:     kind,
 		Name:     spec.Name.Name,
 		Parent:   pkgID,
-		Location: sourceLocation(fset, spec.Name.Pos()),
+		Location: sourceLocation(pkg.Fset, spec.Name.Pos()),
 	}); err != nil {
 		return err
 	}
@@ -165,23 +180,102 @@ func addType(g *graph.Graph, fset *token.FileSet, pkgID graph.SymbolID, spec *as
 				continue // embedded interface/type terms are not structural nodes
 			}
 			for _, name := range field.Names {
-				if err := addFunction(g, fset, typeID, name.Name, name.Pos()); err != nil {
+				functionID, err := addFunction(g, pkg.Fset, typeID, name.Name, name.Pos())
+				if err != nil {
 					return err
 				}
+				registerSymbol(symbols, pkg.TypesInfo.Defs[name], functionID)
 			}
 		}
 	}
 	return nil
 }
 
-func addFunction(g *graph.Graph, fset *token.FileSet, parent graph.SymbolID, name string, pos token.Pos) error {
-	return g.AddNode(graph.Node{
-		ID:       graph.ChildID(parent, name),
+func addFunction(g *graph.Graph, fset *token.FileSet, parent graph.SymbolID, name string, pos token.Pos) (graph.SymbolID, error) {
+	id := graph.ChildID(parent, name)
+	err := g.AddNode(graph.Node{
+		ID:       id,
 		Kind:     graph.NodeFunction,
 		Name:     name,
 		Parent:   parent,
 		Location: sourceLocation(fset, pos),
 	})
+	return id, err
+}
+
+func registerSymbol(symbols map[types.Object]graph.SymbolID, object types.Object, id graph.SymbolID) {
+	if object != nil {
+		symbols[object] = id
+	}
+}
+
+func addCalls(g *graph.Graph, pkg *packages.Package, symbols map[types.Object]graph.SymbolID) error {
+	for _, source := range orderedFiles(pkg) {
+		for _, decl := range source.file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			callerID, ok := symbols[pkg.TypesInfo.Defs[fn.Name]]
+			if !ok {
+				continue
+			}
+
+			var visitErr error
+			ast.Inspect(fn.Body, func(node ast.Node) bool {
+				if visitErr != nil {
+					return false
+				}
+				call, ok := node.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				target, ok := calledFunction(pkg.TypesInfo, call.Fun)
+				if !ok {
+					return true
+				}
+				calleeID, represented := symbols[target]
+				if !represented {
+					return true
+				}
+				visitErr = g.AddEdge(graph.Edge{
+					From:     callerID,
+					To:       calleeID,
+					Kind:     graph.EdgeCalls,
+					Evidence: []graph.Location{sourceLocation(pkg.Fset, call.Pos())},
+				})
+				return visitErr == nil
+			})
+			if visitErr != nil {
+				return visitErr
+			}
+		}
+	}
+	return nil
+}
+
+func calledFunction(info *types.Info, expr ast.Expr) (*types.Func, bool) {
+	var object types.Object
+	switch expr := expr.(type) {
+	case *ast.Ident:
+		object = info.Uses[expr]
+	case *ast.SelectorExpr:
+		if selection := info.Selections[expr]; selection != nil {
+			object = selection.Obj()
+		} else {
+			object = info.Uses[expr.Sel]
+		}
+	case *ast.ParenExpr:
+		return calledFunction(info, expr.X)
+	case *ast.IndexExpr:
+		return calledFunction(info, expr.X)
+	case *ast.IndexListExpr:
+		return calledFunction(info, expr.X)
+	default:
+		return nil, false
+	}
+	function, ok := object.(*types.Func)
+	return function, ok
 }
 
 func receiverName(fields *ast.FieldList) string {

@@ -28,6 +28,26 @@ func main() {
 		fmt.Printf("%s [package] (%s)\n", node.Name, node.ID)
 		printChildren(g, node.ID, "")
 	}
+
+	fmt.Println("\nCalls:")
+	printed := false
+	for _, node := range g.Nodes() {
+		if node.Kind != graph.NodeFunction {
+			continue
+		}
+		edges := g.Outgoing(node.ID, graph.EdgeCalls)
+		if len(edges) == 0 {
+			continue
+		}
+		printed = true
+		fmt.Println(node.ID)
+		for _, edge := range edges {
+			fmt.Printf("  -> %s (%d call site(s))\n", edge.To, len(edge.Evidence))
+		}
+	}
+	if !printed {
+		fmt.Println("  (none)")
+	}
 }
 
 func printChildren(g *graph.Graph, parent graph.SymbolID, indent string) {

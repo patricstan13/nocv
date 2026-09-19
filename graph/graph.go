@@ -52,6 +52,32 @@ type Node struct {
 	Location Location
 }
 
+// EdgeKind identifies a semantic relationship between two nodes.
+type EdgeKind uint8
+
+const (
+	EdgeCalls EdgeKind = iota
+)
+
+// String returns the human-readable name of an edge kind.
+func (k EdgeKind) String() string {
+	switch k {
+	case EdgeCalls:
+		return "calls"
+	default:
+		return fmt.Sprintf("EdgeKind(%d)", k)
+	}
+}
+
+// Edge is one language-independent semantic relationship. Evidence records
+// every source location that established the relationship.
+type Edge struct {
+	From     SymbolID
+	To       SymbolID
+	Kind     EdgeKind
+	Evidence []Location
+}
+
 // PackageID constructs a package identity.
 func PackageID(importPath string) SymbolID {
 	return SymbolID(importPath)
@@ -67,6 +93,15 @@ func ChildID(parent SymbolID, name string) SymbolID {
 type Graph struct {
 	nodes    map[SymbolID]*Node
 	children map[SymbolID][]SymbolID
+	outgoing map[SymbolID][]*Edge
+	incoming map[SymbolID][]*Edge
+	edges    map[edgeKey]*Edge
+}
+
+type edgeKey struct {
+	from SymbolID
+	to   SymbolID
+	kind EdgeKind
 }
 
 // New creates an empty graph.
@@ -74,6 +109,9 @@ func New() *Graph {
 	return &Graph{
 		nodes:    make(map[SymbolID]*Node),
 		children: make(map[SymbolID][]SymbolID),
+		outgoing: make(map[SymbolID][]*Edge),
+		incoming: make(map[SymbolID][]*Edge),
+		edges:    make(map[edgeKey]*Edge),
 	}
 }
 
@@ -138,4 +176,85 @@ func (g *Graph) Nodes() []*Node {
 		nodes = append(nodes, node)
 	}
 	return nodes
+}
+
+// AddEdge adds a semantic relationship. Repeated relationships are merged and
+// contribute additional unique evidence locations to the existing edge.
+func (g *Graph) AddEdge(edge Edge) error {
+	from, fromExists := g.nodes[edge.From]
+	if !fromExists {
+		return fmt.Errorf("edge source %q does not exist", edge.From)
+	}
+	to, toExists := g.nodes[edge.To]
+	if !toExists {
+		return fmt.Errorf("edge target %q does not exist", edge.To)
+	}
+	if edge.Kind != EdgeCalls {
+		return fmt.Errorf("unsupported edge kind %d", edge.Kind)
+	}
+	if from.Kind != NodeFunction || to.Kind != NodeFunction {
+		return fmt.Errorf("calls edge %q -> %q must connect functions", edge.From, edge.To)
+	}
+	if len(edge.Evidence) == 0 {
+		return fmt.Errorf("calls edge %q -> %q has no evidence", edge.From, edge.To)
+	}
+
+	key := edgeKey{from: edge.From, to: edge.To, kind: edge.Kind}
+	if existing, ok := g.edges[key]; ok {
+		appendUniqueEvidence(existing, edge.Evidence)
+		return nil
+	}
+
+	copy := edge
+	copy.Evidence = nil
+	appendUniqueEvidence(&copy, edge.Evidence)
+	g.edges[key] = &copy
+	g.outgoing[edge.From] = append(g.outgoing[edge.From], &copy)
+	g.incoming[edge.To] = append(g.incoming[edge.To], &copy)
+	return nil
+}
+
+// Outgoing returns semantic edges originating at id. If kinds are supplied,
+// only matching edge kinds are returned.
+func (g *Graph) Outgoing(id SymbolID, kinds ...EdgeKind) []*Edge {
+	return copyEdges(g.outgoing[id], kinds)
+}
+
+// Incoming returns semantic edges targeting id. If kinds are supplied, only
+// matching edge kinds are returned.
+func (g *Graph) Incoming(id SymbolID, kinds ...EdgeKind) []*Edge {
+	return copyEdges(g.incoming[id], kinds)
+}
+
+func appendUniqueEvidence(edge *Edge, evidence []Location) {
+	for _, candidate := range evidence {
+		duplicate := false
+		for _, existing := range edge.Evidence {
+			if candidate == existing {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			edge.Evidence = append(edge.Evidence, candidate)
+		}
+	}
+}
+
+func copyEdges(edges []*Edge, kinds []EdgeKind) []*Edge {
+	requested := make(map[EdgeKind]bool, len(kinds))
+	for _, kind := range kinds {
+		requested[kind] = true
+	}
+
+	result := make([]*Edge, 0, len(edges))
+	for _, edge := range edges {
+		if len(requested) > 0 && !requested[edge.Kind] {
+			continue
+		}
+		copy := *edge
+		copy.Evidence = append([]Location(nil), edge.Evidence...)
+		result = append(result, &copy)
+	}
+	return result
 }
