@@ -211,14 +211,44 @@ func (g *Graph) AddEdge(edge Edge) error {
 	if !toExists {
 		return fmt.Errorf("edge target %q does not exist", edge.To)
 	}
-	if edge.Kind != EdgeCalls {
+	switch edge.Kind {
+	case EdgeCalls:
+		if from.Kind != NodeFunction || to.Kind != NodeFunction {
+			return fmt.Errorf(
+				"calls edge %q -> %q must connect functions",
+				edge.From,
+				edge.To,
+			)
+		}
+
+	case EdgeImplements:
+		validTypeImplementation :=
+			from.Kind == NodeStruct &&
+				to.Kind == NodeInterface
+
+		validMethodImplementation :=
+			from.Kind == NodeFunction &&
+				to.Kind == NodeFunction
+
+		if !validTypeImplementation && !validMethodImplementation {
+			return fmt.Errorf(
+				"implements edge %q -> %q must connect struct -> interface or function -> function",
+				edge.From,
+				edge.To,
+			)
+		}
+
+	default:
 		return fmt.Errorf("unsupported edge kind %d", edge.Kind)
 	}
-	if from.Kind != NodeFunction || to.Kind != NodeFunction {
-		return fmt.Errorf("calls edge %q -> %q must connect functions", edge.From, edge.To)
-	}
+
 	if len(edge.Evidence) == 0 {
-		return fmt.Errorf("calls edge %q -> %q has no evidence", edge.From, edge.To)
+		return fmt.Errorf(
+			"%s edge %q -> %q has no evidence",
+			edge.Kind,
+			edge.From,
+			edge.To,
+		)
 	}
 
 	key := edgeKey{from: edge.From, to: edge.To, kind: edge.Kind}
