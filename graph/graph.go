@@ -4,6 +4,7 @@ package graph
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 )
 
@@ -65,8 +66,6 @@ func (k EdgeKind) String() string {
 	switch k {
 	case EdgeCalls:
 		return "calls"
-	case EdgeImplements:
-		return "implements"
 	default:
 		return fmt.Sprintf("EdgeKind(%d)", k)
 	}
@@ -212,22 +211,14 @@ func (g *Graph) AddEdge(edge Edge) error {
 	if !toExists {
 		return fmt.Errorf("edge target %q does not exist", edge.To)
 	}
-	switch edge.Kind {
-	case EdgeCalls:
-		if from.Kind != NodeFunction || to.Kind != NodeFunction {
-			return fmt.Errorf("calls edge %q -> %q must connect functions", edge.From, edge.To)
-		}
-	case EdgeImplements:
-		validTypes := from.Kind == NodeStruct && to.Kind == NodeInterface
-		validMethods := from.Kind == NodeFunction && to.Kind == NodeFunction
-		if !validTypes && !validMethods {
-			return fmt.Errorf("implements edge %q -> %q must connect struct to interface or function to function", edge.From, edge.To)
-		}
-	default:
+	if edge.Kind != EdgeCalls {
 		return fmt.Errorf("unsupported edge kind %d", edge.Kind)
 	}
+	if from.Kind != NodeFunction || to.Kind != NodeFunction {
+		return fmt.Errorf("calls edge %q -> %q must connect functions", edge.From, edge.To)
+	}
 	if len(edge.Evidence) == 0 {
-		return fmt.Errorf("%s edge %q -> %q has no evidence", edge.Kind, edge.From, edge.To)
+		return fmt.Errorf("calls edge %q -> %q has no evidence", edge.From, edge.To)
 	}
 
 	key := edgeKey{from: edge.From, to: edge.To, kind: edge.Kind}
@@ -259,13 +250,7 @@ func (g *Graph) Incoming(id SymbolID, kinds ...EdgeKind) []*Edge {
 
 func appendUniqueEvidence(edge *Edge, evidence []Location) {
 	for _, candidate := range evidence {
-		duplicate := false
-		for _, existing := range edge.Evidence {
-			if candidate == existing {
-				duplicate = true
-				break
-			}
-		}
+		duplicate := slices.Contains(edge.Evidence, candidate)
 		if !duplicate {
 			edge.Evidence = append(edge.Evidence, candidate)
 		}

@@ -349,8 +349,8 @@ func addMethodImplementations(
 	interfaceType *types.Interface,
 ) error {
 	methodSet := types.NewMethodSet(concreteType)
-	for index := 0; index < interfaceType.NumMethods(); index++ {
-		interfaceMethod := interfaceType.Method(index)
+	for interfaceMethod := range interfaceType.Methods() {
+		interfaceMethod := interfaceMethod
 		interfaceMethodID, represented := symbols.objects[interfaceMethod]
 		if !represented || !isDirectChild(g, interfaceMethodID, interfaceID) {
 			continue
