@@ -23,6 +23,9 @@ type Dependency struct {
 	Evidence []CallEvidence
 }
 
+// DependencyExplanation explains one direct projected call dependency.
+type DependencyExplanation = Dependency
+
 type dependencyKey struct {
 	from graph.SymbolID
 	to   graph.SymbolID
@@ -73,6 +76,44 @@ func Dependencies(g *graph.Graph, levels ...graph.NodeKind) []Dependency {
 		return dependencies[i].From < dependencies[j].From
 	})
 	return dependencies
+}
+
+// WhyDependsOn returns the stored call relationships that produce the direct
+// projected dependency from -> to. It does not search for transitive paths.
+func WhyDependsOn(g *graph.Graph, from, to graph.SymbolID) (DependencyExplanation, bool) {
+	if g == nil {
+		return DependencyExplanation{}, false
+	}
+	fromNode, fromExists := g.Node(from)
+	toNode, toExists := g.Node(to)
+	if !fromExists || !toExists {
+		return DependencyExplanation{}, false
+	}
+
+	levels, supported := explanationLevels(fromNode.Kind, toNode.Kind)
+	if !supported {
+		return DependencyExplanation{}, false
+	}
+	for _, dependency := range Dependencies(g, levels...) {
+		if dependency.From == from && dependency.To == to {
+			return dependency, true
+		}
+	}
+	return DependencyExplanation{}, false
+}
+
+func explanationLevels(from, to graph.NodeKind) ([]graph.NodeKind, bool) {
+	if from == graph.NodePackage && to == graph.NodePackage {
+		return []graph.NodeKind{graph.NodePackage}, true
+	}
+	if isTypeLevel(from) && isTypeLevel(to) {
+		return []graph.NodeKind{graph.NodeStruct, graph.NodeInterface}, true
+	}
+	return nil, false
+}
+
+func isTypeLevel(kind graph.NodeKind) bool {
+	return kind == graph.NodeStruct || kind == graph.NodeInterface
 }
 
 func supportedLevels(levels []graph.NodeKind) bool {

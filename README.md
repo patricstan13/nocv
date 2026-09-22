@@ -15,4 +15,5 @@ The graph model is language-independent. Go syntax trees are used only inside
 `goanalyzer` and are converted into graph nodes and semantic edges before being
 returned. The CLI prints both the hierarchy and a simple `Calls` section.
 It also projects calls into direct package dependencies without storing another
-semantic edge kind.
+semantic edge kind, and can explain each direct dependency using the underlying
+call relationships and source locations.

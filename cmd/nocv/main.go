@@ -86,6 +86,33 @@ func main() {
 		}
 		fmt.Printf("  -> %s\n", dependency.To)
 	}
+
+	printDependencyExplanations(g, dependencies)
+}
+
+func printDependencyExplanations(g *graph.Graph, dependencies []query.Dependency) {
+	fmt.Println("\nDependency explanations:")
+	if len(dependencies) == 0 {
+		fmt.Println("  (none)")
+		return
+	}
+	for index, dependency := range dependencies {
+		explanation, ok := query.WhyDependsOn(g, dependency.From, dependency.To)
+		if !ok {
+			continue
+		}
+		if index > 0 {
+			fmt.Println()
+		}
+		fmt.Printf("%s -> %s\n", explanation.From, explanation.To)
+		for _, evidence := range explanation.Evidence {
+			fmt.Printf("  because %s\n", evidence.From)
+			fmt.Printf("    calls %s\n", evidence.To)
+			for _, location := range evidence.Locations {
+				fmt.Printf("    at %s:%d\n", location.File, location.Offset)
+			}
+		}
+	}
 }
 
 func printChildren(g *graph.Graph, parent graph.SymbolID, indent string) {
