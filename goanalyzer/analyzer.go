@@ -37,7 +37,7 @@ func Load(ctx context.Context, dir string, patterns ...string) (*graph.Graph, er
 
 	sort.Slice(pkgs, func(i, j int) bool { return pkgs[i].PkgPath < pkgs[j].PkgPath })
 	g := graph.New()
-	symbols := make(map[types.Object]graph.SymbolID)
+	symbols := newSymbolIndex()
 	for _, pkg := range pkgs {
 		if err := addPackage(g, pkg, symbols); err != nil {
 			return nil, fmt.Errorf("analyze package %s: %w", pkg.PkgPath, err)
@@ -47,6 +47,9 @@ func Load(ctx context.Context, dir string, patterns ...string) (*graph.Graph, er
 		if err := addCalls(g, pkg, symbols); err != nil {
 			return nil, fmt.Errorf("analyze calls in package %s: %w", pkg.PkgPath, err)
 		}
+	}
+	if err := addImplementations(g, symbols); err != nil {
+		return nil, fmt.Errorf("analyze interface implementations: %w", err)
 	}
 	return g, nil
 }
@@ -70,7 +73,19 @@ type sourceFile struct {
 	file *ast.File
 }
 
-func addPackage(g *graph.Graph, pkg *packages.Package, symbols map[types.Object]graph.SymbolID) error {
+type symbolIndex struct {
+	objects    map[types.Object]graph.SymbolID
+	namedTypes map[graph.SymbolID]*types.Named
+}
+
+func newSymbolIndex() *symbolIndex {
+	return &symbolIndex{
+		objects:    make(map[types.Object]graph.SymbolID),
+		namedTypes: make(map[graph.SymbolID]*types.Named),
+	}
+}
+
+func addPackage(g *graph.Graph, pkg *packages.Package, symbols *symbolIndex) error {
 	files := orderedFiles(pkg)
 	pkgID := graph.PackageID(pkg.PkgPath)
 	location := graph.Location{}
@@ -127,7 +142,7 @@ func addPackage(g *graph.Graph, pkg *packages.Package, symbols map[types.Object]
 			if err != nil {
 				return err
 			}
-			registerSymbol(symbols, pkg.TypesInfo.Defs[fn.Name], functionID)
+			registerSymbol(symbols.objects, pkg.TypesInfo.Defs[fn.Name], functionID)
 		}
 	}
 	return nil
@@ -151,7 +166,7 @@ func addType(
 	pkg *packages.Package,
 	pkgID graph.SymbolID,
 	spec *ast.TypeSpec,
-	symbols map[types.Object]graph.SymbolID,
+	symbols *symbolIndex,
 ) error {
 	var kind graph.NodeKind
 	switch spec.Type.(type) {
@@ -173,6 +188,11 @@ func addType(
 	}); err != nil {
 		return err
 	}
+	if typeName, ok := pkg.TypesInfo.Defs[spec.Name].(*types.TypeName); ok {
+		if named, ok := typeName.Type().(*types.Named); ok {
+			symbols.namedTypes[typeID] = named
+		}
+	}
 
 	if iface, ok := spec.Type.(*ast.InterfaceType); ok {
 		for _, field := range iface.Methods.List {
@@ -184,7 +204,7 @@ func addType(
 				if err != nil {
 					return err
 				}
-				registerSymbol(symbols, pkg.TypesInfo.Defs[name], functionID)
+				registerSymbol(symbols.objects, pkg.TypesInfo.Defs[name], functionID)
 			}
 		}
 	}
@@ -209,14 +229,14 @@ func registerSymbol(symbols map[types.Object]graph.SymbolID, object types.Object
 	}
 }
 
-func addCalls(g *graph.Graph, pkg *packages.Package, symbols map[types.Object]graph.SymbolID) error {
+func addCalls(g *graph.Graph, pkg *packages.Package, symbols *symbolIndex) error {
 	for _, source := range orderedFiles(pkg) {
 		for _, decl := range source.file.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
 			if !ok || fn.Body == nil {
 				continue
 			}
-			callerID, ok := symbols[pkg.TypesInfo.Defs[fn.Name]]
+			callerID, ok := symbols.objects[pkg.TypesInfo.Defs[fn.Name]]
 			if !ok {
 				continue
 			}
@@ -239,7 +259,7 @@ func addCalls(g *graph.Graph, pkg *packages.Package, symbols map[types.Object]gr
 				if !ok {
 					return true
 				}
-				calleeID, represented := symbols[target]
+				calleeID, represented := symbols.objects[target]
 				if !represented {
 					return true
 				}
@@ -257,6 +277,116 @@ func addCalls(g *graph.Graph, pkg *packages.Package, symbols map[types.Object]gr
 		}
 	}
 	return nil
+}
+
+func addImplementations(g *graph.Graph, symbols *symbolIndex) error {
+	var structs, interfaces []*graph.Node
+	for _, node := range g.Nodes() {
+		switch node.Kind {
+		case graph.NodeStruct:
+			structs = append(structs, node)
+		case graph.NodeInterface:
+			interfaces = append(interfaces, node)
+		}
+	}
+
+	for _, structNode := range structs {
+		structType := symbols.namedTypes[structNode.ID]
+		if structType == nil || hasTypeParameters(structType) {
+			continue
+		}
+		for _, interfaceNode := range interfaces {
+			interfaceNamed := symbols.namedTypes[interfaceNode.ID]
+			if interfaceNamed == nil || hasTypeParameters(interfaceNamed) {
+				continue
+			}
+			interfaceType, ok := interfaceNamed.Underlying().(*types.Interface)
+			if !ok {
+				continue
+			}
+			interfaceType = interfaceType.Complete()
+			if interfaceType.NumMethods() == 0 || !interfaceType.IsMethodSet() {
+				continue
+			}
+
+			concreteType, implements := implementationType(structType, interfaceType)
+			if !implements {
+				continue
+			}
+			if err := g.AddEdge(graph.Edge{
+				From:     structNode.ID,
+				To:       interfaceNode.ID,
+				Kind:     graph.EdgeImplements,
+				Evidence: []graph.Location{structNode.Location},
+			}); err != nil {
+				return err
+			}
+			if err := addMethodImplementations(g, symbols, structNode.ID, interfaceNode.ID, concreteType, interfaceType); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func implementationType(named *types.Named, iface *types.Interface) (types.Type, bool) {
+	if types.Implements(named, iface) {
+		return named, true
+	}
+	pointer := types.NewPointer(named)
+	if types.Implements(pointer, iface) {
+		return pointer, true
+	}
+	return nil, false
+}
+
+func addMethodImplementations(
+	g *graph.Graph,
+	symbols *symbolIndex,
+	structID graph.SymbolID,
+	interfaceID graph.SymbolID,
+	concreteType types.Type,
+	interfaceType *types.Interface,
+) error {
+	methodSet := types.NewMethodSet(concreteType)
+	for index := 0; index < interfaceType.NumMethods(); index++ {
+		interfaceMethod := interfaceType.Method(index)
+		interfaceMethodID, represented := symbols.objects[interfaceMethod]
+		if !represented || !isDirectChild(g, interfaceMethodID, interfaceID) {
+			continue
+		}
+
+		selection := methodSet.Lookup(interfaceMethod.Pkg(), interfaceMethod.Name())
+		if selection == nil {
+			continue
+		}
+		concreteMethodID, represented := symbols.objects[selection.Obj()]
+		if !represented || !isDirectChild(g, concreteMethodID, structID) {
+			// Promoted methods prove the type-level relationship, but their
+			// declaration belongs to the embedded type rather than this struct.
+			continue
+		}
+		concreteMethod, _ := g.Node(concreteMethodID)
+		if err := g.AddEdge(graph.Edge{
+			From:     concreteMethodID,
+			To:       interfaceMethodID,
+			Kind:     graph.EdgeImplements,
+			Evidence: []graph.Location{concreteMethod.Location},
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func hasTypeParameters(named *types.Named) bool {
+	parameters := named.TypeParams()
+	return parameters != nil && parameters.Len() > 0
+}
+
+func isDirectChild(g *graph.Graph, childID, parentID graph.SymbolID) bool {
+	child, ok := g.Node(childID)
+	return ok && child.Parent == parentID
 }
 
 func calledFunction(info *types.Info, expr ast.Expr) (*types.Func, bool) {

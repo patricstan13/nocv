@@ -50,6 +50,26 @@ func main() {
 		fmt.Println("  (none)")
 	}
 
+	fmt.Println("\nImplementations:")
+	printed = false
+	for _, node := range g.Nodes() {
+		if node.Kind != graph.NodeInterface {
+			continue
+		}
+		edges := g.Incoming(node.ID, graph.EdgeImplements)
+		if len(edges) == 0 {
+			continue
+		}
+		printed = true
+		fmt.Println(node.ID)
+		for _, edge := range edges {
+			fmt.Printf("  <- %s\n", edge.From)
+		}
+	}
+	if !printed {
+		fmt.Println("  (none)")
+	}
+
 	fmt.Println("\nPackage call dependencies:")
 	dependencies := query.Dependencies(g, graph.NodePackage)
 	if len(dependencies) == 0 {

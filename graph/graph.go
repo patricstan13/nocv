@@ -57,6 +57,7 @@ type EdgeKind uint8
 
 const (
 	EdgeCalls EdgeKind = iota
+	EdgeImplements
 )
 
 // String returns the human-readable name of an edge kind.
@@ -64,6 +65,8 @@ func (k EdgeKind) String() string {
 	switch k {
 	case EdgeCalls:
 		return "calls"
+	case EdgeImplements:
+		return "implements"
 	default:
 		return fmt.Sprintf("EdgeKind(%d)", k)
 	}
@@ -209,14 +212,22 @@ func (g *Graph) AddEdge(edge Edge) error {
 	if !toExists {
 		return fmt.Errorf("edge target %q does not exist", edge.To)
 	}
-	if edge.Kind != EdgeCalls {
+	switch edge.Kind {
+	case EdgeCalls:
+		if from.Kind != NodeFunction || to.Kind != NodeFunction {
+			return fmt.Errorf("calls edge %q -> %q must connect functions", edge.From, edge.To)
+		}
+	case EdgeImplements:
+		validTypes := from.Kind == NodeStruct && to.Kind == NodeInterface
+		validMethods := from.Kind == NodeFunction && to.Kind == NodeFunction
+		if !validTypes && !validMethods {
+			return fmt.Errorf("implements edge %q -> %q must connect struct to interface or function to function", edge.From, edge.To)
+		}
+	default:
 		return fmt.Errorf("unsupported edge kind %d", edge.Kind)
 	}
-	if from.Kind != NodeFunction || to.Kind != NodeFunction {
-		return fmt.Errorf("calls edge %q -> %q must connect functions", edge.From, edge.To)
-	}
 	if len(edge.Evidence) == 0 {
-		return fmt.Errorf("calls edge %q -> %q has no evidence", edge.From, edge.To)
+		return fmt.Errorf("%s edge %q -> %q has no evidence", edge.Kind, edge.From, edge.To)
 	}
 
 	key := edgeKey{from: edge.From, to: edge.To, kind: edge.Kind}

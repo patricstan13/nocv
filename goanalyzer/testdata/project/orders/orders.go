@@ -61,3 +61,37 @@ func Outer() {
 
 	_ = fn
 }
+
+type PostgresRepository struct{}
+
+func (*PostgresRepository) Save(Order) error {
+	return nil
+}
+
+type MemoryRepository struct{}
+
+func (MemoryRepository) Save(Order) error {
+	return nil
+}
+
+type BrokenRepository struct{}
+
+type BaseRepository struct{}
+
+func (BaseRepository) Save(Order) error {
+	return nil
+}
+
+type PromotedRepository struct {
+	BaseRepository
+}
+
+type Empty interface{}
+
+type ExternalStringer struct{}
+
+func (ExternalStringer) String() string {
+	return "external"
+}
+
+var _ fmt.Stringer = ExternalStringer{}
