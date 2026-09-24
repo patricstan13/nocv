@@ -213,3 +213,70 @@ func TestImplementsEdgeRejectsInvalidEndpointKinds(t *testing.T) {
 		}
 	}
 }
+
+func TestEmbedsEdgesAcceptMatchingTypeKinds(t *testing.T) {
+	g := New()
+	pkgID := PackageID("example.com/project")
+	baseID := ChildID(pkgID, "Base")
+	childID := ChildID(pkgID, "Child")
+	readerID := ChildID(pkgID, "Reader")
+	readWriterID := ChildID(pkgID, "ReadWriter")
+	for _, node := range []Node{
+		{ID: pkgID, Kind: NodePackage, Name: "project"},
+		{ID: baseID, Kind: NodeStruct, Name: "Base", Parent: pkgID},
+		{ID: childID, Kind: NodeStruct, Name: "Child", Parent: pkgID},
+		{ID: readerID, Kind: NodeInterface, Name: "Reader", Parent: pkgID},
+		{ID: readWriterID, Kind: NodeInterface, Name: "ReadWriter", Parent: pkgID},
+	} {
+		if err := g.AddNode(node); err != nil {
+			t.Fatalf("AddNode(%q): %v", node.ID, err)
+		}
+	}
+
+	evidence := []Location{{File: "project.go", Offset: 10}}
+	for _, edge := range []Edge{
+		{From: childID, To: baseID, Kind: EdgeEmbeds, Evidence: evidence},
+		{From: readWriterID, To: readerID, Kind: EdgeEmbeds, Evidence: evidence},
+	} {
+		if err := g.AddEdge(edge); err != nil {
+			t.Fatalf("AddEdge(%q -> %q): %v", edge.From, edge.To, err)
+		}
+	}
+
+	if got := g.Outgoing(childID, EdgeEmbeds); len(got) != 1 || got[0].To != baseID {
+		t.Fatalf("struct embedding edges = %#v", got)
+	}
+	if got := g.Incoming(readerID, EdgeEmbeds); len(got) != 1 || got[0].From != readWriterID {
+		t.Fatalf("interface embedding edges = %#v", got)
+	}
+}
+
+func TestEmbedsEdgeRejectsMismatchedEndpointKinds(t *testing.T) {
+	g := New()
+	pkgID := PackageID("example.com/project")
+	structID := ChildID(pkgID, "Struct")
+	interfaceID := ChildID(pkgID, "Interface")
+	functionID := ChildID(pkgID, "Function")
+	for _, node := range []Node{
+		{ID: pkgID, Kind: NodePackage, Name: "project"},
+		{ID: structID, Kind: NodeStruct, Name: "Struct", Parent: pkgID},
+		{ID: interfaceID, Kind: NodeInterface, Name: "Interface", Parent: pkgID},
+		{ID: functionID, Kind: NodeFunction, Name: "Function", Parent: pkgID},
+	} {
+		if err := g.AddNode(node); err != nil {
+			t.Fatalf("AddNode(%q): %v", node.ID, err)
+		}
+	}
+
+	evidence := []Location{{File: "project.go"}}
+	for _, edge := range []Edge{
+		{From: structID, To: interfaceID, Kind: EdgeEmbeds, Evidence: evidence},
+		{From: interfaceID, To: structID, Kind: EdgeEmbeds, Evidence: evidence},
+		{From: functionID, To: functionID, Kind: EdgeEmbeds, Evidence: evidence},
+		{From: pkgID, To: pkgID, Kind: EdgeEmbeds, Evidence: evidence},
+	} {
+		if err := g.AddEdge(edge); err == nil {
+			t.Errorf("AddEdge(%#v) succeeded, want an error", edge)
+		}
+	}
+}

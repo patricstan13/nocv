@@ -50,6 +50,19 @@ func TestLoadDiscoversStructuralHierarchy(t *testing.T) {
 		"example.com/shop/orders::Empty":                    {graph.NodeInterface, "Empty", "example.com/shop/orders"},
 		"example.com/shop/orders::ExternalStringer":         {graph.NodeStruct, "ExternalStringer", "example.com/shop/orders"},
 		"example.com/shop/orders::ExternalStringer::String": {graph.NodeFunction, "String", "example.com/shop/orders::ExternalStringer"},
+		"example.com/shop/orders::EmbeddedBase":             {graph.NodeStruct, "EmbeddedBase", "example.com/shop/orders"},
+		"example.com/shop/orders::EmbeddedChild":            {graph.NodeStruct, "EmbeddedChild", "example.com/shop/orders"},
+		"example.com/shop/orders::PointerEmbeddedChild":     {graph.NodeStruct, "PointerEmbeddedChild", "example.com/shop/orders"},
+		"example.com/shop/orders::NamedFieldChild":          {graph.NodeStruct, "NamedFieldChild", "example.com/shop/orders"},
+		"example.com/shop/orders::Holder":                   {graph.NodeStruct, "Holder", "example.com/shop/orders"},
+		"example.com/shop/orders::Reader":                   {graph.NodeInterface, "Reader", "example.com/shop/orders"},
+		"example.com/shop/orders::Reader::Read":             {graph.NodeFunction, "Read", "example.com/shop/orders::Reader"},
+		"example.com/shop/orders::Writer":                   {graph.NodeInterface, "Writer", "example.com/shop/orders"},
+		"example.com/shop/orders::Writer::Write":            {graph.NodeFunction, "Write", "example.com/shop/orders::Writer"},
+		"example.com/shop/orders::ReadWriter":               {graph.NodeInterface, "ReadWriter", "example.com/shop/orders"},
+		"example.com/shop/orders::Number":                   {graph.NodeInterface, "Number", "example.com/shop/orders"},
+		"example.com/shop/orders::HTTPWrapper":              {graph.NodeStruct, "HTTPWrapper", "example.com/shop/orders"},
+		"example.com/shop/orders::ExternalReader":           {graph.NodeInterface, "ExternalReader", "example.com/shop/orders"},
 	}
 
 	if got := len(g.Nodes()); got != len(want) {
@@ -82,6 +95,17 @@ func TestLoadDiscoversStructuralHierarchy(t *testing.T) {
 		"example.com/shop/orders::PromotedRepository",
 		"example.com/shop/orders::Empty",
 		"example.com/shop/orders::ExternalStringer",
+		"example.com/shop/orders::EmbeddedBase",
+		"example.com/shop/orders::EmbeddedChild",
+		"example.com/shop/orders::PointerEmbeddedChild",
+		"example.com/shop/orders::NamedFieldChild",
+		"example.com/shop/orders::Holder",
+		"example.com/shop/orders::Reader",
+		"example.com/shop/orders::Writer",
+		"example.com/shop/orders::ReadWriter",
+		"example.com/shop/orders::Number",
+		"example.com/shop/orders::HTTPWrapper",
+		"example.com/shop/orders::ExternalReader",
 		"example.com/shop/orders::NewService",
 		"example.com/shop/orders::Process",
 		"example.com/shop/orders::Validate",
@@ -109,6 +133,12 @@ func TestLoadDiscoversStructuralHierarchy(t *testing.T) {
 	})
 	assertChildren(t, g, "example.com/shop/orders::BaseRepository", []graph.SymbolID{
 		"example.com/shop/orders::BaseRepository::Save",
+	})
+	assertChildren(t, g, "example.com/shop/orders::Reader", []graph.SymbolID{
+		"example.com/shop/orders::Reader::Read",
+	})
+	assertChildren(t, g, "example.com/shop/orders::Writer", []graph.SymbolID{
+		"example.com/shop/orders::Writer::Write",
 	})
 }
 
@@ -231,6 +261,82 @@ func TestLoadDiscoversInterfaceImplementations(t *testing.T) {
 	}
 	if edges := g.Outgoing("example.com/shop/orders::PromotedRepository", graph.EdgeImplements); len(edges) != 1 || edges[0].To != repositoryID {
 		t.Fatalf("promoted-method type implementation = %#v, want Repository", edges)
+	}
+}
+
+func TestLoadDiscoversEmbeddings(t *testing.T) {
+	g, err := Load(context.Background(), filepath.Join("testdata", "project"), "./...")
+	if err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+
+	wantOutgoing := map[graph.SymbolID][]graph.SymbolID{
+		"example.com/shop/orders::PromotedRepository":   {"example.com/shop/orders::BaseRepository"},
+		"example.com/shop/orders::EmbeddedChild":        {"example.com/shop/orders::EmbeddedBase"},
+		"example.com/shop/orders::PointerEmbeddedChild": {"example.com/shop/orders::EmbeddedBase"},
+		"example.com/shop/orders::Holder":               {"example.com/shop/orders::Box"},
+		"example.com/shop/orders::ReadWriter": {
+			"example.com/shop/orders::Reader",
+			"example.com/shop/orders::Writer",
+		},
+	}
+	for from, wantTargets := range wantOutgoing {
+		edges := g.Outgoing(from, graph.EdgeEmbeds)
+		if len(edges) != len(wantTargets) {
+			t.Fatalf("embeddings from %q = %#v, want %v", from, edges, wantTargets)
+		}
+		for index, edge := range edges {
+			if edge.To != wantTargets[index] {
+				t.Errorf("embedding %d from %q targets %q, want %q", index, from, edge.To, wantTargets[index])
+			}
+			assertValidEvidence(t, edge)
+		}
+	}
+
+	incoming := g.Incoming("example.com/shop/orders::EmbeddedBase", graph.EdgeEmbeds)
+	if len(incoming) != 2 {
+		t.Fatalf("incoming EmbeddedBase embeddings = %#v, want two", incoming)
+	}
+	wantSources := map[graph.SymbolID]bool{
+		"example.com/shop/orders::EmbeddedChild":        true,
+		"example.com/shop/orders::PointerEmbeddedChild": true,
+	}
+	for _, edge := range incoming {
+		if !wantSources[edge.From] {
+			t.Errorf("unexpected EmbeddedBase embedding source %q", edge.From)
+		}
+	}
+
+	for _, id := range []graph.SymbolID{
+		"example.com/shop/orders::NamedFieldChild",
+		"example.com/shop/orders::Reader",
+		"example.com/shop/orders::Writer",
+		"example.com/shop/orders::Number",
+		"example.com/shop/orders::HTTPWrapper",
+		"example.com/shop/orders::ExternalReader",
+	} {
+		if edges := g.Outgoing(id, graph.EdgeEmbeds); len(edges) != 0 {
+			t.Errorf("Outgoing(%q, embeds) = %#v, want none", id, edges)
+		}
+	}
+	for _, id := range []graph.SymbolID{
+		"net/http::Client",
+		"io::Reader",
+		"example.com/shop/orders::Box[int]",
+	} {
+		if node, exists := g.Node(id); exists {
+			t.Errorf("synthetic or external node %q unexpectedly exists: %#v", id, node)
+		}
+	}
+
+	// Existing semantic passes remain intact when embedding edges are added.
+	assertCall(t, g,
+		"example.com/shop/orders::Service::Create",
+		"example.com/shop/orders::Repository::Save",
+		1,
+	)
+	if edges := g.Outgoing("example.com/shop/orders::PromotedRepository", graph.EdgeImplements); len(edges) != 1 {
+		t.Fatalf("PromotedRepository implementation edges = %#v, want one", edges)
 	}
 }
 

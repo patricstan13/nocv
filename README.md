@@ -4,7 +4,8 @@ NOCV discovers the structural hierarchy of Go projects—packages, structs,
 interfaces, functions, struct methods, and interface methods—and resolved
 function-to-function call relationships within the analyzed project.
 It also records struct-to-interface and concrete-method-to-interface-method
-implementation relationships established by Go's type system.
+implementation relationships established by Go's type system, plus explicit
+struct and interface embedding relationships.
 
 ```sh
 go run ./cmd/nocv .

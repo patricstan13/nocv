@@ -2,6 +2,8 @@ package orders
 
 import (
 	"fmt"
+	"io"
+	"net/http"
 
 	"example.com/shop/logging"
 )
@@ -95,3 +97,46 @@ func (ExternalStringer) String() string {
 }
 
 var _ fmt.Stringer = ExternalStringer{}
+
+type EmbeddedBase struct{}
+
+type EmbeddedChild struct {
+	EmbeddedBase
+}
+
+type PointerEmbeddedChild struct {
+	*EmbeddedBase
+}
+
+type NamedFieldChild struct {
+	base EmbeddedBase
+}
+
+type Holder struct {
+	Box[int]
+}
+
+type Reader interface {
+	Read() error
+}
+
+type Writer interface {
+	Write() error
+}
+
+type ReadWriter interface {
+	Reader
+	Writer
+}
+
+type Number interface {
+	~int | ~float64
+}
+
+type HTTPWrapper struct {
+	http.Client
+}
+
+type ExternalReader interface {
+	io.Reader
+}

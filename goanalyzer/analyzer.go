@@ -48,6 +48,11 @@ func Load(ctx context.Context, dir string, patterns ...string) (*graph.Graph, er
 			return nil, fmt.Errorf("analyze calls in package %s: %w", pkg.PkgPath, err)
 		}
 	}
+	for _, pkg := range pkgs {
+		if err := addEmbeddings(g, pkg, symbols); err != nil {
+			return nil, fmt.Errorf("analyze embeddings in package %s: %w", pkg.PkgPath, err)
+		}
+	}
 	if err := addImplementations(g, symbols); err != nil {
 		return nil, fmt.Errorf("analyze interface implementations: %w", err)
 	}
@@ -189,6 +194,7 @@ func addType(
 		return err
 	}
 	if typeName, ok := pkg.TypesInfo.Defs[spec.Name].(*types.TypeName); ok {
+		registerSymbol(symbols.objects, typeName, typeID)
 		if named, ok := typeName.Type().(*types.Named); ok {
 			symbols.namedTypes[typeID] = named
 		}
@@ -277,6 +283,99 @@ func addCalls(g *graph.Graph, pkg *packages.Package, symbols *symbolIndex) error
 		}
 	}
 	return nil
+}
+
+func addEmbeddings(g *graph.Graph, pkg *packages.Package, symbols *symbolIndex) error {
+	for _, source := range orderedFiles(pkg) {
+		for _, declaration := range source.file.Decls {
+			general, ok := declaration.(*ast.GenDecl)
+			if !ok || general.Tok != token.TYPE {
+				continue
+			}
+			for _, specification := range general.Specs {
+				typeSpec := specification.(*ast.TypeSpec)
+				if typeSpec.Assign.IsValid() {
+					continue
+				}
+				sourceID, represented := symbols.objects[pkg.TypesInfo.Defs[typeSpec.Name]]
+				if !represented {
+					continue
+				}
+
+				var fields *ast.FieldList
+				switch declaration := typeSpec.Type.(type) {
+				case *ast.StructType:
+					fields = declaration.Fields
+				case *ast.InterfaceType:
+					fields = declaration.Methods
+				default:
+					continue
+				}
+				if err := addEmbeddedFields(g, pkg, symbols, sourceID, fields); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func addEmbeddedFields(
+	g *graph.Graph,
+	pkg *packages.Package,
+	symbols *symbolIndex,
+	sourceID graph.SymbolID,
+	fields *ast.FieldList,
+) error {
+	if fields == nil {
+		return nil
+	}
+	sourceNode, exists := g.Node(sourceID)
+	if !exists {
+		return nil
+	}
+	for _, field := range fields.List {
+		if len(field.Names) != 0 {
+			continue
+		}
+		typeName := embeddedTypeName(pkg.TypesInfo.TypeOf(field.Type))
+		if typeName == nil {
+			continue
+		}
+		targetID, represented := symbols.objects[typeName]
+		if !represented {
+			continue
+		}
+		targetNode, targetExists := g.Node(targetID)
+		if !targetExists || sourceNode.Kind != targetNode.Kind ||
+			(sourceNode.Kind != graph.NodeStruct && sourceNode.Kind != graph.NodeInterface) {
+			continue
+		}
+		if err := g.AddEdge(graph.Edge{
+			From:     sourceID,
+			To:       targetID,
+			Kind:     graph.EdgeEmbeds,
+			Evidence: []graph.Location{sourceLocation(pkg.Fset, field.Type.Pos())},
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func embeddedTypeName(typ types.Type) *types.TypeName {
+	if typ == nil {
+		return nil
+	}
+	typ = types.Unalias(typ)
+	if pointer, ok := typ.(*types.Pointer); ok {
+		typ = types.Unalias(pointer.Elem())
+	}
+	named, ok := typ.(*types.Named)
+	if !ok {
+		return nil
+	}
+	return named.Obj()
 }
 
 func addImplementations(g *graph.Graph, symbols *symbolIndex) error {
