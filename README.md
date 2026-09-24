@@ -7,6 +7,7 @@ function signature relationships record represented project structs and
 interfaces accepted or returned by functions and methods. Pointer and alias
 uses normalize to their declarations; containers and variadic parameters are
 intentionally not traversed.
+
 It also records struct-to-interface and concrete-method-to-interface-method
 implementation relationships established by Go's type system, plus explicit
 struct and interface embedding relationships.
@@ -21,4 +22,6 @@ The graph model is language-independent. Go syntax trees are used only inside
 returned. The CLI prints both the hierarchy and a simple `Calls` section.
 It also projects calls into direct package dependencies without storing another
 semantic edge kind, and can explain each direct dependency using the underlying
-call relationships and source locations.
+call relationships and source locations. Direct semantic navigation combines
+Calls, Implements, Embeds, Accepts, and Returns while preserving each stored
+relationship kind and its evidence.

@@ -92,6 +92,7 @@ func main() {
 
 	printSignatureRelationships(g, "Accepted types", graph.EdgeAccepts)
 	printSignatureRelationships(g, "Returned types", graph.EdgeReturns)
+	printDirectNavigation(g)
 
 	fmt.Println("\nPackage call dependencies:")
 	dependencies := query.Dependencies(g, graph.NodePackage)
@@ -111,6 +112,42 @@ func main() {
 	}
 
 	printDependencyExplanations(g, dependencies)
+}
+
+func printDirectNavigation(g *graph.Graph) {
+	fmt.Println("\nDirect semantic dependencies:")
+	printed := false
+	for _, node := range g.Nodes() {
+		relationships := query.DirectDependencies(g, node.ID)
+		if len(relationships) == 0 {
+			continue
+		}
+		printed = true
+		fmt.Println(node.ID)
+		for _, relationship := range relationships {
+			fmt.Printf("  %s -> %s\n", relationship.Kind, relationship.To)
+		}
+	}
+	if !printed {
+		fmt.Println("  (none)")
+	}
+
+	fmt.Println("\nDirect semantic dependents:")
+	printed = false
+	for _, node := range g.Nodes() {
+		relationships := query.DirectDependents(g, node.ID)
+		if len(relationships) == 0 {
+			continue
+		}
+		printed = true
+		fmt.Println(node.ID)
+		for _, relationship := range relationships {
+			fmt.Printf("  <- %s %s\n", relationship.Kind, relationship.From)
+		}
+	}
+	if !printed {
+		fmt.Println("  (none)")
+	}
 }
 
 func printSignatureRelationships(g *graph.Graph, heading string, kind graph.EdgeKind) {
