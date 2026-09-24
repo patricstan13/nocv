@@ -2,7 +2,11 @@
 
 NOCV discovers the structural hierarchy of Go projects—packages, structs,
 interfaces, functions, struct methods, and interface methods—and resolved
-function-to-function call relationships within the analyzed project.
+function-to-function call relationships within the analyzed project. Direct
+function signature relationships record represented project structs and
+interfaces accepted or returned by functions and methods. Pointer and alias
+uses normalize to their declarations; containers and variadic parameters are
+intentionally not traversed.
 It also records struct-to-interface and concrete-method-to-interface-method
 implementation relationships established by Go's type system, plus explicit
 struct and interface embedding relationships.

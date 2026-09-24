@@ -90,6 +90,9 @@ func main() {
 		fmt.Println("  (none)")
 	}
 
+	printSignatureRelationships(g, "Accepted types", graph.EdgeAccepts)
+	printSignatureRelationships(g, "Returned types", graph.EdgeReturns)
+
 	fmt.Println("\nPackage call dependencies:")
 	dependencies := query.Dependencies(g, graph.NodePackage)
 	if len(dependencies) == 0 {
@@ -108,6 +111,28 @@ func main() {
 	}
 
 	printDependencyExplanations(g, dependencies)
+}
+
+func printSignatureRelationships(g *graph.Graph, heading string, kind graph.EdgeKind) {
+	fmt.Printf("\n%s:\n", heading)
+	printed := false
+	for _, node := range g.Nodes() {
+		if node.Kind != graph.NodeFunction {
+			continue
+		}
+		edges := g.Outgoing(node.ID, kind)
+		if len(edges) == 0 {
+			continue
+		}
+		printed = true
+		fmt.Println(node.ID)
+		for _, edge := range edges {
+			fmt.Printf("  -> %s\n", edge.To)
+		}
+	}
+	if !printed {
+		fmt.Println("  (none)")
+	}
 }
 
 func printDependencyExplanations(g *graph.Graph, dependencies []query.Dependency) {

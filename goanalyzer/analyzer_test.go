@@ -31,9 +31,12 @@ func TestLoadDiscoversStructuralHierarchy(t *testing.T) {
 		"example.com/shop/orders::Order":                    {graph.NodeStruct, "Order", "example.com/shop/orders"},
 		"example.com/shop/orders::Repository":               {graph.NodeInterface, "Repository", "example.com/shop/orders"},
 		"example.com/shop/orders::Repository::Save":         {graph.NodeFunction, "Save", "example.com/shop/orders::Repository"},
+		"example.com/shop/orders::Processor":                {graph.NodeInterface, "Processor", "example.com/shop/orders"},
+		"example.com/shop/orders::Processor::Process":       {graph.NodeFunction, "Process", "example.com/shop/orders::Processor"},
 		"example.com/shop/orders::Service":                  {graph.NodeStruct, "Service", "example.com/shop/orders"},
 		"example.com/shop/orders::Service::Create":          {graph.NodeFunction, "Create", "example.com/shop/orders::Service"},
 		"example.com/shop/orders::Service::Health":          {graph.NodeFunction, "Health", "example.com/shop/orders::Service"},
+		"example.com/shop/orders::Service::Transform":       {graph.NodeFunction, "Transform", "example.com/shop/orders::Service"},
 		"example.com/shop/orders::Service::Validate":        {graph.NodeFunction, "Validate", "example.com/shop/orders::Service"},
 		"example.com/shop/orders::NewService":               {graph.NodeFunction, "NewService", "example.com/shop/orders"},
 		"example.com/shop/orders::Box":                      {graph.NodeStruct, "Box", "example.com/shop/orders"},
@@ -63,6 +66,16 @@ func TestLoadDiscoversStructuralHierarchy(t *testing.T) {
 		"example.com/shop/orders::Number":                   {graph.NodeInterface, "Number", "example.com/shop/orders"},
 		"example.com/shop/orders::HTTPWrapper":              {graph.NodeStruct, "HTTPWrapper", "example.com/shop/orders"},
 		"example.com/shop/orders::ExternalReader":           {graph.NodeInterface, "ExternalReader", "example.com/shop/orders"},
+		"example.com/shop/orders::HandleOrder":              {graph.NodeFunction, "HandleOrder", "example.com/shop/orders"},
+		"example.com/shop/orders::LoadPair":                 {graph.NodeFunction, "LoadPair", "example.com/shop/orders"},
+		"example.com/shop/orders::CompareOrders":            {graph.NodeFunction, "CompareOrders", "example.com/shop/orders"},
+		"example.com/shop/orders::PointerOrder":             {graph.NodeFunction, "PointerOrder", "example.com/shop/orders"},
+		"example.com/shop/orders::ExternalSignature":        {graph.NodeFunction, "ExternalSignature", "example.com/shop/orders"},
+		"example.com/shop/orders::ContainerSignature":       {graph.NodeFunction, "ContainerSignature", "example.com/shop/orders"},
+		"example.com/shop/orders::VariadicOrders":           {graph.NodeFunction, "VariadicOrders", "example.com/shop/orders"},
+		"example.com/shop/orders::FindUser":                 {graph.NodeFunction, "FindUser", "example.com/shop/orders"},
+		"example.com/shop/orders::AliasOrder":               {graph.NodeFunction, "AliasOrder", "example.com/shop/orders"},
+		"example.com/shop/orders::GenericBox":               {graph.NodeFunction, "GenericBox", "example.com/shop/orders"},
 	}
 
 	if got := len(g.Nodes()); got != len(want) {
@@ -86,6 +99,7 @@ func TestLoadDiscoversStructuralHierarchy(t *testing.T) {
 	assertChildren(t, g, "example.com/shop/orders", []graph.SymbolID{
 		"example.com/shop/orders::Order",
 		"example.com/shop/orders::Repository",
+		"example.com/shop/orders::Processor",
 		"example.com/shop/orders::Service",
 		"example.com/shop/orders::Box",
 		"example.com/shop/orders::PostgresRepository",
@@ -112,6 +126,16 @@ func TestLoadDiscoversStructuralHierarchy(t *testing.T) {
 		"example.com/shop/orders::ExternalOnly",
 		"example.com/shop/orders::ConvertOnly",
 		"example.com/shop/orders::Outer",
+		"example.com/shop/orders::HandleOrder",
+		"example.com/shop/orders::LoadPair",
+		"example.com/shop/orders::CompareOrders",
+		"example.com/shop/orders::PointerOrder",
+		"example.com/shop/orders::ExternalSignature",
+		"example.com/shop/orders::ContainerSignature",
+		"example.com/shop/orders::VariadicOrders",
+		"example.com/shop/orders::FindUser",
+		"example.com/shop/orders::AliasOrder",
+		"example.com/shop/orders::GenericBox",
 	})
 	assertChildren(t, g, "example.com/shop/orders::Repository", []graph.SymbolID{
 		"example.com/shop/orders::Repository::Save",
@@ -120,6 +144,10 @@ func TestLoadDiscoversStructuralHierarchy(t *testing.T) {
 		"example.com/shop/orders::Service::Health",
 		"example.com/shop/orders::Service::Validate",
 		"example.com/shop/orders::Service::Create",
+		"example.com/shop/orders::Service::Transform",
+	})
+	assertChildren(t, g, "example.com/shop/orders::Processor", []graph.SymbolID{
+		"example.com/shop/orders::Processor::Process",
 	})
 
 	assertChildren(t, g, "example.com/shop/orders::Box", []graph.SymbolID{
@@ -340,6 +368,80 @@ func TestLoadDiscoversEmbeddings(t *testing.T) {
 	}
 }
 
+func TestLoadDiscoversSignatureRelationships(t *testing.T) {
+	g, err := Load(context.Background(), filepath.Join("testdata", "project"), "./...")
+	if err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+
+	orderID := graph.SymbolID("example.com/shop/orders::Order")
+	repositoryID := graph.SymbolID("example.com/shop/orders::Repository")
+	boxID := graph.SymbolID("example.com/shop/orders::Box")
+
+	// Package functions cover multiple parameters/results and pointer normalization.
+	assertRelationship(t, g, "example.com/shop/orders::HandleOrder", orderID, graph.EdgeAccepts, 1)
+	assertRelationship(t, g, "example.com/shop/orders::HandleOrder", repositoryID, graph.EdgeAccepts, 1)
+	assertRelationship(t, g, "example.com/shop/orders::HandleOrder", orderID, graph.EdgeReturns, 1)
+	assertRelationship(t, g, "example.com/shop/orders::LoadPair", orderID, graph.EdgeReturns, 1)
+	assertRelationship(t, g, "example.com/shop/orders::LoadPair", repositoryID, graph.EdgeReturns, 1)
+	assertRelationship(t, g, "example.com/shop/orders::PointerOrder", orderID, graph.EdgeAccepts, 1)
+	assertRelationship(t, g, "example.com/shop/orders::PointerOrder", orderID, graph.EdgeReturns, 1)
+
+	// Repeated direct occurrences aggregate into one edge with both locations.
+	assertRelationship(t, g, "example.com/shop/orders::CompareOrders", orderID, graph.EdgeAccepts, 2)
+
+	// Concrete and interface methods use the same signature pass; receivers do not.
+	assertRelationship(t, g, "example.com/shop/orders::Service::Transform", orderID, graph.EdgeAccepts, 1)
+	assertRelationship(t, g, "example.com/shop/orders::Service::Transform", repositoryID, graph.EdgeAccepts, 1)
+	assertRelationship(t, g, "example.com/shop/orders::Service::Transform", repositoryID, graph.EdgeReturns, 1)
+	assertRelationship(t, g, "example.com/shop/orders::Processor::Process", orderID, graph.EdgeAccepts, 1)
+	assertRelationship(t, g, "example.com/shop/orders::Processor::Process", repositoryID, graph.EdgeAccepts, 1)
+	assertRelationship(t, g, "example.com/shop/orders::Processor::Process", repositoryID, graph.EdgeReturns, 1)
+	if edges := g.Outgoing("example.com/shop/orders::Service::Health", graph.EdgeAccepts); len(edges) != 0 {
+		t.Fatalf("receiver unexpectedly produced accepts edges: %#v", edges)
+	}
+
+	// Aliases and direct generic instances normalize to represented declarations.
+	assertRelationship(t, g, "example.com/shop/orders::AliasOrder", orderID, graph.EdgeAccepts, 1)
+	assertRelationship(t, g, "example.com/shop/orders::AliasOrder", orderID, graph.EdgeReturns, 1)
+	assertRelationship(t, g, "example.com/shop/orders::GenericBox", boxID, graph.EdgeAccepts, 1)
+	assertRelationship(t, g, "example.com/shop/orders::GenericBox", boxID, graph.EdgeReturns, 1)
+
+	// Builtins, external declarations, containers, variadics, and unrepresented
+	// named scalar types are deliberately outside direct signature semantics.
+	for _, id := range []graph.SymbolID{
+		"example.com/shop/orders::ConvertOnly",
+		"example.com/shop/orders::ExternalSignature",
+		"example.com/shop/orders::ContainerSignature",
+		"example.com/shop/orders::VariadicOrders",
+		"example.com/shop/orders::FindUser",
+	} {
+		if edges := g.Outgoing(id, graph.EdgeAccepts, graph.EdgeReturns); len(edges) != 0 {
+			t.Errorf("signature relationships from %q = %#v, want none", id, edges)
+		}
+	}
+	for _, id := range []graph.SymbolID{
+		"context::Context",
+		"net/http::Request",
+		"example.com/shop/orders::UserID",
+		"example.com/shop/orders::Purchase",
+		"example.com/shop/orders::Box[int]",
+	} {
+		if node, exists := g.Node(id); exists {
+			t.Errorf("external or synthetic signature node %q unexpectedly exists: %#v", id, node)
+		}
+	}
+
+	// Existing relationship passes remain intact.
+	assertCall(t, g, "example.com/shop/orders::Process", "example.com/shop/orders::Validate", 2)
+	if edges := g.Outgoing("example.com/shop/orders::PromotedRepository", graph.EdgeImplements); len(edges) != 1 {
+		t.Fatalf("PromotedRepository implementation edges = %#v, want one", edges)
+	}
+	if edges := g.Outgoing("example.com/shop/orders::EmbeddedChild", graph.EdgeEmbeds); len(edges) != 1 {
+		t.Fatalf("EmbeddedChild embedding edges = %#v, want one", edges)
+	}
+}
+
 func TestLoadProducesDeterministicIDs(t *testing.T) {
 	dir := filepath.Join("testdata", "project")
 	first, err := Load(context.Background(), dir, "./...")
@@ -392,6 +494,31 @@ func assertCall(t *testing.T, g *graph.Graph, from, to graph.SymbolID, evidenceC
 		return
 	}
 	t.Fatalf("missing call %q -> %q; outgoing: %#v", from, to, g.Outgoing(from, graph.EdgeCalls))
+}
+
+func assertRelationship(
+	t *testing.T,
+	g *graph.Graph,
+	from, to graph.SymbolID,
+	kind graph.EdgeKind,
+	evidenceCount int,
+) {
+	t.Helper()
+	for _, edge := range g.Outgoing(from, kind) {
+		if edge.To != to {
+			continue
+		}
+		if len(edge.Evidence) != evidenceCount {
+			t.Fatalf("%s relationship %q -> %q has %d evidence locations, want %d", kind, from, to, len(edge.Evidence), evidenceCount)
+		}
+		for _, evidence := range edge.Evidence {
+			if evidence.File == "" || evidence.Offset < 0 {
+				t.Errorf("%s relationship %q -> %q has invalid evidence %#v", kind, from, to, evidence)
+			}
+		}
+		return
+	}
+	t.Fatalf("missing %s relationship %q -> %q; outgoing: %#v", kind, from, to, g.Outgoing(from, kind))
 }
 
 func assertValidEvidence(t *testing.T, edge *graph.Edge) {

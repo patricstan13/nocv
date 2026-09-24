@@ -53,6 +53,11 @@ func Load(ctx context.Context, dir string, patterns ...string) (*graph.Graph, er
 			return nil, fmt.Errorf("analyze embeddings in package %s: %w", pkg.PkgPath, err)
 		}
 	}
+	for _, pkg := range pkgs {
+		if err := addSignatureRelationships(g, pkg, symbols); err != nil {
+			return nil, fmt.Errorf("analyze signatures in package %s: %w", pkg.PkgPath, err)
+		}
+	}
 	if err := addImplementations(g, symbols); err != nil {
 		return nil, fmt.Errorf("analyze interface implementations: %w", err)
 	}
@@ -338,7 +343,7 @@ func addEmbeddedFields(
 		if len(field.Names) != 0 {
 			continue
 		}
-		typeName := embeddedTypeName(pkg.TypesInfo.TypeOf(field.Type))
+		typeName := directTypeName(pkg.TypesInfo.TypeOf(field.Type))
 		if typeName == nil {
 			continue
 		}
@@ -363,7 +368,108 @@ func addEmbeddedFields(
 	return nil
 }
 
-func embeddedTypeName(typ types.Type) *types.TypeName {
+func addSignatureRelationships(g *graph.Graph, pkg *packages.Package, symbols *symbolIndex) error {
+	for _, source := range orderedFiles(pkg) {
+		for _, declaration := range source.file.Decls {
+			switch declaration := declaration.(type) {
+			case *ast.FuncDecl:
+				function, ok := pkg.TypesInfo.Defs[declaration.Name].(*types.Func)
+				if !ok {
+					continue
+				}
+				functionID, represented := symbols.objects[function]
+				if !represented {
+					continue
+				}
+				if _, ok := function.Type().(*types.Signature); !ok {
+					continue
+				}
+				if err := addSignatureFieldRelationships(g, pkg, symbols, functionID, graph.EdgeAccepts, declaration.Type.Params); err != nil {
+					return err
+				}
+				if err := addSignatureFieldRelationships(g, pkg, symbols, functionID, graph.EdgeReturns, declaration.Type.Results); err != nil {
+					return err
+				}
+
+			case *ast.GenDecl:
+				if declaration.Tok != token.TYPE {
+					continue
+				}
+				for _, specification := range declaration.Specs {
+					typeSpec := specification.(*ast.TypeSpec)
+					interfaceType, ok := typeSpec.Type.(*ast.InterfaceType)
+					if !ok {
+						continue
+					}
+					for _, field := range interfaceType.Methods.List {
+						functionType, ok := field.Type.(*ast.FuncType)
+						if !ok {
+							continue
+						}
+						for _, name := range field.Names {
+							function, ok := pkg.TypesInfo.Defs[name].(*types.Func)
+							if !ok {
+								continue
+							}
+							functionID, represented := symbols.objects[function]
+							if !represented {
+								continue
+							}
+							if _, ok := function.Type().(*types.Signature); !ok {
+								continue
+							}
+							if err := addSignatureFieldRelationships(g, pkg, symbols, functionID, graph.EdgeAccepts, functionType.Params); err != nil {
+								return err
+							}
+							if err := addSignatureFieldRelationships(g, pkg, symbols, functionID, graph.EdgeReturns, functionType.Results); err != nil {
+								return err
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func addSignatureFieldRelationships(
+	g *graph.Graph,
+	pkg *packages.Package,
+	symbols *symbolIndex,
+	functionID graph.SymbolID,
+	kind graph.EdgeKind,
+	fields *ast.FieldList,
+) error {
+	if fields == nil {
+		return nil
+	}
+	for _, field := range fields.List {
+		typeName := directTypeName(pkg.TypesInfo.TypeOf(field.Type))
+		if typeName == nil {
+			continue
+		}
+		targetID, represented := symbols.objects[typeName]
+		if !represented {
+			continue
+		}
+		targetNode, exists := g.Node(targetID)
+		if !exists || (targetNode.Kind != graph.NodeStruct && targetNode.Kind != graph.NodeInterface) {
+			continue
+		}
+		if err := g.AddEdge(graph.Edge{
+			From:     functionID,
+			To:       targetID,
+			Kind:     kind,
+			Evidence: []graph.Location{sourceLocation(pkg.Fset, field.Type.Pos())},
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func directTypeName(typ types.Type) *types.TypeName {
 	if typ == nil {
 		return nil
 	}

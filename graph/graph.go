@@ -60,6 +60,8 @@ const (
 	EdgeCalls EdgeKind = iota
 	EdgeImplements
 	EdgeEmbeds
+	EdgeAccepts
+	EdgeReturns
 )
 
 // String returns the human-readable name of an edge kind.
@@ -71,6 +73,10 @@ func (k EdgeKind) String() string {
 		return "implements"
 	case EdgeEmbeds:
 		return "embeds"
+	case EdgeAccepts:
+		return "accepts"
+	case EdgeReturns:
+		return "returns"
 	default:
 		return fmt.Sprintf("EdgeKind(%d)", k)
 	}
@@ -249,6 +255,17 @@ func (g *Graph) AddEdge(edge Edge) error {
 		if !validStructEmbedding && !validInterfaceEmbedding {
 			return fmt.Errorf(
 				"embeds edge %q -> %q must connect struct -> struct or interface -> interface",
+				edge.From,
+				edge.To,
+			)
+		}
+
+	case EdgeAccepts, EdgeReturns:
+		validTarget := to.Kind == NodeStruct || to.Kind == NodeInterface
+		if from.Kind != NodeFunction || !validTarget {
+			return fmt.Errorf(
+				"%s edge %q -> %q must connect function -> struct or function -> interface",
+				edge.Kind,
 				edge.From,
 				edge.To,
 			)

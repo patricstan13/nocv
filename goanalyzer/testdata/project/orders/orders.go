@@ -1,6 +1,7 @@
 package orders
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,10 @@ type Order struct{}
 
 type Repository interface {
 	Save(Order) error
+}
+
+type Processor interface {
+	Process(Order, Repository) Repository
 }
 
 type Service struct {
@@ -33,6 +38,10 @@ func (s *Service) Create(order Order) error {
 	s.Validate()
 	logging.Info()
 	return s.repo.Save(order)
+}
+
+func (s *Service) Transform(order Order, repo Repository) Repository {
+	return repo
 }
 
 func Process() {
@@ -62,6 +71,48 @@ func Outer() {
 	}
 
 	_ = fn
+}
+
+func HandleOrder(order Order, repo Repository) *Order {
+	return &order
+}
+
+func LoadPair() (Order, Repository, error) {
+	return Order{}, nil, nil
+}
+
+func CompareOrders(a Order, b Order) {}
+
+func PointerOrder(order *Order) *Order {
+	return order
+}
+
+func ExternalSignature(ctx context.Context) http.Request {
+	return http.Request{}
+}
+
+func ContainerSignature(
+	orders []Order,
+	byID map[string]Order,
+	stream chan Order,
+) ([]Order, map[string]Order, chan Order) {
+	return orders, byID, stream
+}
+
+func VariadicOrders(orders ...Order) {}
+
+type UserID string
+
+func FindUser(id UserID) {}
+
+type Purchase = Order
+
+func AliasOrder(order Purchase) Purchase {
+	return order
+}
+
+func GenericBox(box Box[int]) Box[int] {
+	return box
 }
 
 type PostgresRepository struct{}
