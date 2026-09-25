@@ -65,6 +65,9 @@ func PackageDependencyPaths(g *graph.Graph, from, to graph.SymbolID) []PackageDe
 }
 
 func isPackageNode(g *graph.Graph, id graph.SymbolID) bool {
+	if g == nil {
+		return false
+	}
 	node, exists := g.Node(id)
 	return exists && node.Kind == graph.NodePackage
 }

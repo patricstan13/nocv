@@ -19,6 +19,9 @@ var commandSpecs = map[string]commandSpec{
 	"implementations":   {usage: "nocv implementations <pattern>"},
 	"embeddings":        {usage: "nocv embeddings <pattern>"},
 	"signatures":        {usage: "nocv signatures <pattern>"},
+	"imports":           {usage: "nocv imports <pattern>"},
+	"package-imports":   {usage: "nocv package-imports <pattern> <package-id>", extraCount: 1},
+	"package-importers": {usage: "nocv package-importers <pattern> <package-id>", extraCount: 1},
 	"direct-deps":       {usage: "nocv direct-deps <pattern> <symbol-id>", extraCount: 1},
 	"direct-dependents": {usage: "nocv direct-dependents <pattern> <symbol-id>", extraCount: 1},
 	"impact":            {usage: "nocv impact <pattern> <symbol-id>", extraCount: 1},
@@ -36,7 +39,7 @@ type invocation struct {
 
 func parseInvocation(args []string) (invocation, error) {
 	if len(args) == 0 {
-		return invocation{}, fmt.Errorf("usage: nocv <command> <pattern> [arguments...]\ncommands: tree, calls, implementations, embeddings, signatures, direct-deps, direct-dependents, impact, paths, package-paths, package-deps, why-package-dep")
+		return invocation{}, fmt.Errorf("usage: nocv <command> <pattern> [arguments...]\ncommands: tree, calls, implementations, embeddings, signatures, imports, package-imports, package-importers, direct-deps, direct-dependents, impact, paths, package-paths, package-deps, why-package-dep")
 	}
 	spec, exists := commandSpecs[args[0]]
 	if !exists {
@@ -60,6 +63,20 @@ func executeCommand(out io.Writer, g *graph.Graph, invocation invocation) error 
 		printEdges(out, g, "Embeddings", graph.EdgeEmbeds)
 	case "signatures":
 		printSignatures(out, g)
+	case "imports":
+		printEdges(out, g, "Imports", graph.EdgeImports)
+	case "package-imports":
+		id := graph.SymbolID(invocation.values[0])
+		if err := requirePackage(g, id); err != nil {
+			return err
+		}
+		printDirectImports(out, g, id)
+	case "package-importers":
+		id := graph.SymbolID(invocation.values[0])
+		if err := requirePackage(g, id); err != nil {
+			return err
+		}
+		printDirectImporters(out, g, id)
 	case "direct-deps":
 		id := graph.SymbolID(invocation.values[0])
 		if err := requireSymbol(g, id); err != nil {

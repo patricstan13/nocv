@@ -8,6 +8,7 @@ import (
 	"go/token"
 	"go/types"
 	"sort"
+	"strconv"
 	"strings"
 
 	"golang.org/x/tools/go/packages"
@@ -44,6 +45,11 @@ func Load(ctx context.Context, dir string, patterns ...string) (*graph.Graph, er
 		}
 	}
 	for _, pkg := range pkgs {
+		if err := addImports(g, pkg); err != nil {
+			return nil, fmt.Errorf("analyze imports in package %s: %w", pkg.PkgPath, err)
+		}
+	}
+	for _, pkg := range pkgs {
 		if err := addCalls(g, pkg, symbols); err != nil {
 			return nil, fmt.Errorf("analyze calls in package %s: %w", pkg.PkgPath, err)
 		}
@@ -62,6 +68,46 @@ func Load(ctx context.Context, dir string, patterns ...string) (*graph.Graph, er
 		return nil, fmt.Errorf("analyze interface implementations: %w", err)
 	}
 	return g, nil
+}
+
+func addImports(g *graph.Graph, pkg *packages.Package) error {
+	from := graph.PackageID(pkg.PkgPath)
+	for _, source := range orderedFiles(pkg) {
+		for _, spec := range source.file.Imports {
+			imported := importedPackage(pkg, spec)
+			if imported == nil {
+				continue
+			}
+			to := graph.PackageID(imported.PkgPath)
+			if from == to {
+				continue
+			}
+			target, represented := g.Node(to)
+			if !represented || target.Kind != graph.NodePackage {
+				continue
+			}
+			if err := g.AddEdge(graph.Edge{
+				From:     from,
+				To:       to,
+				Kind:     graph.EdgeImports,
+				Evidence: []graph.Location{sourceLocation(pkg.Fset, spec.Pos())},
+			}); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func importedPackage(pkg *packages.Package, spec *ast.ImportSpec) *packages.Package {
+	if pkg == nil || spec == nil || spec.Path == nil {
+		return nil
+	}
+	path, err := strconv.Unquote(spec.Path.Value)
+	if err != nil {
+		return nil
+	}
+	return pkg.Imports[path]
 }
 
 func packageErrors(pkgs []*packages.Package) error {

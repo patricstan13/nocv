@@ -349,3 +349,45 @@ func TestSignatureEdgesRejectInvalidEndpointKinds(t *testing.T) {
 		}
 	}
 }
+
+func TestImportsEdgesRequirePackagesAndAggregateEvidence(t *testing.T) {
+	g := New()
+	from := PackageID("example.com/project/app")
+	to := PackageID("example.com/project/service")
+	function := ChildID(from, "Run")
+	structure := ChildID(to, "Service")
+	for _, node := range []Node{
+		{ID: from, Kind: NodePackage, Name: "app"},
+		{ID: to, Kind: NodePackage, Name: "service"},
+		{ID: function, Kind: NodeFunction, Name: "Run", Parent: from},
+		{ID: structure, Kind: NodeStruct, Name: "Service", Parent: to},
+	} {
+		if err := g.AddNode(node); err != nil {
+			t.Fatalf("AddNode(%q): %v", node.ID, err)
+		}
+	}
+
+	first := Location{File: "a.go", Offset: 20}
+	second := Location{File: "b.go", Offset: 40}
+	if err := g.AddEdge(Edge{From: from, To: to, Kind: EdgeImports, Evidence: []Location{first}}); err != nil {
+		t.Fatalf("first AddEdge(): %v", err)
+	}
+	if err := g.AddEdge(Edge{From: from, To: to, Kind: EdgeImports, Evidence: []Location{first, second}}); err != nil {
+		t.Fatalf("second AddEdge(): %v", err)
+	}
+	if got := g.Outgoing(from, EdgeImports); len(got) != 1 || len(got[0].Evidence) != 2 || got[0].Evidence[0] != first || got[0].Evidence[1] != second {
+		t.Fatalf("import edges = %#v, want one edge with two evidence locations", got)
+	}
+
+	evidence := []Location{{File: "imports.go"}}
+	for _, edge := range []Edge{
+		{From: function, To: to, Kind: EdgeImports, Evidence: evidence},
+		{From: from, To: function, Kind: EdgeImports, Evidence: evidence},
+		{From: structure, To: to, Kind: EdgeImports, Evidence: evidence},
+		{From: from, To: structure, Kind: EdgeImports, Evidence: evidence},
+	} {
+		if err := g.AddEdge(edge); err == nil {
+			t.Errorf("AddEdge(%#v) succeeded, want an error", edge)
+		}
+	}
+}

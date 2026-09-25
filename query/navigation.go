@@ -6,8 +6,8 @@ import (
 	"nocv/graph"
 )
 
-// Relationship is one stored semantic fact presented as direct dependency
-// navigation. Evidence is copied from the graph edge that established it.
+// Relationship is one stored graph fact presented as direct navigation.
+// Evidence is copied from the graph edge that established it.
 type Relationship struct {
 	From     graph.SymbolID
 	To       graph.SymbolID

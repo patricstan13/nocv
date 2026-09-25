@@ -103,6 +103,30 @@ func printDirectDependents(out io.Writer, g *graph.Graph, id graph.SymbolID) {
 	}
 }
 
+func printDirectImports(out io.Writer, g *graph.Graph, id graph.SymbolID) {
+	fmt.Fprintln(out, id)
+	relationships := query.DirectImports(g, id)
+	if len(relationships) == 0 {
+		fmt.Fprintln(out, "  (none)")
+		return
+	}
+	for _, relationship := range relationships {
+		fmt.Fprintf(out, "  imports -> %s\n", relationship.To)
+	}
+}
+
+func printDirectImporters(out io.Writer, g *graph.Graph, id graph.SymbolID) {
+	fmt.Fprintln(out, id)
+	relationships := query.DirectImporters(g, id)
+	if len(relationships) == 0 {
+		fmt.Fprintln(out, "  (none)")
+		return
+	}
+	for _, relationship := range relationships {
+		fmt.Fprintf(out, "  <- imports %s\n", relationship.From)
+	}
+}
+
 func printImpact(out io.Writer, g *graph.Graph, id graph.SymbolID) {
 	fmt.Fprintf(out, "Impact of %s:\n", id)
 	results := query.Impact(g, id)

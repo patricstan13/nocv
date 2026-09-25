@@ -53,7 +53,7 @@ type Node struct {
 	Location Location
 }
 
-// EdgeKind identifies a semantic relationship between two nodes.
+// EdgeKind identifies a relationship between two nodes.
 type EdgeKind uint8
 
 const (
@@ -62,6 +62,7 @@ const (
 	EdgeEmbeds
 	EdgeAccepts
 	EdgeReturns
+	EdgeImports
 )
 
 // String returns the human-readable name of an edge kind.
@@ -77,13 +78,15 @@ func (k EdgeKind) String() string {
 		return "accepts"
 	case EdgeReturns:
 		return "returns"
+	case EdgeImports:
+		return "imports"
 	default:
 		return fmt.Sprintf("EdgeKind(%d)", k)
 	}
 }
 
-// Edge is one language-independent semantic relationship. Evidence records
-// every source location that established the relationship.
+// Edge is one language-independent relationship. Evidence records every
+// source location that established the relationship.
 type Edge struct {
 	From     SymbolID
 	To       SymbolID
@@ -271,6 +274,15 @@ func (g *Graph) AddEdge(edge Edge) error {
 			)
 		}
 
+	case EdgeImports:
+		if from.Kind != NodePackage || to.Kind != NodePackage {
+			return fmt.Errorf(
+				"imports edge %q -> %q must connect packages",
+				edge.From,
+				edge.To,
+			)
+		}
+
 	default:
 		return fmt.Errorf("unsupported edge kind %d", edge.Kind)
 	}
@@ -299,14 +311,14 @@ func (g *Graph) AddEdge(edge Edge) error {
 	return nil
 }
 
-// Outgoing returns semantic edges originating at id. If kinds are supplied,
-// only matching edge kinds are returned.
+// Outgoing returns edges originating at id. If kinds are supplied, only
+// matching edge kinds are returned.
 func (g *Graph) Outgoing(id SymbolID, kinds ...EdgeKind) []*Edge {
 	return copyEdges(g.outgoing[id], kinds)
 }
 
-// Incoming returns semantic edges targeting id. If kinds are supplied, only
-// matching edge kinds are returned.
+// Incoming returns edges targeting id. If kinds are supplied, only matching
+// edge kinds are returned.
 func (g *Graph) Incoming(id SymbolID, kinds ...EdgeKind) []*Edge {
 	return copyEdges(g.incoming[id], kinds)
 }

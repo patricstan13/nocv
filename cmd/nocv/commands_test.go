@@ -68,6 +68,9 @@ func TestExecuteCommandsRenderFocusedDeterministicOutput(t *testing.T) {
 		{name: "implementations", want: []string{"Implementations:", "implements -> example.com/b::Repository"}},
 		{name: "embeddings", want: []string{"Embeddings:", "embeds -> example.com/a::Base"}},
 		{name: "signatures", want: []string{"Signatures:", "accepts -> example.com/b::Repository", "returns -> example.com/a::Base"}},
+		{name: "imports", want: []string{"Imports:", "example.com/a", "imports -> example.com/b"}, unwanted: []string{"Package call dependencies:"}},
+		{name: "package-imports", values: []string{string(ids.packageA)}, want: []string{"example.com/a", "imports -> example.com/b"}},
+		{name: "package-importers", values: []string{string(ids.packageB)}, want: []string{"example.com/b", "<- imports example.com/a"}},
 		{name: "direct-deps", values: []string{string(ids.caller)}, want: []string{string(ids.caller), "calls ->", "accepts ->"}},
 		{name: "direct-dependents", values: []string{string(ids.repository)}, want: []string{string(ids.repository), "<- implements", "<- accepts"}},
 		{name: "impact", values: []string{string(ids.callee)}, want: []string{"Impact of", string(ids.caller), "path 1:"}},
@@ -118,6 +121,8 @@ func TestExecuteCommandReportsMissingAndInvalidSymbols(t *testing.T) {
 		{name: "package-paths", values: []string{"missing", string(ids.packageB)}, want: "unknown package: missing"},
 		{name: "package-paths", values: []string{string(ids.caller), string(ids.packageB)}, want: "symbol is not a package: " + string(ids.caller)},
 		{name: "why-package-dep", values: []string{string(ids.packageA), string(ids.repository)}, want: "symbol is not a package: " + string(ids.repository)},
+		{name: "package-imports", values: []string{"missing"}, want: "unknown package: missing"},
+		{name: "package-importers", values: []string{string(ids.repository)}, want: "symbol is not a package: " + string(ids.repository)},
 	}
 	for _, test := range tests {
 		t.Run(test.name+test.want, func(t *testing.T) {
@@ -165,6 +170,7 @@ func cliFixture(t *testing.T) (*graph.Graph, cliIDs) {
 		}
 	}
 	edges := []graph.Edge{
+		{From: ids.packageA, To: ids.packageB, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "fixture.go", Offset: 1}}},
 		{From: ids.caller, To: ids.callee, Kind: graph.EdgeCalls, Evidence: []graph.Location{{File: "fixture.go", Offset: 20}, {File: "fixture.go", Offset: 40}}},
 		{From: ids.caller, To: ids.callee, Kind: graph.EdgeImplements, Evidence: []graph.Location{{File: "fixture.go", Offset: 10}}},
 		{From: ids.service, To: ids.repository, Kind: graph.EdgeImplements, Evidence: []graph.Location{{File: "fixture.go", Offset: 5}}},
