@@ -44,6 +44,10 @@ func (s *Service) Transform(order Order, repo Repository) Repository {
 	return repo
 }
 
+func RunCreate(service *Service) {
+	_ = service.Create(Order{})
+}
+
 func Process() {
 	Validate()
 	Validate()

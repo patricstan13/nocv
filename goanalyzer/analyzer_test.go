@@ -76,6 +76,7 @@ func TestLoadDiscoversStructuralHierarchy(t *testing.T) {
 		"example.com/shop/orders::FindUser":                 {graph.NodeFunction, "FindUser", "example.com/shop/orders"},
 		"example.com/shop/orders::AliasOrder":               {graph.NodeFunction, "AliasOrder", "example.com/shop/orders"},
 		"example.com/shop/orders::GenericBox":               {graph.NodeFunction, "GenericBox", "example.com/shop/orders"},
+		"example.com/shop/orders::RunCreate":                {graph.NodeFunction, "RunCreate", "example.com/shop/orders"},
 	}
 
 	if got := len(g.Nodes()); got != len(want) {
@@ -121,6 +122,7 @@ func TestLoadDiscoversStructuralHierarchy(t *testing.T) {
 		"example.com/shop/orders::HTTPWrapper",
 		"example.com/shop/orders::ExternalReader",
 		"example.com/shop/orders::NewService",
+		"example.com/shop/orders::RunCreate",
 		"example.com/shop/orders::Process",
 		"example.com/shop/orders::Validate",
 		"example.com/shop/orders::ExternalOnly",

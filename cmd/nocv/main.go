@@ -93,6 +93,7 @@ func main() {
 	printSignatureRelationships(g, "Accepted types", graph.EdgeAccepts)
 	printSignatureRelationships(g, "Returned types", graph.EdgeReturns)
 	printDirectNavigation(g)
+	printImpactExample(g)
 
 	fmt.Println("\nPackage call dependencies:")
 	dependencies := query.Dependencies(g, graph.NodePackage)
@@ -112,6 +113,35 @@ func main() {
 	}
 
 	printDependencyExplanations(g, dependencies)
+}
+
+func printImpactExample(g *graph.Graph) {
+	var changed graph.SymbolID
+	mostDirectDependents := 0
+	for _, node := range g.Nodes() {
+		count := len(query.DirectDependents(g, node.ID))
+		if count > mostDirectDependents {
+			changed = node.ID
+			mostDirectDependents = count
+		}
+	}
+
+	fmt.Println("\nImpact of:")
+	if changed == "" {
+		fmt.Println("  (none)")
+		return
+	}
+	fmt.Println(changed)
+	fmt.Println("\nPotentially affected:")
+	for _, result := range query.Impact(g, changed) {
+		fmt.Println(result.ID)
+		for index, path := range result.Paths {
+			fmt.Printf("  path %d:\n", index+1)
+			for _, step := range path.Steps {
+				fmt.Printf("    %s %s -> %s\n", step.From, step.Kind, step.To)
+			}
+		}
+	}
 }
 
 func printDirectNavigation(g *graph.Graph) {

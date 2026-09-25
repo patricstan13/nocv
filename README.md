@@ -24,4 +24,6 @@ It also projects calls into direct package dependencies without storing another
 semantic edge kind, and can explain each direct dependency using the underlying
 call relationships and source locations. Direct semantic navigation combines
 Calls, Implements, Embeds, Accepts, and Returns while preserving each stored
-relationship kind and its evidence.
+relationship kind and its evidence. Transitive impact analysis walks those
+relationships in reverse and reports every distinct simple dependency path to
+each potentially affected node.
