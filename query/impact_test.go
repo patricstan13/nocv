@@ -273,6 +273,11 @@ func TestSelfAnalysisAttributesImpactClosureCall(t *testing.T) {
 	if !hasOneStepImpact(query.Impact(g, directDependentsID), impactID, directDependentsID, graph.EdgeCalls) {
 		t.Fatal("impact analysis does not consume Impact -> DirectDependents closure call")
 	}
+
+	packagePaths := query.PackageDependencyPaths(g, "nocv/cmd/nocv", "nocv/query")
+	if len(packagePaths) == 0 {
+		t.Fatal("self-analysis lacks cmd/nocv -> query package dependency paths")
+	}
 }
 
 type branchingImpactIDs struct {

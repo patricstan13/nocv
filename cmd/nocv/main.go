@@ -95,6 +95,7 @@ func main() {
 	printDirectNavigation(g)
 	printImpactExample(g)
 	printDependencyPathExample(g)
+	printPackageDependencyPathExample(g)
 
 	fmt.Println("\nPackage call dependencies:")
 	dependencies := query.Dependencies(g, graph.NodePackage)
@@ -114,6 +115,31 @@ func main() {
 	}
 
 	printDependencyExplanations(g, dependencies)
+}
+
+func printPackageDependencyPathExample(g *graph.Graph) {
+	from := graph.SymbolID("example.com/shop/app")
+	to := graph.SymbolID("example.com/shop/repository")
+	paths := query.PackageDependencyPaths(g, from, to)
+
+	fmt.Println("\nPackage dependency paths:")
+	if len(paths) == 0 {
+		fmt.Println("  (none)")
+		return
+	}
+	fmt.Printf("%s -> %s\n", from, to)
+	for index, path := range paths {
+		fmt.Printf("  path %d:\n", index+1)
+		for _, packageID := range path.Packages {
+			fmt.Printf("    -> %s\n", packageID)
+		}
+		for evidenceIndex, evidence := range path.Evidence {
+			fmt.Printf("    evidence %d:\n", evidenceIndex+1)
+			for _, step := range evidence.Steps {
+				fmt.Printf("      %s %s -> %s\n", step.From, step.Kind, step.To)
+			}
+		}
+	}
 }
 
 func printDependencyPathExample(g *graph.Graph) {
