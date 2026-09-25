@@ -28,4 +28,6 @@ call relationships and source locations. Direct semantic navigation combines
 Calls, Implements, Embeds, Accepts, and Returns while preserving each stored
 relationship kind and its evidence. Transitive impact analysis walks those
 relationships in reverse and reports every distinct simple dependency path to
-each potentially affected node.
+each potentially affected node. Exact symbol-to-symbol dependency explanation
+uses the same semantic policy and reports every distinct simple path in stored
+dependency direction without type or package projection.

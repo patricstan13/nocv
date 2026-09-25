@@ -2,8 +2,6 @@ package query
 
 import (
 	"sort"
-	"strconv"
-	"strings"
 
 	"nocv/graph"
 )
@@ -12,20 +10,13 @@ import (
 // simple semantic dependency path from that node to the changed node.
 type ImpactResult struct {
 	ID    graph.SymbolID
-	Paths []ImpactPath
+	Paths []SemanticPath
 }
 
-// ImpactPath is one explanation of why a node may be affected.
-type ImpactPath struct {
-	Steps []ImpactStep
-}
-
-// ImpactStep is one semantic relationship in ordinary dependency direction.
-type ImpactStep struct {
-	From graph.SymbolID
-	To   graph.SymbolID
-	Kind graph.EdgeKind
-}
+// ImpactPath and ImpactStep retain the impact-specific API names while impact
+// and exact dependency explanation share one neutral path representation.
+type ImpactPath = SemanticPath
+type ImpactStep = SemanticStep
 
 // Impact returns all represented nodes with a semantic dependency path to id.
 // Paths are simple: no SymbolID is visited more than once within one path.
@@ -41,23 +32,23 @@ func Impact(g *graph.Graph, id graph.SymbolID) []ImpactResult {
 	pathKeys := make(map[graph.SymbolID]map[string]bool)
 	seen := map[graph.SymbolID]bool{id: true}
 
-	var walk func(graph.SymbolID, []ImpactStep)
-	walk = func(current graph.SymbolID, path []ImpactStep) {
+	var walk func(graph.SymbolID, []SemanticStep)
+	walk = func(current graph.SymbolID, path []SemanticStep) {
 		for _, relationship := range DirectDependents(g, current) {
 			dependent := relationship.From
 			if seen[dependent] {
 				continue
 			}
 
-			nextPath := make([]ImpactStep, len(path)+1)
-			nextPath[0] = ImpactStep{
+			nextPath := make([]SemanticStep, len(path)+1)
+			nextPath[0] = SemanticStep{
 				From: relationship.From,
 				To:   relationship.To,
 				Kind: relationship.Kind,
 			}
 			copy(nextPath[1:], path)
 
-			key := impactPathKey(nextPath)
+			key := semanticPathKey(nextPath)
 			keys := pathKeys[dependent]
 			if keys == nil {
 				keys = make(map[string]bool)
@@ -73,7 +64,7 @@ func Impact(g *graph.Graph, id graph.SymbolID) []ImpactResult {
 				result = &ImpactResult{ID: dependent}
 				byID[dependent] = result
 			}
-			result.Paths = append(result.Paths, ImpactPath{Steps: nextPath})
+			result.Paths = append(result.Paths, SemanticPath{Steps: nextPath})
 
 			seen[dependent] = true
 			walk(dependent, nextPath)
@@ -85,7 +76,7 @@ func Impact(g *graph.Graph, id graph.SymbolID) []ImpactResult {
 	results := make([]ImpactResult, 0, len(byID))
 	for _, result := range byID {
 		sort.Slice(result.Paths, func(i, j int) bool {
-			return impactPathLess(result.Paths[i], result.Paths[j])
+			return semanticPathLess(result.Paths[i], result.Paths[j])
 		})
 		results = append(results, *result)
 	}
@@ -93,44 +84,4 @@ func Impact(g *graph.Graph, id graph.SymbolID) []ImpactResult {
 		return results[i].ID < results[j].ID
 	})
 	return results
-}
-
-func impactPathLess(left, right ImpactPath) bool {
-	if len(left.Steps) != len(right.Steps) {
-		return len(left.Steps) < len(right.Steps)
-	}
-	for index := range left.Steps {
-		leftStep := left.Steps[index]
-		rightStep := right.Steps[index]
-		if leftStep.From != rightStep.From {
-			return leftStep.From < rightStep.From
-		}
-		if leftStep.Kind != rightStep.Kind {
-			return leftStep.Kind < rightStep.Kind
-		}
-		if leftStep.To != rightStep.To {
-			return leftStep.To < rightStep.To
-		}
-	}
-	return false
-}
-
-func impactPathKey(steps []ImpactStep) string {
-	var key strings.Builder
-	for _, step := range steps {
-		writePathID(&key, step.From)
-		key.WriteByte('/')
-		key.WriteString(strconv.FormatUint(uint64(step.Kind), 10))
-		key.WriteByte('/')
-		writePathID(&key, step.To)
-		key.WriteByte(';')
-	}
-	return key.String()
-}
-
-func writePathID(builder *strings.Builder, id graph.SymbolID) {
-	value := string(id)
-	builder.WriteString(strconv.Itoa(len(value)))
-	builder.WriteByte(':')
-	builder.WriteString(value)
 }

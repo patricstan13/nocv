@@ -94,6 +94,7 @@ func main() {
 	printSignatureRelationships(g, "Returned types", graph.EdgeReturns)
 	printDirectNavigation(g)
 	printImpactExample(g)
+	printDependencyPathExample(g)
 
 	fmt.Println("\nPackage call dependencies:")
 	dependencies := query.Dependencies(g, graph.NodePackage)
@@ -113,6 +114,25 @@ func main() {
 	}
 
 	printDependencyExplanations(g, dependencies)
+}
+
+func printDependencyPathExample(g *graph.Graph) {
+	from := graph.SymbolID("example.com/shop/orders::RunCreate")
+	to := graph.SymbolID("example.com/shop/orders::Order")
+	paths := query.DependencyPaths(g, from, to)
+
+	fmt.Println("\nDependency paths:")
+	if len(paths) == 0 {
+		fmt.Println("  (none)")
+		return
+	}
+	fmt.Printf("%s -> %s\n", from, to)
+	for index, path := range paths {
+		fmt.Printf("  path %d:\n", index+1)
+		for _, step := range path.Steps {
+			fmt.Printf("    %s %s -> %s\n", step.From, step.Kind, step.To)
+		}
+	}
 }
 
 func printImpactExample(g *graph.Graph) {
