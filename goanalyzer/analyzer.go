@@ -251,43 +251,49 @@ func addCalls(g *graph.Graph, pkg *packages.Package, symbols *symbolIndex) error
 			if !ok {
 				continue
 			}
-
-			var visitErr error
-			ast.Inspect(fn.Body, func(node ast.Node) bool {
-				if visitErr != nil {
-					return false
-				}
-
-				if _, ok := node.(*ast.FuncLit); ok {
-					return false
-				}
-
-				call, ok := node.(*ast.CallExpr)
-				if !ok {
-					return true
-				}
-				target, ok := calledFunction(pkg.TypesInfo, call.Fun)
-				if !ok {
-					return true
-				}
-				calleeID, represented := symbols.objects[target]
-				if !represented {
-					return true
-				}
-				visitErr = g.AddEdge(graph.Edge{
-					From:     callerID,
-					To:       calleeID,
-					Kind:     graph.EdgeCalls,
-					Evidence: []graph.Location{sourceLocation(pkg.Fset, call.Pos())},
-				})
-				return visitErr == nil
-			})
-			if visitErr != nil {
-				return visitErr
+			if err := addLexicalCalls(g, pkg, symbols, callerID, fn.Body); err != nil {
+				return err
 			}
 		}
 	}
 	return nil
+}
+
+// addLexicalCalls attributes every resolvable call in body to the fixed
+// declared caller, including calls nested inside any depth of function literal.
+func addLexicalCalls(
+	g *graph.Graph,
+	pkg *packages.Package,
+	symbols *symbolIndex,
+	callerID graph.SymbolID,
+	body *ast.BlockStmt,
+) error {
+	var visitErr error
+	ast.Inspect(body, func(node ast.Node) bool {
+		if visitErr != nil {
+			return false
+		}
+		call, ok := node.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		target, ok := calledFunction(pkg.TypesInfo, call.Fun)
+		if !ok {
+			return true
+		}
+		calleeID, represented := symbols.objects[target]
+		if !represented {
+			return true
+		}
+		visitErr = g.AddEdge(graph.Edge{
+			From:     callerID,
+			To:       calleeID,
+			Kind:     graph.EdgeCalls,
+			Evidence: []graph.Location{sourceLocation(pkg.Fset, call.Pos())},
+		})
+		return visitErr == nil
+	})
+	return visitErr
 }
 
 func addEmbeddings(g *graph.Graph, pkg *packages.Package, symbols *symbolIndex) error {

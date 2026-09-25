@@ -44,6 +44,18 @@ func (s *Service) Transform(order Order, repo Repository) Repository {
 	return repo
 }
 
+func (s *Service) ClosureCalls(repo Repository, dynamic func()) {
+	fn := func() {
+		s.Health()
+		repo.Save(Order{})
+		dynamic()
+		fmt.Println("external")
+		_ = len([]Order{})
+		_ = string('x')
+	}
+	_ = fn
+}
+
 func RunCreate(service *Service) {
 	_ = service.Create(Order{})
 }
@@ -74,6 +86,18 @@ func Outer() {
 		Validate()
 	}
 
+	_ = fn
+}
+
+func NestedClosures() {
+	Validate()
+	fn := func() {
+		nested := func() {
+			Validate()
+			Validate()
+		}
+		_ = nested
+	}
 	_ = fn
 }
 

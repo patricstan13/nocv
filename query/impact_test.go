@@ -250,6 +250,31 @@ func TestAnalyzerPipelineProvidesTransitiveImpactPaths(t *testing.T) {
 	}
 }
 
+func TestSelfAnalysisAttributesImpactClosureCall(t *testing.T) {
+	g, err := goanalyzer.Load(context.Background(), filepath.Join(".."), "./...")
+	if err != nil {
+		t.Fatalf("Load(NOCV): %v", err)
+	}
+
+	impactID := graph.SymbolID("nocv/query::Impact")
+	directDependentsID := graph.SymbolID("nocv/query::DirectDependents")
+	dependencies := query.DirectDependencies(g, impactID)
+	foundCall := false
+	for _, relationship := range dependencies {
+		if relationship.Kind == graph.EdgeCalls && relationship.To == directDependentsID {
+			foundCall = len(relationship.Evidence) == 1 && relationship.Evidence[0].File != ""
+			break
+		}
+	}
+	if !foundCall {
+		t.Fatalf("Impact direct dependencies lack closure call to DirectDependents: %#v", dependencies)
+	}
+
+	if !hasOneStepImpact(query.Impact(g, directDependentsID), impactID, directDependentsID, graph.EdgeCalls) {
+		t.Fatal("impact analysis does not consume Impact -> DirectDependents closure call")
+	}
+}
+
 type branchingImpactIDs struct {
 	changed graph.SymbolID
 	a       graph.SymbolID

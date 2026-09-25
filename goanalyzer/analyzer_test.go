@@ -3,6 +3,7 @@ package goanalyzer
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"nocv/graph"
@@ -35,6 +36,7 @@ func TestLoadDiscoversStructuralHierarchy(t *testing.T) {
 		"example.com/shop/orders::Processor::Process":       {graph.NodeFunction, "Process", "example.com/shop/orders::Processor"},
 		"example.com/shop/orders::Service":                  {graph.NodeStruct, "Service", "example.com/shop/orders"},
 		"example.com/shop/orders::Service::Create":          {graph.NodeFunction, "Create", "example.com/shop/orders::Service"},
+		"example.com/shop/orders::Service::ClosureCalls":    {graph.NodeFunction, "ClosureCalls", "example.com/shop/orders::Service"},
 		"example.com/shop/orders::Service::Health":          {graph.NodeFunction, "Health", "example.com/shop/orders::Service"},
 		"example.com/shop/orders::Service::Transform":       {graph.NodeFunction, "Transform", "example.com/shop/orders::Service"},
 		"example.com/shop/orders::Service::Validate":        {graph.NodeFunction, "Validate", "example.com/shop/orders::Service"},
@@ -42,6 +44,7 @@ func TestLoadDiscoversStructuralHierarchy(t *testing.T) {
 		"example.com/shop/orders::Box":                      {graph.NodeStruct, "Box", "example.com/shop/orders"},
 		"example.com/shop/orders::Box::Get":                 {graph.NodeFunction, "Get", "example.com/shop/orders::Box"},
 		"example.com/shop/orders::Outer":                    {graph.NodeFunction, "Outer", "example.com/shop/orders"},
+		"example.com/shop/orders::NestedClosures":           {graph.NodeFunction, "NestedClosures", "example.com/shop/orders"},
 		"example.com/shop/orders::PostgresRepository":       {graph.NodeStruct, "PostgresRepository", "example.com/shop/orders"},
 		"example.com/shop/orders::PostgresRepository::Save": {graph.NodeFunction, "Save", "example.com/shop/orders::PostgresRepository"},
 		"example.com/shop/orders::MemoryRepository":         {graph.NodeStruct, "MemoryRepository", "example.com/shop/orders"},
@@ -128,6 +131,7 @@ func TestLoadDiscoversStructuralHierarchy(t *testing.T) {
 		"example.com/shop/orders::ExternalOnly",
 		"example.com/shop/orders::ConvertOnly",
 		"example.com/shop/orders::Outer",
+		"example.com/shop/orders::NestedClosures",
 		"example.com/shop/orders::HandleOrder",
 		"example.com/shop/orders::LoadPair",
 		"example.com/shop/orders::CompareOrders",
@@ -147,6 +151,7 @@ func TestLoadDiscoversStructuralHierarchy(t *testing.T) {
 		"example.com/shop/orders::Service::Validate",
 		"example.com/shop/orders::Service::Create",
 		"example.com/shop/orders::Service::Transform",
+		"example.com/shop/orders::Service::ClosureCalls",
 	})
 	assertChildren(t, g, "example.com/shop/orders::Processor", []graph.SymbolID{
 		"example.com/shop/orders::Processor::Process",
@@ -205,15 +210,46 @@ func TestLoadDiscoversCalls(t *testing.T) {
 	)
 
 	incoming := g.Incoming("example.com/shop/orders::Repository::Save", graph.EdgeCalls)
-	if len(incoming) != 1 || incoming[0].From != "example.com/shop/orders::Service::Create" {
-		t.Fatalf("incoming calls to Repository.Save = %#v, want one from Service.Create", incoming)
+	wantRepositoryCallers := map[graph.SymbolID]bool{
+		"example.com/shop/orders::Service::ClosureCalls": true,
+		"example.com/shop/orders::Service::Create":       true,
+	}
+	if len(incoming) != len(wantRepositoryCallers) {
+		t.Fatalf("incoming calls to Repository.Save = %#v, want two fixture callers", incoming)
+	}
+	for _, edge := range incoming {
+		if !wantRepositoryCallers[edge.From] {
+			t.Errorf("unexpected Repository.Save caller %q", edge.From)
+		}
 	}
 
-	if edges := g.Outgoing(
+	assertCall(t, g,
 		"example.com/shop/orders::Outer",
-		graph.EdgeCalls,
-	); len(edges) != 0 {
-		t.Fatalf("Outer unexpectedly has calls: %#v", edges)
+		"example.com/shop/orders::Validate",
+		1,
+	)
+	outerNode, _ := g.Node("example.com/shop/orders::Outer")
+	outerCall := g.Outgoing("example.com/shop/orders::Outer", graph.EdgeCalls)[0]
+	if outerCall.Evidence[0] == outerNode.Location || outerCall.Evidence[0].Offset <= outerNode.Location.Offset {
+		t.Errorf("Outer call evidence = %#v, want the nested Validate() call site after declaration %#v", outerCall.Evidence, outerNode.Location)
+	}
+	assertCall(t, g,
+		"example.com/shop/orders::NestedClosures",
+		"example.com/shop/orders::Validate",
+		3,
+	)
+	assertCall(t, g,
+		"example.com/shop/orders::Service::ClosureCalls",
+		"example.com/shop/orders::Service::Health",
+		1,
+	)
+	assertCall(t, g,
+		"example.com/shop/orders::Service::ClosureCalls",
+		"example.com/shop/orders::Repository::Save",
+		1,
+	)
+	if edges := g.Outgoing("example.com/shop/orders::Service::ClosureCalls", graph.EdgeCalls); len(edges) != 2 {
+		t.Fatalf("ClosureCalls edges = %#v, want only resolved project method and interface calls", edges)
 	}
 
 	for _, id := range []graph.SymbolID{
@@ -227,6 +263,11 @@ func TestLoadDiscoversCalls(t *testing.T) {
 	for _, id := range []graph.SymbolID{"fmt", "fmt::Println", "builtin::len", "builtin::append", "builtin::string"} {
 		if node, exists := g.Node(id); exists {
 			t.Errorf("external or builtin node %q unexpectedly exists: %#v", id, node)
+		}
+	}
+	for _, node := range g.Nodes() {
+		if strings.Contains(string(node.ID), "::<closure") || strings.Contains(string(node.ID), "::<func@") {
+			t.Errorf("synthetic anonymous-function node unexpectedly exists: %#v", node)
 		}
 	}
 }

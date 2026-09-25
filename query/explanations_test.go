@@ -118,10 +118,18 @@ func TestAnalyzerPipelineExplainsServiceRepositoryDependency(t *testing.T) {
 	if !ok {
 		t.Fatal("missing Service -> Repository explanation")
 	}
-	if len(explanation.Evidence) != 1 ||
-		explanation.Evidence[0].From != "example.com/shop/orders::Service::Create" ||
-		explanation.Evidence[0].To != "example.com/shop/orders::Repository::Save" ||
-		len(explanation.Evidence[0].Locations) != 1 {
+	if len(explanation.Evidence) != 2 {
 		t.Fatalf("Service -> Repository explanation = %#v", explanation)
+	}
+	wantCallers := map[graph.SymbolID]bool{
+		"example.com/shop/orders::Service::ClosureCalls": true,
+		"example.com/shop/orders::Service::Create":       true,
+	}
+	for _, evidence := range explanation.Evidence {
+		if !wantCallers[evidence.From] ||
+			evidence.To != "example.com/shop/orders::Repository::Save" ||
+			len(evidence.Locations) != 1 {
+			t.Errorf("unexpected Service -> Repository evidence: %#v", evidence)
+		}
 	}
 }
