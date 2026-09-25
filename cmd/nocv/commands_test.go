@@ -1,0 +1,181 @@
+package main
+
+import (
+	"bytes"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"nocv/graph"
+)
+
+func TestParseInvocationRejectsMissingUnknownAndWrongArguments(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "missing command", want: "usage: nocv <command>"},
+		{name: "unknown command", args: []string{"unknown", "./..."}, want: `unknown command "unknown"`},
+		{name: "missing path endpoint", args: []string{"paths", "./...", "from"}, want: "usage: nocv paths <pattern> <from-symbol> <to-symbol>"},
+		{name: "extra tree argument", args: []string{"tree", "./...", "extra"}, want: "usage: nocv tree <pattern>"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := parseInvocation(test.args)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("parseInvocation(%v) error = %v, want containing %q", test.args, err, test.want)
+			}
+		})
+	}
+}
+
+func TestRunReturnsUsageStatusWithoutLoading(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if status := run(nil, &stdout, &stderr); status != 2 {
+		t.Fatalf("run(nil) status = %d, want 2", status)
+	}
+	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "usage: nocv") {
+		t.Fatalf("run(nil) stdout = %q, stderr = %q", stdout.String(), stderr.String())
+	}
+}
+
+func TestLocalModulePattern(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/test\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if gotDir, gotPattern := localModulePattern(filepath.Join(dir, "...")); gotDir != dir || gotPattern != "./..." {
+		t.Fatalf("localModulePattern(module/...) = (%q, %q), want (%q, %q)", gotDir, gotPattern, dir, "./...")
+	}
+	if gotDir, gotPattern := localModulePattern("example.com/remote/..."); gotDir != "" || gotPattern != "example.com/remote/..." {
+		t.Fatalf("localModulePattern(remote) = (%q, %q), want unchanged remote pattern", gotDir, gotPattern)
+	}
+}
+
+func TestExecuteCommandsRenderFocusedDeterministicOutput(t *testing.T) {
+	g, ids := cliFixture(t)
+	tests := []struct {
+		name     string
+		values   []string
+		want     []string
+		unwanted []string
+	}{
+		{name: "tree", want: []string{"a [package]", "Service [struct]"}, unwanted: []string{"Calls:"}},
+		{name: "calls", want: []string{"Calls:", "calls -> example.com/b::Repository::Save", "2 call site(s)"}, unwanted: []string{"Implementations:"}},
+		{name: "implementations", want: []string{"Implementations:", "implements -> example.com/b::Repository"}},
+		{name: "embeddings", want: []string{"Embeddings:", "embeds -> example.com/a::Base"}},
+		{name: "signatures", want: []string{"Signatures:", "accepts -> example.com/b::Repository", "returns -> example.com/a::Base"}},
+		{name: "direct-deps", values: []string{string(ids.caller)}, want: []string{string(ids.caller), "calls ->", "accepts ->"}},
+		{name: "direct-dependents", values: []string{string(ids.repository)}, want: []string{string(ids.repository), "<- implements", "<- accepts"}},
+		{name: "impact", values: []string{string(ids.callee)}, want: []string{"Impact of", string(ids.caller), "path 1:"}},
+		{name: "paths", values: []string{string(ids.caller), string(ids.callee)}, want: []string{"Dependency paths:", "path 1:", "calls ->"}},
+		{name: "package-paths", values: []string{string(ids.packageA), string(ids.packageB)}, want: []string{"Package dependency paths:", "evidence 1:", "example.com/a", "example.com/b"}},
+		{name: "package-deps", want: []string{"Package call dependencies:", "example.com/a -> example.com/b"}},
+		{name: "why-package-dep", values: []string{string(ids.packageA), string(ids.packageB)}, want: []string{"Package call dependency explanation:", "calls ->", "at fixture.go:"}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			invocation := invocation{name: test.name, pattern: "./...", values: test.values}
+			var first bytes.Buffer
+			if err := executeCommand(&first, g, invocation); err != nil {
+				t.Fatalf("executeCommand(%s): %v", test.name, err)
+			}
+			for _, want := range test.want {
+				if !strings.Contains(first.String(), want) {
+					t.Errorf("%s output lacks %q:\n%s", test.name, want, first.String())
+				}
+			}
+			for _, unwanted := range test.unwanted {
+				if strings.Contains(first.String(), unwanted) {
+					t.Errorf("%s output unexpectedly contains %q:\n%s", test.name, unwanted, first.String())
+				}
+			}
+
+			var second bytes.Buffer
+			if err := executeCommand(&second, g, invocation); err != nil {
+				t.Fatalf("second executeCommand(%s): %v", test.name, err)
+			}
+			if second.String() != first.String() {
+				t.Errorf("%s output is not deterministic:\nfirst:  %q\nsecond: %q", test.name, first.String(), second.String())
+			}
+		})
+	}
+}
+
+func TestExecuteCommandReportsMissingAndInvalidSymbols(t *testing.T) {
+	g, ids := cliFixture(t)
+	tests := []struct {
+		name   string
+		values []string
+		want   string
+	}{
+		{name: "direct-deps", values: []string{"missing"}, want: "unknown symbol: missing"},
+		{name: "paths", values: []string{string(ids.caller), "missing"}, want: "unknown symbol: missing"},
+		{name: "package-paths", values: []string{"missing", string(ids.packageB)}, want: "unknown package: missing"},
+		{name: "package-paths", values: []string{string(ids.caller), string(ids.packageB)}, want: "symbol is not a package: " + string(ids.caller)},
+		{name: "why-package-dep", values: []string{string(ids.packageA), string(ids.repository)}, want: "symbol is not a package: " + string(ids.repository)},
+	}
+	for _, test := range tests {
+		t.Run(test.name+test.want, func(t *testing.T) {
+			err := executeCommand(&bytes.Buffer{}, g, invocation{name: test.name, pattern: "./...", values: test.values})
+			if err == nil || err.Error() != test.want {
+				t.Fatalf("executeCommand() error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
+type cliIDs struct {
+	packageA   graph.SymbolID
+	packageB   graph.SymbolID
+	service    graph.SymbolID
+	base       graph.SymbolID
+	repository graph.SymbolID
+	caller     graph.SymbolID
+	callee     graph.SymbolID
+}
+
+func cliFixture(t *testing.T) (*graph.Graph, cliIDs) {
+	t.Helper()
+	ids := cliIDs{
+		packageA:   "example.com/a",
+		packageB:   "example.com/b",
+		service:    "example.com/a::Service",
+		base:       "example.com/a::Base",
+		repository: "example.com/b::Repository",
+		caller:     "example.com/a::Service::Run",
+		callee:     "example.com/b::Repository::Save",
+	}
+	g := graph.New()
+	for _, node := range []graph.Node{
+		{ID: ids.packageA, Kind: graph.NodePackage, Name: "a"},
+		{ID: ids.packageB, Kind: graph.NodePackage, Name: "b"},
+		{ID: ids.service, Kind: graph.NodeStruct, Name: "Service", Parent: ids.packageA},
+		{ID: ids.base, Kind: graph.NodeStruct, Name: "Base", Parent: ids.packageA},
+		{ID: ids.repository, Kind: graph.NodeInterface, Name: "Repository", Parent: ids.packageB},
+		{ID: ids.caller, Kind: graph.NodeFunction, Name: "Run", Parent: ids.service},
+		{ID: ids.callee, Kind: graph.NodeFunction, Name: "Save", Parent: ids.repository},
+	} {
+		if err := g.AddNode(node); err != nil {
+			t.Fatalf("AddNode(%q): %v", node.ID, err)
+		}
+	}
+	edges := []graph.Edge{
+		{From: ids.caller, To: ids.callee, Kind: graph.EdgeCalls, Evidence: []graph.Location{{File: "fixture.go", Offset: 20}, {File: "fixture.go", Offset: 40}}},
+		{From: ids.caller, To: ids.callee, Kind: graph.EdgeImplements, Evidence: []graph.Location{{File: "fixture.go", Offset: 10}}},
+		{From: ids.service, To: ids.repository, Kind: graph.EdgeImplements, Evidence: []graph.Location{{File: "fixture.go", Offset: 5}}},
+		{From: ids.service, To: ids.base, Kind: graph.EdgeEmbeds, Evidence: []graph.Location{{File: "fixture.go", Offset: 6}}},
+		{From: ids.caller, To: ids.repository, Kind: graph.EdgeAccepts, Evidence: []graph.Location{{File: "fixture.go", Offset: 7}}},
+		{From: ids.caller, To: ids.base, Kind: graph.EdgeReturns, Evidence: []graph.Location{{File: "fixture.go", Offset: 8}}},
+	}
+	for _, edge := range edges {
+		if err := g.AddEdge(edge); err != nil {
+			t.Fatalf("AddEdge(%s, %q -> %q): %v", edge.Kind, edge.From, edge.To, err)
+		}
+	}
+	return g, ids
+}
