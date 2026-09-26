@@ -144,15 +144,10 @@ func newSymbolIndex() *symbolIndex {
 func addPackage(g *graph.Graph, pkg *packages.Package, symbols *symbolIndex) error {
 	files := orderedFiles(pkg)
 	pkgID := graph.PackageID(pkg.PkgPath)
-	location := graph.Location{}
-	if len(files) > 0 {
-		location = sourceLocation(pkg.Fset, files[0].file.Package)
-	}
 	if err := g.AddNode(graph.Node{
 		ID:            pkgID,
 		Kind:          graph.NodePackage,
 		Name:          pkg.Name,
-		Location:      location,
 		Documentation: packageDocumentation(files),
 	}); err != nil {
 		return err

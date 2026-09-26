@@ -163,13 +163,22 @@ func TestInspectNodeIntegratesDocumentationAndAnalyzerSemantics(t *testing.T) {
 		len(packageView.Package.Imports) != 1 || len(packageView.Package.Importers) != 1 {
 		t.Fatalf("typeview package inspection = %#v, %v", packageView, ok)
 	}
+	if packageView.Node.Location != (graph.Location{}) {
+		t.Errorf("typeview package inspection has declaration location %#v", packageView.Node.Location)
+	}
 	typeView, ok := query.InspectNode(typeGraph, "example.com/typeview/service::Service")
 	if !ok || typeView.Type == nil || len(typeView.Type.Methods) != 3 || len(typeView.Type.Dependencies) != 1 {
 		t.Fatalf("typeview Service inspection = %#v, %v", typeView, ok)
 	}
+	if typeView.Node.Location.File == "" {
+		t.Errorf("typeview Service inspection lost declaration location: %#v", typeView.Node.Location)
+	}
 	functionView, ok := query.InspectNode(typeGraph, "example.com/typeview/service::Service::Create")
 	if !ok || functionView.Function == nil || len(functionView.Function.Dependencies) != 2 || len(functionView.Function.Dependents) != 1 {
 		t.Fatalf("typeview Service.Create inspection = %#v, %v", functionView, ok)
+	}
+	if functionView.Node.Location.File == "" {
+		t.Errorf("typeview Service.Create inspection lost declaration location: %#v", functionView.Node.Location)
 	}
 }
 

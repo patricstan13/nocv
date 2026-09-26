@@ -102,8 +102,12 @@ func TestLoadDiscoversStructuralHierarchy(t *testing.T) {
 			t.Errorf("node %q = (%s, %q, parent %q), want (%s, %q, parent %q)",
 				id, node.Kind, node.Name, node.Parent, expected.kind, expected.name, expected.parent)
 		}
-		if node.Location.File == "" || node.Location.Offset < 0 {
-			t.Errorf("node %q has invalid location %#v", id, node.Location)
+		if node.Kind == graph.NodePackage {
+			if node.Location != (graph.Location{}) {
+				t.Errorf("package node %q has declaration location %#v", id, node.Location)
+			}
+		} else if node.Location.File == "" || node.Location.Offset < 0 {
+			t.Errorf("declaration node %q has invalid location %#v", id, node.Location)
 		}
 	}
 

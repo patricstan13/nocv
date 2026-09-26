@@ -103,6 +103,13 @@ func TestLoadAttachesDeclarationDocumentation(t *testing.T) {
 				id, node.Kind, node.Parent, node.Documentation,
 				expected.kind, expected.parent, expected.documentation)
 		}
+		if node.Kind == graph.NodePackage {
+			if node.Location != (graph.Location{}) {
+				t.Errorf("documented package %q has declaration location %#v", id, node.Location)
+			}
+		} else if node.Location.File == "" || node.Location.Offset < 0 {
+			t.Errorf("documented declaration %q has invalid location %#v", id, node.Location)
+		}
 	}
 
 	assertCall(t, g, pkg+"::Run", pkg+"::Service::Create", 1)

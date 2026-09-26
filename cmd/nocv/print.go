@@ -321,11 +321,13 @@ func printNodeInspection(out io.Writer, g *graph.Graph, id graph.SymbolID) {
 	if node.Parent != "" {
 		fmt.Fprintf(out, "\nParent:\n  %s\n", node.Parent)
 	}
-	fmt.Fprintln(out, "\nLocation:")
-	if node.Location.File == "" {
-		fmt.Fprintln(out, "  (unknown)")
-	} else {
-		fmt.Fprintf(out, "  %s:%d\n", node.Location.File, node.Location.Offset)
+	if node.Kind != graph.NodePackage {
+		fmt.Fprintln(out, "\nLocation:")
+		if node.Location.File == "" {
+			fmt.Fprintln(out, "  (unknown)")
+		} else {
+			fmt.Fprintf(out, "  %s:%d\n", node.Location.File, node.Location.Offset)
+		}
 	}
 	fmt.Fprintln(out, "\nDocumentation:")
 	printDocumentation(out, node.Documentation, "  ")

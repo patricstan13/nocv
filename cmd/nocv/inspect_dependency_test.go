@@ -124,6 +124,33 @@ func TestDependencyInspectionStopsWhenNoPackageDependencyExists(t *testing.T) {
 	}
 }
 
+func TestNodeInspectionOmitsPackageLocationButKeepsDeclarationLocations(t *testing.T) {
+	g, err := goanalyzer.Load(context.Background(), filepath.Join("..", "..", "goanalyzer", "testdata", "typeview"), "./...")
+	if err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+
+	var packageOutput bytes.Buffer
+	printNodeInspection(&packageOutput, g, "example.com/typeview/service")
+	if !strings.Contains(packageOutput.String(), "Kind:\n  package") {
+		t.Fatalf("package inspection lacks package kind:\n%s", packageOutput.String())
+	}
+	if strings.Contains(packageOutput.String(), "Location:") || strings.Contains(packageOutput.String(), "service.go:") {
+		t.Fatalf("package inspection rendered a declaration location:\n%s", packageOutput.String())
+	}
+
+	for _, id := range []graph.SymbolID{
+		"example.com/typeview/service::Service",
+		"example.com/typeview/service::Service::Create",
+	} {
+		var declarationOutput bytes.Buffer
+		printNodeInspection(&declarationOutput, g, id)
+		if !strings.Contains(declarationOutput.String(), "Location:") || !strings.Contains(declarationOutput.String(), "service.go:") {
+			t.Errorf("declaration inspection %s lacks source location:\n%s", id, declarationOutput.String())
+		}
+	}
+}
+
 func inspectionFixture(t *testing.T) *graph.Graph {
 	t.Helper()
 	g := graph.New()
