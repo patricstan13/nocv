@@ -109,7 +109,7 @@ func packageDependencyView(g *graph.Graph) map[graph.SymbolID][]PackageDependenc
 		dependencies := make([]PackageDependency, 0, len(byTarget))
 		for _, dependency := range byTarget {
 			sort.Slice(dependency.Evidence, func(i, j int) bool {
-				return packageEvidenceLess(dependency.Evidence[i], dependency.Evidence[j])
+				return semanticRelationshipLess(dependency.Evidence[i], dependency.Evidence[j])
 			})
 			dependencies = append(dependencies, *dependency)
 		}
@@ -121,7 +121,7 @@ func packageDependencyView(g *graph.Graph) map[graph.SymbolID][]PackageDependenc
 	return view
 }
 
-func packageEvidenceLess(left, right Relationship) bool {
+func semanticRelationshipLess(left, right Relationship) bool {
 	if left.From != right.From {
 		return left.From < right.From
 	}

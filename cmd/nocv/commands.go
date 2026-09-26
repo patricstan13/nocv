@@ -32,6 +32,8 @@ var commandSpecs = map[string]commandSpec{
 	"package-paths":              {usage: "nocv package-paths <pattern> <from-package> <to-package>", extraCount: 2},
 	"package-deps":               {usage: "nocv package-deps <pattern>"},
 	"why-package-dep":            {usage: "nocv why-package-dep <pattern> <from-package> <to-package>", extraCount: 2},
+	"type-deps":                  {usage: "nocv type-deps <pattern> <type-id>", extraCount: 1},
+	"type-paths":                 {usage: "nocv type-paths <pattern> <from-type> <to-type>", extraCount: 2},
 }
 
 type invocation struct {
@@ -42,7 +44,7 @@ type invocation struct {
 
 func parseInvocation(args []string) (invocation, error) {
 	if len(args) == 0 {
-		return invocation{}, fmt.Errorf("usage: nocv <command> <pattern> [arguments...]\ncommands: tree, calls, implementations, embeddings, signatures, imports, package-imports, package-importers, import-cycle, check-forbidden-import, check-forbidden-dependency, direct-deps, direct-dependents, impact, paths, package-paths, package-deps, why-package-dep")
+		return invocation{}, fmt.Errorf("usage: nocv <command> <pattern> [arguments...]\ncommands: tree, calls, implementations, embeddings, signatures, imports, package-imports, package-importers, import-cycle, check-forbidden-import, check-forbidden-dependency, direct-deps, direct-dependents, impact, paths, package-paths, package-deps, why-package-dep, type-deps, type-paths")
 	}
 	spec, exists := commandSpecs[args[0]]
 	if !exists {
@@ -160,6 +162,22 @@ func executeCommand(out io.Writer, g *graph.Graph, invocation invocation) error 
 			return err
 		}
 		printPackageDependencyExplanation(out, g, from, to)
+	case "type-deps":
+		id := graph.SymbolID(invocation.values[0])
+		if err := requireType(g, id); err != nil {
+			return err
+		}
+		printDirectTypeDependencies(out, g, id)
+	case "type-paths":
+		from := graph.SymbolID(invocation.values[0])
+		to := graph.SymbolID(invocation.values[1])
+		if err := requireType(g, from); err != nil {
+			return err
+		}
+		if err := requireType(g, to); err != nil {
+			return err
+		}
+		printTypeDependencyPaths(out, g, from, to)
 	default:
 		return fmt.Errorf("unknown command %q", invocation.name)
 	}
@@ -180,6 +198,17 @@ func requirePackage(g *graph.Graph, id graph.SymbolID) error {
 	}
 	if node.Kind != graph.NodePackage {
 		return fmt.Errorf("symbol is not a package: %s", id)
+	}
+	return nil
+}
+
+func requireType(g *graph.Graph, id graph.SymbolID) error {
+	node, exists := g.Node(id)
+	if !exists {
+		return fmt.Errorf("unknown symbol: %s", id)
+	}
+	if node.Kind != graph.NodeStruct && node.Kind != graph.NodeInterface {
+		return fmt.Errorf("symbol is not a type: %s", id)
 	}
 	return nil
 }

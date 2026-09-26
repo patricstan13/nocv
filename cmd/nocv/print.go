@@ -232,6 +232,42 @@ func printPackagePathResults(out io.Writer, paths []query.PackageDependencyPath)
 	}
 }
 
+func printDirectTypeDependencies(out io.Writer, g *graph.Graph, id graph.SymbolID) {
+	fmt.Fprintf(out, "Type dependencies:\n  %s\n", id)
+	dependencies := query.DirectTypeDependencies(g, id)
+	if len(dependencies) == 0 {
+		fmt.Fprintln(out, "  (none)")
+		return
+	}
+	for _, dependency := range dependencies {
+		fmt.Fprintf(out, "  -> %s\n", dependency.To)
+		fmt.Fprintln(out, "     evidence:")
+		for _, evidence := range dependency.Evidence {
+			fmt.Fprintf(out, "       %s %s -> %s\n", evidence.From, evidence.Kind, evidence.To)
+		}
+	}
+}
+
+func printTypeDependencyPaths(out io.Writer, g *graph.Graph, from, to graph.SymbolID) {
+	fmt.Fprintf(out, "Type dependency paths: %s -> %s\n", from, to)
+	paths := query.TypeDependencyPaths(g, from, to)
+	if len(paths) == 0 {
+		fmt.Fprintln(out, "  (none)")
+		return
+	}
+	for index, path := range paths {
+		fmt.Fprintf(out, "path %d:\n", index+1)
+		fmt.Fprintf(out, "  %s\n", path.Types[0])
+		for _, step := range path.Steps {
+			fmt.Fprintf(out, "  -> %s\n", step.To)
+			fmt.Fprintln(out, "     evidence:")
+			for _, evidence := range step.Evidence {
+				fmt.Fprintf(out, "       %s %s -> %s\n", evidence.From, evidence.Kind, evidence.To)
+			}
+		}
+	}
+}
+
 func printPackageDependencyExplanation(out io.Writer, g *graph.Graph, from, to graph.SymbolID) {
 	fmt.Fprintf(out, "Package call dependency explanation: %s -> %s\n", from, to)
 	explanation, exists := query.WhyDependsOn(g, from, to)

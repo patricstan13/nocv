@@ -22,6 +22,8 @@ func TestParseInvocationRejectsMissingUnknownAndWrongArguments(t *testing.T) {
 		{name: "missing import cycle endpoint", args: []string{"import-cycle", "./...", "from"}, want: "usage: nocv import-cycle <pattern> <from-package> <to-package>"},
 		{name: "missing forbidden import endpoint", args: []string{"check-forbidden-import", "./...", "from"}, want: "usage: nocv check-forbidden-import <pattern> <from-package> <to-package>"},
 		{name: "missing forbidden dependency endpoint", args: []string{"check-forbidden-dependency", "./...", "from"}, want: "usage: nocv check-forbidden-dependency <pattern> <from-package> <to-package>"},
+		{name: "missing type dependency endpoint", args: []string{"type-deps", "./..."}, want: "usage: nocv type-deps <pattern> <type-id>"},
+		{name: "missing type path endpoint", args: []string{"type-paths", "./...", "from"}, want: "usage: nocv type-paths <pattern> <from-type> <to-type>"},
 		{name: "extra tree argument", args: []string{"tree", "./...", "extra"}, want: "usage: nocv tree <pattern>"},
 	}
 	for _, test := range tests {
@@ -80,6 +82,8 @@ func TestExecuteCommandsRenderFocusedDeterministicOutput(t *testing.T) {
 		{name: "check-forbidden-import", values: []string{string(ids.packageB), string(ids.packageA)}, want: []string{"Forbidden package import:", "No violation."}, unwanted: []string{"VIOLATION", "evidence:"}},
 		{name: "check-forbidden-dependency", values: []string{string(ids.packageA), string(ids.packageB)}, want: []string{"Forbidden package dependency:", "example.com/a -> example.com/b", "VIOLATION", "path 1:", "evidence:", "calls ->"}},
 		{name: "check-forbidden-dependency", values: []string{string(ids.packageB), string(ids.packageA)}, want: []string{"Forbidden package dependency:", "No violation."}, unwanted: []string{"VIOLATION", "path 1:"}},
+		{name: "type-deps", values: []string{string(ids.service)}, want: []string{"Type dependencies:", string(ids.service), "-> " + string(ids.repository), "evidence:", "calls ->"}},
+		{name: "type-paths", values: []string{string(ids.service), string(ids.repository)}, want: []string{"Type dependency paths:", "path 1:", string(ids.service), "-> " + string(ids.repository), "evidence:"}},
 		{name: "direct-deps", values: []string{string(ids.caller)}, want: []string{string(ids.caller), "calls ->", "accepts ->"}},
 		{name: "direct-dependents", values: []string{string(ids.repository)}, want: []string{string(ids.repository), "<- implements", "<- accepts"}},
 		{name: "impact", values: []string{string(ids.callee)}, want: []string{"Impact of", string(ids.caller), "path 1:"}},
@@ -138,6 +142,9 @@ func TestExecuteCommandReportsMissingAndInvalidSymbols(t *testing.T) {
 		{name: "check-forbidden-import", values: []string{string(ids.packageA), string(ids.repository)}, want: "symbol is not a package: " + string(ids.repository)},
 		{name: "check-forbidden-dependency", values: []string{"missing", string(ids.packageB)}, want: "unknown package: missing"},
 		{name: "check-forbidden-dependency", values: []string{string(ids.packageA), string(ids.repository)}, want: "symbol is not a package: " + string(ids.repository)},
+		{name: "type-deps", values: []string{"missing"}, want: "unknown symbol: missing"},
+		{name: "type-deps", values: []string{string(ids.packageA)}, want: "symbol is not a type: " + string(ids.packageA)},
+		{name: "type-paths", values: []string{string(ids.service), string(ids.caller)}, want: "symbol is not a type: " + string(ids.caller)},
 	}
 	for _, test := range tests {
 		t.Run(test.name+test.want, func(t *testing.T) {
