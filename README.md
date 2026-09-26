@@ -24,6 +24,7 @@ go run ./cmd/nocv imports ./...
 go run ./cmd/nocv package-imports ./... nocv/query
 go run ./cmd/nocv package-importers ./... nocv/graph
 go run ./cmd/nocv import-cycle ./... nocv/graph nocv/cmd/nocv
+go run ./cmd/nocv check-forbidden-import ./... nocv/query nocv/graph
 go run ./cmd/nocv direct-deps ./... nocv/query::Impact
 go run ./cmd/nocv direct-dependents ./... nocv/query::DirectDependents
 go run ./cmd/nocv impact ./... nocv/graph::Graph
@@ -56,6 +57,10 @@ unless they are part of the analyzed package set.
 
 `import-cycle` checks whether a proposed direct package import would close an
 existing import path and therefore create a cycle.
+
+`check-forbidden-import` checks whether one exact package directly imports
+another forbidden package. It does not evaluate transitive imports or semantic
+dependency paths.
 
 Query and workflow features that benefit from manual validation should expose
 a focused CLI command instead of adding unconditional demonstration output.

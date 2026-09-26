@@ -20,6 +20,7 @@ func TestParseInvocationRejectsMissingUnknownAndWrongArguments(t *testing.T) {
 		{name: "unknown command", args: []string{"unknown", "./..."}, want: `unknown command "unknown"`},
 		{name: "missing path endpoint", args: []string{"paths", "./...", "from"}, want: "usage: nocv paths <pattern> <from-symbol> <to-symbol>"},
 		{name: "missing import cycle endpoint", args: []string{"import-cycle", "./...", "from"}, want: "usage: nocv import-cycle <pattern> <from-package> <to-package>"},
+		{name: "missing forbidden import endpoint", args: []string{"check-forbidden-import", "./...", "from"}, want: "usage: nocv check-forbidden-import <pattern> <from-package> <to-package>"},
 		{name: "extra tree argument", args: []string{"tree", "./...", "extra"}, want: "usage: nocv tree <pattern>"},
 	}
 	for _, test := range tests {
@@ -74,6 +75,8 @@ func TestExecuteCommandsRenderFocusedDeterministicOutput(t *testing.T) {
 		{name: "package-importers", values: []string{string(ids.packageB)}, want: []string{"example.com/b", "<- imports example.com/a"}},
 		{name: "import-cycle", values: []string{string(ids.packageB), string(ids.packageA)}, want: []string{"Proposed import:", "example.com/b -> example.com/a", "Would create import cycle.", "existing path 1:", "-> example.com/b"}},
 		{name: "import-cycle", values: []string{string(ids.packageA), string(ids.packageB)}, want: []string{"Proposed import:", "No import cycle would be created."}, unwanted: []string{"existing path"}},
+		{name: "check-forbidden-import", values: []string{string(ids.packageA), string(ids.packageB)}, want: []string{"Forbidden package import:", "example.com/a -> example.com/b", "VIOLATION", "evidence:", "fixture.go:1"}},
+		{name: "check-forbidden-import", values: []string{string(ids.packageB), string(ids.packageA)}, want: []string{"Forbidden package import:", "No violation."}, unwanted: []string{"VIOLATION", "evidence:"}},
 		{name: "direct-deps", values: []string{string(ids.caller)}, want: []string{string(ids.caller), "calls ->", "accepts ->"}},
 		{name: "direct-dependents", values: []string{string(ids.repository)}, want: []string{string(ids.repository), "<- implements", "<- accepts"}},
 		{name: "impact", values: []string{string(ids.callee)}, want: []string{"Impact of", string(ids.caller), "path 1:"}},
@@ -128,6 +131,8 @@ func TestExecuteCommandReportsMissingAndInvalidSymbols(t *testing.T) {
 		{name: "package-importers", values: []string{string(ids.repository)}, want: "symbol is not a package: " + string(ids.repository)},
 		{name: "import-cycle", values: []string{"missing", string(ids.packageB)}, want: "unknown package: missing"},
 		{name: "import-cycle", values: []string{string(ids.packageA), string(ids.repository)}, want: "symbol is not a package: " + string(ids.repository)},
+		{name: "check-forbidden-import", values: []string{"missing", string(ids.packageB)}, want: "unknown package: missing"},
+		{name: "check-forbidden-import", values: []string{string(ids.packageA), string(ids.repository)}, want: "symbol is not a package: " + string(ids.repository)},
 	}
 	for _, test := range tests {
 		t.Run(test.name+test.want, func(t *testing.T) {

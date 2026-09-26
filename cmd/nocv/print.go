@@ -148,6 +148,21 @@ func printImportCycleCheck(out io.Writer, g *graph.Graph, from, to graph.SymbolI
 	}
 }
 
+func printForbiddenImportCheck(out io.Writer, g *graph.Graph, from, to graph.SymbolID) {
+	fmt.Fprintf(out, "Forbidden package import:\n  %s -> %s\n\n", from, to)
+	violation, exists := query.CheckForbiddenPackageImport(g, from, to)
+	if !exists {
+		fmt.Fprintln(out, "No violation.")
+		return
+	}
+
+	fmt.Fprintln(out, "VIOLATION")
+	fmt.Fprintln(out, "\nevidence:")
+	for _, location := range violation.Evidence {
+		fmt.Fprintf(out, "  %s:%d\n", location.File, location.Offset)
+	}
+}
+
 func printImpact(out io.Writer, g *graph.Graph, id graph.SymbolID) {
 	fmt.Fprintf(out, "Impact of %s:\n", id)
 	results := query.Impact(g, id)
