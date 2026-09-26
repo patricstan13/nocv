@@ -41,6 +41,9 @@ go run ./cmd/nocv inspect-dependency ./goanalyzer/testdata/typeview/... example.
 The graph model is language-independent. Go syntax trees are used only inside
 `goanalyzer` and are converted into graph nodes and semantic edges before being
 returned. The CLI prints both the hierarchy and a simple `Calls` section.
+Nodes retain source-authored declaration documentation where available. For Go,
+this includes package, type, function, method, and interface-method doc
+comments; inline implementation comments are not modeled.
 It also projects calls into direct package dependencies without storing another
 semantic edge kind, and can explain each direct dependency using the underlying
 call relationships and source locations. Direct semantic navigation combines

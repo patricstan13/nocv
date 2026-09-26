@@ -149,10 +149,11 @@ func addPackage(g *graph.Graph, pkg *packages.Package, symbols *symbolIndex) err
 		location = sourceLocation(pkg.Fset, files[0].file.Package)
 	}
 	if err := g.AddNode(graph.Node{
-		ID:       pkgID,
-		Kind:     graph.NodePackage,
-		Name:     pkg.Name,
-		Location: location,
+		ID:            pkgID,
+		Kind:          graph.NodePackage,
+		Name:          pkg.Name,
+		Location:      location,
+		Documentation: packageDocumentation(files),
 	}); err != nil {
 		return err
 	}
@@ -169,7 +170,7 @@ func addPackage(g *graph.Graph, pkg *packages.Package, symbols *symbolIndex) err
 				if typeSpec.Assign.IsValid() { // aliases are not new structural declarations
 					continue
 				}
-				if err := addType(g, pkg, pkgID, typeSpec, symbols); err != nil {
+				if err := addType(g, pkg, pkgID, typeSpec, typeDocumentation(gen, typeSpec), symbols); err != nil {
 					return err
 				}
 			}
@@ -194,7 +195,7 @@ func addPackage(g *graph.Graph, pkg *packages.Package, symbols *symbolIndex) err
 				}
 				parent = candidate
 			}
-			functionID, err := addFunction(g, pkg.Fset, parent, fn.Name.Name, fn.Name.Pos())
+			functionID, err := addFunction(g, pkg.Fset, parent, fn.Name.Name, fn.Name.Pos(), documentation(fn.Doc))
 			if err != nil {
 				return err
 			}
@@ -222,6 +223,7 @@ func addType(
 	pkg *packages.Package,
 	pkgID graph.SymbolID,
 	spec *ast.TypeSpec,
+	docText string,
 	symbols *symbolIndex,
 ) error {
 	var kind graph.NodeKind
@@ -236,11 +238,12 @@ func addType(
 
 	typeID := graph.ChildID(pkgID, spec.Name.Name)
 	if err := g.AddNode(graph.Node{
-		ID:       typeID,
-		Kind:     kind,
-		Name:     spec.Name.Name,
-		Parent:   pkgID,
-		Location: sourceLocation(pkg.Fset, spec.Name.Pos()),
+		ID:            typeID,
+		Kind:          kind,
+		Name:          spec.Name.Name,
+		Parent:        pkgID,
+		Location:      sourceLocation(pkg.Fset, spec.Name.Pos()),
+		Documentation: docText,
 	}); err != nil {
 		return err
 	}
@@ -257,7 +260,7 @@ func addType(
 				continue // embedded interface/type terms are not structural nodes
 			}
 			for _, name := range field.Names {
-				functionID, err := addFunction(g, pkg.Fset, typeID, name.Name, name.Pos())
+				functionID, err := addFunction(g, pkg.Fset, typeID, name.Name, name.Pos(), documentation(field.Doc))
 				if err != nil {
 					return err
 				}
@@ -268,16 +271,55 @@ func addType(
 	return nil
 }
 
-func addFunction(g *graph.Graph, fset *token.FileSet, parent graph.SymbolID, name string, pos token.Pos) (graph.SymbolID, error) {
+func addFunction(
+	g *graph.Graph,
+	fset *token.FileSet,
+	parent graph.SymbolID,
+	name string,
+	pos token.Pos,
+	docText string,
+) (graph.SymbolID, error) {
 	id := graph.ChildID(parent, name)
 	err := g.AddNode(graph.Node{
-		ID:       id,
-		Kind:     graph.NodeFunction,
-		Name:     name,
-		Parent:   parent,
-		Location: sourceLocation(fset, pos),
+		ID:            id,
+		Kind:          graph.NodeFunction,
+		Name:          name,
+		Parent:        parent,
+		Location:      sourceLocation(fset, pos),
+		Documentation: docText,
 	})
 	return id, err
+}
+
+func packageDocumentation(files []sourceFile) string {
+	seen := make(map[string]bool)
+	var blocks []string
+	for _, source := range files {
+		text := documentation(source.file.Doc)
+		if text == "" || seen[text] {
+			continue
+		}
+		seen[text] = true
+		blocks = append(blocks, text)
+	}
+	return strings.Join(blocks, "\n\n")
+}
+
+func typeDocumentation(declaration *ast.GenDecl, specification *ast.TypeSpec) string {
+	if text := documentation(specification.Doc); text != "" {
+		return text
+	}
+	if declaration != nil && !declaration.Lparen.IsValid() {
+		return documentation(declaration.Doc)
+	}
+	return ""
+}
+
+func documentation(comments *ast.CommentGroup) string {
+	if comments == nil {
+		return ""
+	}
+	return strings.TrimSpace(comments.Text())
 }
 
 func registerSymbol(symbols map[types.Object]graph.SymbolID, object types.Object, id graph.SymbolID) {

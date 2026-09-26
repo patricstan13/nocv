@@ -46,11 +46,12 @@ type Location struct {
 // Node is one declaration in a project's structural hierarchy.
 // It deliberately contains no Go compiler or syntax-tree objects.
 type Node struct {
-	ID       SymbolID
-	Kind     NodeKind
-	Name     string
-	Parent   SymbolID
-	Location Location
+	ID            SymbolID
+	Kind          NodeKind
+	Name          string
+	Parent        SymbolID
+	Location      Location
+	Documentation string
 }
 
 // EdgeKind identifies a relationship between two nodes.

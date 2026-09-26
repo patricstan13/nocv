@@ -10,7 +10,7 @@ func TestIDsAndHierarchy(t *testing.T) {
 
 	for _, node := range []Node{
 		{ID: pkgID, Kind: NodePackage, Name: "orders"},
-		{ID: serviceID, Kind: NodeStruct, Name: "Service", Parent: pkgID},
+		{ID: serviceID, Kind: NodeStruct, Name: "Service", Parent: pkgID, Documentation: "Service coordinates orders."},
 		{ID: createID, Kind: NodeFunction, Name: "Create", Parent: serviceID},
 	} {
 		if err := g.AddNode(node); err != nil {
@@ -33,6 +33,23 @@ func TestIDsAndHierarchy(t *testing.T) {
 	node, ok := g.Node(createID)
 	if !ok || node.Parent != serviceID {
 		t.Fatalf("method node = %#v, %v; want parent %q", node, ok, serviceID)
+	}
+	service, ok := g.Node(serviceID)
+	if !ok {
+		t.Fatalf("missing service node %q", serviceID)
+	}
+	if service.Documentation != "Service coordinates orders." {
+		t.Fatalf("service documentation = %q", service.Documentation)
+	}
+	service.Documentation = "mutated"
+	service, _ = g.Node(serviceID)
+	if service.Documentation != "Service coordinates orders." {
+		t.Fatalf("mutating Node result changed documentation to %q", service.Documentation)
+	}
+	for _, candidate := range g.Nodes() {
+		if candidate.ID == serviceID && candidate.Documentation != "Service coordinates orders." {
+			t.Fatalf("Nodes result lost documentation: %#v", candidate)
+		}
 	}
 }
 
