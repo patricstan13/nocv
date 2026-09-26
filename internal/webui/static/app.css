@@ -44,8 +44,8 @@ h3 { margin: 22px 0 8px; color: #344054; font-size: 12px; letter-spacing: .08em;
 .legend { margin: 0; color: #cbd5e1; font-size: 12px; }
 .legend span { display: inline-block; width: 20px; height: 2px; margin: 0 8px 3px 0; background: #7dd3fc; }
 
-main { display: grid; grid-template-columns: minmax(0, 1fr) 380px; height: calc(100vh - 76px); }
-#network { min-width: 0; background: #f8fafc; }
+main { display: grid; grid-template-columns: minmax(0, 1fr) 380px; height: calc(100vh - 76px); min-height: 0;}
+#network {width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; background: #f8fafc; }
 
 #inspector {
   overflow: auto;
@@ -73,7 +73,8 @@ li:last-child { border-bottom: 0; }
 @media (max-width: 760px) {
   header { height: 64px; padding: 10px 16px; }
   .legend { display: none; }
-  main { grid-template-columns: 1fr; grid-template-rows: 55% 45%; height: calc(100vh - 64px); }
+  main { grid-template-columns: 1fr; grid-template-rows: 55% 45%; height: calc(100vh - 64px); min-height: 0; }
   #inspector { border-top: 1px solid #d7dee8; border-left: 0; padding: 18px; }
   .empty-state { margin-top: 12vh; }
+  #network {min-height: 0;}
 }
