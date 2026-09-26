@@ -3,7 +3,7 @@ package query
 import "nocv/graph"
 
 // PackageDependencyViolation is one forbidden semantic package dependency
-// together with every projected package route and exact semantic explanation.
+// together with every package route and its hop-level boundary evidence.
 type PackageDependencyViolation struct {
 	From  graph.SymbolID
 	To    graph.SymbolID

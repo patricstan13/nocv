@@ -38,15 +38,15 @@ func TestCheckForbiddenPackageDependencyPreservesProjectedRoutesAndEvidence(t *t
 			t.Errorf("route %d = %v, want %v", index, violation.Paths[index].Packages, want)
 		}
 	}
-	if len(violation.Paths[2].Evidence) != 2 {
-		t.Fatalf("service route evidence = %#v, want two grouped semantic explanations", violation.Paths[2].Evidence)
+	if len(violation.Paths[2].Steps) != 2 || len(violation.Paths[2].Steps[0].Evidence) != 2 || len(violation.Paths[2].Steps[1].Evidence) != 2 {
+		t.Fatalf("service route steps = %#v, want two hops with two grouped boundary facts each", violation.Paths[2].Steps)
 	}
 	if !containsSemanticKind(violation.Paths[2], graph.EdgeAccepts) {
 		t.Fatalf("service route lacks non-Calls evidence: %#v", violation.Paths[2])
 	}
 
 	violation.Paths[0].Packages[0] = "mutated"
-	violation.Paths[0].Evidence[0].Steps[0].From = "mutated"
+	violation.Paths[0].Steps[0].Evidence[0].From = "mutated"
 	if again, ok := query.CheckForbiddenPackageDependency(g, ids.app, ids.repository); !ok || !reflect.DeepEqual(again.Paths, beforePaths) {
 		t.Fatalf("second dependency check = (%#v, %v), want detached paths %#v", again, ok, beforePaths)
 	}
@@ -172,9 +172,9 @@ func forbiddenDependencyFixture(t *testing.T) (*graph.Graph, forbiddenDependency
 }
 
 func containsSemanticKind(path query.PackageDependencyPath, kind graph.EdgeKind) bool {
-	for _, evidence := range path.Evidence {
-		for _, step := range evidence.Steps {
-			if step.Kind == kind {
+	for _, step := range path.Steps {
+		for _, evidence := range step.Evidence {
+			if evidence.Kind == kind {
 				return true
 			}
 		}

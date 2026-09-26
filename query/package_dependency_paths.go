@@ -7,61 +7,157 @@ import (
 	"nocv/graph"
 )
 
-// PackageDependencyPath is one projected architectural route together with
-// every exact semantic path that produced that package sequence.
-type PackageDependencyPath struct {
-	Packages []graph.SymbolID
-	Evidence []SemanticPath
+// PackageDependency is one derived direct semantic dependency between two
+// packages. Evidence contains every stored cross-package semantic fact that
+// establishes the package relationship.
+type PackageDependency struct {
+	From     graph.SymbolID
+	To       graph.SymbolID
+	Evidence []Relationship
 }
 
-// PackageDependencyPaths derives all package-level dependency routes between
-// two exact package nodes without storing or inventing package edges.
+// PackageDependencyPath is one simple route through the derived semantic
+// package view. Each step carries evidence for exactly one package boundary.
+type PackageDependencyPath struct {
+	Packages []graph.SymbolID
+	Steps    []PackageDependency
+}
+
+// DirectPackageDependencies returns direct derived semantic package
+// dependencies originating from one exact package.
+func DirectPackageDependencies(g *graph.Graph, packageID graph.SymbolID) []PackageDependency {
+	if !isPackageNode(g, packageID) {
+		return nil
+	}
+	return copyPackageDependencies(packageDependencyView(g)[packageID])
+}
+
+// PackageDependencyPaths returns every distinct simple route through the
+// derived semantic package view from one exact package to another.
 func PackageDependencyPaths(g *graph.Graph, from, to graph.SymbolID) []PackageDependencyPath {
 	if g == nil || from == to || !isPackageNode(g, from) || !isPackageNode(g, to) {
 		return nil
 	}
 
-	sources := packageSemanticSymbols(g, from)
-	targets := packageSemanticSymbols(g, to)
-	byPackages := make(map[string]*PackageDependencyPath)
-	evidenceKeys := make(map[string]map[string]bool)
+	view := packageDependencyView(g)
+	var paths []PackageDependencyPath
+	pathKeys := make(map[string]bool)
+	seen := map[graph.SymbolID]bool{from: true}
 
-	for _, source := range sources {
-		for _, target := range targets {
-			for _, path := range DependencyPaths(g, source, target) {
-				packages, ok := projectSemanticPathToPackages(g, path)
-				if !ok || len(packages) < 2 || packages[0] != from || packages[len(packages)-1] != to {
-					continue
-				}
-
-				key := packageSequenceKey(packages)
-				projected := byPackages[key]
-				if projected == nil {
-					projected = &PackageDependencyPath{Packages: append([]graph.SymbolID(nil), packages...)}
-					byPackages[key] = projected
-					evidenceKeys[key] = make(map[string]bool)
-				}
-				evidenceKey := semanticPathKey(path.Steps)
-				if evidenceKeys[key][evidenceKey] {
-					continue
-				}
-				evidenceKeys[key][evidenceKey] = true
-				projected.Evidence = append(projected.Evidence, path)
+	var walk func(graph.SymbolID, []graph.SymbolID, []PackageDependency)
+	walk = func(current graph.SymbolID, packages []graph.SymbolID, steps []PackageDependency) {
+		for _, dependency := range view[current] {
+			next := dependency.To
+			if seen[next] {
+				continue
 			}
+			nextPackages := append(append([]graph.SymbolID(nil), packages...), next)
+			nextSteps := appendPackageDependency(steps, dependency)
+			if next == to {
+				key := packageSequenceKey(nextPackages)
+				if !pathKeys[key] {
+					pathKeys[key] = true
+					paths = append(paths, PackageDependencyPath{Packages: nextPackages, Steps: nextSteps})
+				}
+				continue
+			}
+
+			seen[next] = true
+			walk(next, nextPackages, nextSteps)
+			delete(seen, next)
+		}
+	}
+	walk(from, []graph.SymbolID{from}, nil)
+
+	sort.Slice(paths, func(i, j int) bool {
+		return packageSequenceLess(paths[i].Packages, paths[j].Packages)
+	})
+	return paths
+}
+
+func packageDependencyView(g *graph.Graph) map[graph.SymbolID][]PackageDependency {
+	bySourceAndTarget := make(map[graph.SymbolID]map[graph.SymbolID]*PackageDependency)
+	for _, node := range g.Nodes() {
+		if node.Kind == graph.NodePackage {
+			continue
+		}
+		from, exists := g.AncestorOfKind(node.ID, graph.NodePackage)
+		if !exists {
+			continue
+		}
+		for _, relationship := range DirectDependencies(g, node.ID) {
+			to, exists := g.AncestorOfKind(relationship.To, graph.NodePackage)
+			if !exists || from == to {
+				continue
+			}
+			byTarget := bySourceAndTarget[from]
+			if byTarget == nil {
+				byTarget = make(map[graph.SymbolID]*PackageDependency)
+				bySourceAndTarget[from] = byTarget
+			}
+			dependency := byTarget[to]
+			if dependency == nil {
+				dependency = &PackageDependency{From: from, To: to}
+				byTarget[to] = dependency
+			}
+			dependency.Evidence = append(dependency.Evidence, relationship)
 		}
 	}
 
-	results := make([]PackageDependencyPath, 0, len(byPackages))
-	for _, projected := range byPackages {
-		sort.Slice(projected.Evidence, func(i, j int) bool {
-			return semanticPathLess(projected.Evidence[i], projected.Evidence[j])
+	view := make(map[graph.SymbolID][]PackageDependency, len(bySourceAndTarget))
+	for from, byTarget := range bySourceAndTarget {
+		dependencies := make([]PackageDependency, 0, len(byTarget))
+		for _, dependency := range byTarget {
+			sort.Slice(dependency.Evidence, func(i, j int) bool {
+				return packageEvidenceLess(dependency.Evidence[i], dependency.Evidence[j])
+			})
+			dependencies = append(dependencies, *dependency)
+		}
+		sort.Slice(dependencies, func(i, j int) bool {
+			return dependencies[i].To < dependencies[j].To
 		})
-		results = append(results, *projected)
+		view[from] = dependencies
 	}
-	sort.Slice(results, func(i, j int) bool {
-		return packageSequenceLess(results[i].Packages, results[j].Packages)
-	})
-	return results
+	return view
+}
+
+func packageEvidenceLess(left, right Relationship) bool {
+	if left.From != right.From {
+		return left.From < right.From
+	}
+	if left.Kind != right.Kind {
+		return left.Kind < right.Kind
+	}
+	return left.To < right.To
+}
+
+func appendPackageDependency(steps []PackageDependency, dependency PackageDependency) []PackageDependency {
+	result := make([]PackageDependency, len(steps), len(steps)+1)
+	for index, step := range steps {
+		result[index] = copyPackageDependency(step)
+	}
+	return append(result, copyPackageDependency(dependency))
+}
+
+func copyPackageDependencies(dependencies []PackageDependency) []PackageDependency {
+	if len(dependencies) == 0 {
+		return nil
+	}
+	result := make([]PackageDependency, len(dependencies))
+	for index, dependency := range dependencies {
+		result[index] = copyPackageDependency(dependency)
+	}
+	return result
+}
+
+func copyPackageDependency(dependency PackageDependency) PackageDependency {
+	copy := PackageDependency{From: dependency.From, To: dependency.To}
+	copy.Evidence = make([]Relationship, len(dependency.Evidence))
+	for index, relationship := range dependency.Evidence {
+		copy.Evidence[index] = relationship
+		copy.Evidence[index].Evidence = append([]graph.Location(nil), relationship.Evidence...)
+	}
+	return copy
 }
 
 func isPackageNode(g *graph.Graph, id graph.SymbolID) bool {
@@ -70,41 +166,6 @@ func isPackageNode(g *graph.Graph, id graph.SymbolID) bool {
 	}
 	node, exists := g.Node(id)
 	return exists && node.Kind == graph.NodePackage
-}
-
-func packageSemanticSymbols(g *graph.Graph, packageID graph.SymbolID) []graph.SymbolID {
-	var symbols []graph.SymbolID
-	for _, node := range g.Nodes() {
-		if node.Kind == graph.NodePackage {
-			continue
-		}
-		owner, exists := g.AncestorOfKind(node.ID, graph.NodePackage)
-		if exists && owner == packageID {
-			symbols = append(symbols, node.ID)
-		}
-	}
-	return symbols
-}
-
-func projectSemanticPathToPackages(g *graph.Graph, path SemanticPath) ([]graph.SymbolID, bool) {
-	if len(path.Steps) == 0 {
-		return nil, false
-	}
-	first, exists := g.AncestorOfKind(path.Steps[0].From, graph.NodePackage)
-	if !exists {
-		return nil, false
-	}
-	packages := []graph.SymbolID{first}
-	for _, step := range path.Steps {
-		owner, exists := g.AncestorOfKind(step.To, graph.NodePackage)
-		if !exists {
-			return nil, false
-		}
-		if owner != packages[len(packages)-1] {
-			packages = append(packages, owner)
-		}
-	}
-	return packages, true
 }
 
 func packageSequenceLess(left, right []graph.SymbolID) bool {

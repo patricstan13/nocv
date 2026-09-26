@@ -221,17 +221,12 @@ func printPackageDependencyPaths(out io.Writer, g *graph.Graph, from, to graph.S
 func printPackagePathResults(out io.Writer, paths []query.PackageDependencyPath) {
 	for index, path := range paths {
 		fmt.Fprintf(out, "path %d:\n", index+1)
-		for packageIndex, packageID := range path.Packages {
-			if packageIndex == 0 {
-				fmt.Fprintf(out, "  %s\n", packageID)
-			} else {
-				fmt.Fprintf(out, "  -> %s\n", packageID)
-			}
-		}
-		for evidenceIndex, evidence := range path.Evidence {
-			fmt.Fprintf(out, "  evidence %d:\n", evidenceIndex+1)
-			for _, step := range evidence.Steps {
-				fmt.Fprintf(out, "    %s %s -> %s\n", step.From, step.Kind, step.To)
+		fmt.Fprintf(out, "  %s\n", path.Packages[0])
+		for _, step := range path.Steps {
+			fmt.Fprintf(out, "  -> %s\n", step.To)
+			fmt.Fprintln(out, "     evidence:")
+			for _, evidence := range step.Evidence {
+				fmt.Fprintf(out, "       %s %s -> %s\n", evidence.From, evidence.Kind, evidence.To)
 			}
 		}
 	}

@@ -47,8 +47,11 @@ relationships in reverse and reports every distinct simple dependency path to
 each potentially affected node. Exact symbol-to-symbol dependency explanation
 uses the same semantic policy and reports every distinct simple path in stored
 dependency direction without type or package projection. Package dependency
-paths project those exact explanations onto package ownership, grouping equal
-architectural routes while retaining every concrete semantic path as evidence.
+paths instead traverse a derived semantic package view. A direct package
+dependency exists when a stored semantic relationship crosses a package
+boundary, and multiple lower-level facts are aggregated as evidence for that
+package edge. Package routes do not require one continuous symbol-level path.
+Go imports remain a separate package relation.
 
 Imports are stored direct package-level Go dependencies when both packages are
 represented in the loaded graph. They are distinct from NOCV semantic
