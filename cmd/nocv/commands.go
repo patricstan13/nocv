@@ -34,6 +34,7 @@ var commandSpecs = map[string]commandSpec{
 	"why-package-dep":            {usage: "nocv why-package-dep <pattern> <from-package> <to-package>", extraCount: 2},
 	"type-deps":                  {usage: "nocv type-deps <pattern> <type-id>", extraCount: 1},
 	"type-paths":                 {usage: "nocv type-paths <pattern> <from-type> <to-type>", extraCount: 2},
+	"inspect-dependency":         {usage: "nocv inspect-dependency <pattern> <from-package> <to-package>", extraCount: 2},
 }
 
 type invocation struct {
@@ -44,7 +45,7 @@ type invocation struct {
 
 func parseInvocation(args []string) (invocation, error) {
 	if len(args) == 0 {
-		return invocation{}, fmt.Errorf("usage: nocv <command> <pattern> [arguments...]\ncommands: tree, calls, implementations, embeddings, signatures, imports, package-imports, package-importers, import-cycle, check-forbidden-import, check-forbidden-dependency, direct-deps, direct-dependents, impact, paths, package-paths, package-deps, why-package-dep, type-deps, type-paths")
+		return invocation{}, fmt.Errorf("usage: nocv <command> <pattern> [arguments...]\ncommands: tree, calls, implementations, embeddings, signatures, imports, package-imports, package-importers, import-cycle, check-forbidden-import, check-forbidden-dependency, direct-deps, direct-dependents, impact, paths, package-paths, package-deps, why-package-dep, type-deps, type-paths, inspect-dependency")
 	}
 	spec, exists := commandSpecs[args[0]]
 	if !exists {
@@ -178,6 +179,16 @@ func executeCommand(out io.Writer, g *graph.Graph, invocation invocation) error 
 			return err
 		}
 		printTypeDependencyPaths(out, g, from, to)
+	case "inspect-dependency":
+		from := graph.SymbolID(invocation.values[0])
+		to := graph.SymbolID(invocation.values[1])
+		if err := requirePackage(g, from); err != nil {
+			return err
+		}
+		if err := requirePackage(g, to); err != nil {
+			return err
+		}
+		printDependencyInspection(out, g, from, to)
 	default:
 		return fmt.Errorf("unknown command %q", invocation.name)
 	}

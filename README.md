@@ -35,6 +35,7 @@ go run ./cmd/nocv package-deps ./...
 go run ./cmd/nocv why-package-dep ./... nocv/cmd/nocv nocv/query
 go run ./cmd/nocv type-deps ./goanalyzer/testdata/typeview/... example.com/typeview/service::Service
 go run ./cmd/nocv type-paths ./goanalyzer/testdata/typeview/... example.com/typeview/service::Service example.com/typeview/store::Store
+go run ./cmd/nocv inspect-dependency ./goanalyzer/testdata/typeview/... example.com/typeview/app example.com/typeview/repository
 ```
 
 The graph model is language-independent. Go syntax trees are used only inside
@@ -60,6 +61,10 @@ dependency queries derive struct/interface relationships only when both ends of
 a semantic fact belong to represented types; package-level functions do not
 participate. Package dependency queries independently derive relationships from
 semantic facts crossing package boundaries.
+
+`inspect-dependency` is an exploratory cross-level workflow that shows a
+package dependency path and drills each package hop into any type-level
+relationships and their exact semantic evidence.
 
 Imports are stored direct package-level Go dependencies when both packages are
 represented in the loaded graph. They are distinct from NOCV semantic

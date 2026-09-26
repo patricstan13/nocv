@@ -1,0 +1,158 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+
+	"nocv/goanalyzer"
+	"nocv/graph"
+	"nocv/query"
+)
+
+func TestDependencyInspectionDrillsThroughMixedTransitiveFixture(t *testing.T) {
+	g, err := goanalyzer.Load(context.Background(), filepath.Join("..", "..", "goanalyzer", "testdata", "typeview"), "./...")
+	if err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	app := graph.SymbolID("example.com/typeview/app")
+	repository := graph.SymbolID("example.com/typeview/repository")
+	serviceType := graph.SymbolID("example.com/typeview/service::Service")
+
+	beforePackages := query.PackageDependencyPaths(g, app, repository)
+	beforeTypes := query.DirectTypeDependencies(g, serviceType)
+	beforeExact := query.DirectDependencies(g, "example.com/typeview/service::Service::Create")
+
+	var first bytes.Buffer
+	printDependencyInspection(&first, g, app, repository)
+	output := first.String()
+	for _, want := range []string{
+		"Dependency inspection:",
+		"PACKAGE PATH 1",
+		"PACKAGE PATH 2",
+		"example.com/typeview/app -> example.com/typeview/service",
+		"example.com/typeview/service -> example.com/typeview/repository",
+		"example.com/typeview/app::Run calls -> example.com/typeview/service::Service::Create",
+		"example.com/typeview/service::Service -> example.com/typeview/repository::Repository",
+		"TYPE",
+		"EXACT PACKAGE EVIDENCE",
+		"EXACT",
+	} {
+		if !strings.Contains(output, want) {
+			t.Errorf("inspection output lacks %q:\n%s", want, output)
+		}
+	}
+	packageOnly := "example.com/typeview/app::Run calls -> example.com/typeview/service::Service::Create"
+	if count := strings.Count(output, packageOnly); count != 1 {
+		t.Errorf("package-function evidence rendered %d times, want only package evidence once:\n%s", count, output)
+	}
+	typeBacked := "example.com/typeview/service::Service::Create calls -> example.com/typeview/repository::Repository::Save"
+	if count := strings.Count(output, typeBacked); count != 3 {
+		t.Errorf("type-backed evidence rendered %d times, want package, type, and exact lineage:\n%s", count, output)
+	}
+	if strings.Contains(output, " imports -> ") {
+		t.Errorf("import leaked into semantic inspection:\n%s", output)
+	}
+
+	var second bytes.Buffer
+	printDependencyInspection(&second, g, app, repository)
+	if second.String() != output {
+		t.Fatalf("inspection rendering is not deterministic:\nfirst:\n%s\nsecond:\n%s", output, second.String())
+	}
+	if after := query.PackageDependencyPaths(g, app, repository); !reflect.DeepEqual(after, beforePackages) {
+		t.Fatalf("package paths changed after inspection: %#v", after)
+	}
+	if after := query.DirectTypeDependencies(g, serviceType); !reflect.DeepEqual(after, beforeTypes) {
+		t.Fatalf("type dependencies changed after inspection: %#v", after)
+	}
+	if after := query.DirectDependencies(g, "example.com/typeview/service::Service::Create"); !reflect.DeepEqual(after, beforeExact) {
+		t.Fatalf("exact dependencies changed after inspection: %#v", after)
+	}
+}
+
+func TestDependencyInspectionShowsMultipleTypesInterfaceAndPackageFunctionEvidence(t *testing.T) {
+	g := inspectionFixture(t)
+	dependencies := typeDependenciesForPackageHop(g, "service", "repository")
+	if len(dependencies) != 2 {
+		t.Fatalf("typeDependenciesForPackageHop() = %#v, want two relationships", dependencies)
+	}
+	if dependencies[0].From != "service::Service" || dependencies[0].To != "repository::Repository" || len(dependencies[0].Evidence) != 3 {
+		t.Fatalf("first dependency = %#v, want Service -> Repository with three exact facts", dependencies[0])
+	}
+	if dependencies[1].From != "service::Worker" || dependencies[1].To != "repository::Audit" || len(dependencies[1].Evidence) != 1 {
+		t.Fatalf("second dependency = %#v, want Worker -> Audit", dependencies[1])
+	}
+
+	var out bytes.Buffer
+	printDependencyInspection(&out, g, "service", "repository")
+	output := out.String()
+	for _, want := range []string{
+		"service::Migrate calls -> repository::Repository::Save",
+		"service::Service -> repository::Repository",
+		"service::Service implements -> repository::Repository",
+		"service::Service::Create implements -> repository::Repository::Save",
+		"service::Worker -> repository::Audit",
+	} {
+		if !strings.Contains(output, want) {
+			t.Errorf("inspection output lacks %q:\n%s", want, output)
+		}
+	}
+	if strings.Count(output, "service::Migrate calls -> repository::Repository::Save") != 1 {
+		t.Errorf("package-function fact should remain package-only:\n%s", output)
+	}
+	if strings.Contains(output, " imports -> ") {
+		t.Errorf("import leaked into inspection:\n%s", output)
+	}
+}
+
+func TestDependencyInspectionStopsWhenNoPackageDependencyExists(t *testing.T) {
+	g, ids := cliFixture(t)
+	var out bytes.Buffer
+	printDependencyInspection(&out, g, ids.packageB, ids.packageA)
+	output := out.String()
+	if !strings.Contains(output, "PACKAGE\n  no dependency") {
+		t.Fatalf("missing clean no-dependency result:\n%s", output)
+	}
+	if strings.Contains(output, "HOP") || strings.Contains(output, "TYPE") || strings.Contains(output, "EXACT") {
+		t.Fatalf("no-dependency inspection attempted lower-level drilldown:\n%s", output)
+	}
+}
+
+func inspectionFixture(t *testing.T) *graph.Graph {
+	t.Helper()
+	g := graph.New()
+	for _, node := range []graph.Node{
+		{ID: "service", Kind: graph.NodePackage, Name: "service"},
+		{ID: "repository", Kind: graph.NodePackage, Name: "repository"},
+		{ID: "service::Service", Kind: graph.NodeStruct, Name: "Service", Parent: "service"},
+		{ID: "service::Worker", Kind: graph.NodeStruct, Name: "Worker", Parent: "service"},
+		{ID: "repository::Repository", Kind: graph.NodeInterface, Name: "Repository", Parent: "repository"},
+		{ID: "repository::Audit", Kind: graph.NodeStruct, Name: "Audit", Parent: "repository"},
+		{ID: "service::Migrate", Kind: graph.NodeFunction, Name: "Migrate", Parent: "service"},
+		{ID: "service::Service::Create", Kind: graph.NodeFunction, Name: "Create", Parent: "service::Service"},
+		{ID: "service::Worker::Sync", Kind: graph.NodeFunction, Name: "Sync", Parent: "service::Worker"},
+		{ID: "repository::Repository::Save", Kind: graph.NodeFunction, Name: "Save", Parent: "repository::Repository"},
+		{ID: "repository::Audit::Record", Kind: graph.NodeFunction, Name: "Record", Parent: "repository::Audit"},
+	} {
+		if err := g.AddNode(node); err != nil {
+			t.Fatalf("AddNode(%q): %v", node.ID, err)
+		}
+	}
+	for index, edge := range []graph.Edge{
+		{From: "service::Migrate", To: "repository::Repository::Save", Kind: graph.EdgeCalls},
+		{From: "service::Service::Create", To: "repository::Repository::Save", Kind: graph.EdgeCalls},
+		{From: "service::Service", To: "repository::Repository", Kind: graph.EdgeImplements},
+		{From: "service::Service::Create", To: "repository::Repository::Save", Kind: graph.EdgeImplements},
+		{From: "service::Worker::Sync", To: "repository::Audit::Record", Kind: graph.EdgeCalls},
+		{From: "service", To: "repository", Kind: graph.EdgeImports},
+	} {
+		edge.Evidence = []graph.Location{{File: "inspection.go", Offset: index}}
+		if err := g.AddEdge(edge); err != nil {
+			t.Fatalf("AddEdge(%s, %q -> %q): %v", edge.Kind, edge.From, edge.To, err)
+		}
+	}
+	return g
+}
