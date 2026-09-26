@@ -14,6 +14,7 @@ type commandSpec struct {
 }
 
 var commandSpecs = map[string]commandSpec{
+	"serve":                      {usage: "nocv serve <pattern>"},
 	"tree":                       {usage: "nocv tree <pattern>"},
 	"calls":                      {usage: "nocv calls <pattern>"},
 	"implementations":            {usage: "nocv implementations <pattern>"},
@@ -46,7 +47,7 @@ type invocation struct {
 
 func parseInvocation(args []string) (invocation, error) {
 	if len(args) == 0 {
-		return invocation{}, fmt.Errorf("usage: nocv <command> <pattern> [arguments...]\ncommands: tree, calls, implementations, embeddings, signatures, imports, package-imports, package-importers, import-cycle, check-forbidden-import, check-forbidden-dependency, direct-deps, direct-dependents, impact, paths, package-paths, package-deps, why-package-dep, type-deps, type-paths, inspect-dependency, inspect-node")
+		return invocation{}, fmt.Errorf("usage: nocv <command> <pattern> [arguments...]\ncommands: serve, tree, calls, implementations, embeddings, signatures, imports, package-imports, package-importers, import-cycle, check-forbidden-import, check-forbidden-dependency, direct-deps, direct-dependents, impact, paths, package-paths, package-deps, why-package-dep, type-deps, type-paths, inspect-dependency, inspect-node")
 	}
 	spec, exists := commandSpecs[args[0]]
 	if !exists {
@@ -60,6 +61,8 @@ func parseInvocation(args []string) (invocation, error) {
 
 func executeCommand(out io.Writer, g *graph.Graph, invocation invocation) error {
 	switch invocation.name {
+	case "serve":
+		return serve(out, g)
 	case "tree":
 		printTree(out, g)
 	case "calls":

@@ -18,6 +18,7 @@ func TestParseInvocationRejectsMissingUnknownAndWrongArguments(t *testing.T) {
 	}{
 		{name: "missing command", want: "usage: nocv <command>"},
 		{name: "unknown command", args: []string{"unknown", "./..."}, want: `unknown command "unknown"`},
+		{name: "extra serve argument", args: []string{"serve", "./...", "extra"}, want: "usage: nocv serve <pattern>"},
 		{name: "missing path endpoint", args: []string{"paths", "./...", "from"}, want: "usage: nocv paths <pattern> <from-symbol> <to-symbol>"},
 		{name: "missing import cycle endpoint", args: []string{"import-cycle", "./...", "from"}, want: "usage: nocv import-cycle <pattern> <from-package> <to-package>"},
 		{name: "missing forbidden import endpoint", args: []string{"check-forbidden-import", "./...", "from"}, want: "usage: nocv check-forbidden-import <pattern> <from-package> <to-package>"},

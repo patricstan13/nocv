@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NOCV Package Explorer</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header>
+    <div>
+      <p class="eyebrow">NOCV</p>
+      <h1>Package dependencies</h1>
+    </div>
+    <p class="legend"><span></span> semantic dependency</p>
+  </header>
+  <main>
+    <section id="network" aria-label="Package dependency graph"></section>
+    <aside id="inspector" aria-live="polite">
+      <div class="empty-state">
+        <p class="eyebrow">Inspector</p>
+        <h2>Select a package or dependency</h2>
+        <p>Package dependencies point from the dependent package to the package it uses.</p>
+      </div>
+    </aside>
+  </main>
+  <script src="/static/vis-network.min.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

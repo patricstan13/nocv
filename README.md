@@ -15,6 +15,7 @@ implementation relationships established by Go's type system, plus explicit
 struct and interface embedding relationships.
 
 ```sh
+go run ./cmd/nocv serve ./...
 go run ./cmd/nocv tree ./...
 go run ./cmd/nocv calls ./...
 go run ./cmd/nocv implementations ./...
@@ -38,6 +39,24 @@ go run ./cmd/nocv type-paths ./goanalyzer/testdata/typeview/... example.com/type
 go run ./cmd/nocv inspect-dependency ./goanalyzer/testdata/typeview/... example.com/typeview/app example.com/typeview/repository
 go run ./cmd/nocv inspect-node ./goanalyzer/testdata/documentation/... example.com/documentation/service::Service
 ```
+
+## Graphical package explorer
+
+Run `nocv serve <pattern>` to load a graph once and start a read-only package
+dependency explorer on an automatically selected local port. The command prints
+the `http://127.0.0.1:<port>` URL and keeps serving until it is stopped; it does
+not open a browser. For example:
+
+```sh
+go run ./cmd/nocv serve ./...
+```
+
+The canvas shows packages and direct semantic package dependencies, directed
+from the dependent package to the package it uses. Select a package to inspect
+its documentation, declarations, semantic neighbors, and separately modeled
+imports. Select an edge to inspect the type-level and exact-only facts that
+establish that direct dependency. The first slice intentionally has no reload,
+persistence, search, type graph, or function graph.
 
 The graph model is language-independent. Go syntax trees are used only inside
 `goanalyzer` and are converted into graph nodes and semantic edges before being
