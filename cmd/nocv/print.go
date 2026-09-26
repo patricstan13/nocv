@@ -285,66 +285,29 @@ func printDependencyInspection(out io.Writer, g *graph.Graph, from, to graph.Sym
 
 		for stepIndex, step := range path.Steps {
 			fmt.Fprintf(out, "\nHOP %d\n  %s -> %s\n", stepIndex+1, step.From, step.To)
-			fmt.Fprintln(out, "\n  EXACT PACKAGE EVIDENCE")
-			for _, evidence := range step.Evidence {
+			inspection := query.InspectPackageDependency(g, step)
+			fmt.Fprintln(out, "\n  TYPE")
+			if len(inspection.TypeDependencies) == 0 {
+				fmt.Fprintln(out, "    (none)")
+			} else {
+				for _, dependency := range inspection.TypeDependencies {
+					fmt.Fprintf(out, "    %s -> %s\n", dependency.From, dependency.To)
+					fmt.Fprintln(out, "      evidence:")
+					for _, evidence := range dependency.Evidence {
+						fmt.Fprintf(out, "        %s %s -> %s\n", evidence.From, evidence.Kind, evidence.To)
+					}
+				}
+			}
+
+			fmt.Fprintln(out, "\n  EXACT ONLY")
+			if len(inspection.ExactOnly) == 0 {
+				fmt.Fprintln(out, "    (none)")
+			}
+			for _, evidence := range inspection.ExactOnly {
 				fmt.Fprintf(out, "    %s %s -> %s\n", evidence.From, evidence.Kind, evidence.To)
 			}
-
-			dependencies := typeDependenciesForPackageHop(g, step.From, step.To)
-			fmt.Fprintln(out, "\n  TYPE")
-			if len(dependencies) == 0 {
-				fmt.Fprintln(out, "    (none)")
-				fmt.Fprintln(out, "\n  EXACT\n    (no type-level relationship)")
-				continue
-			}
-			for _, dependency := range dependencies {
-				fmt.Fprintf(out, "    %s -> %s\n", dependency.From, dependency.To)
-				fmt.Fprintln(out, "      evidence:")
-				for _, evidence := range dependency.Evidence {
-					fmt.Fprintf(out, "        %s %s -> %s\n", evidence.From, evidence.Kind, evidence.To)
-				}
-			}
-
-			fmt.Fprintln(out, "\n  EXACT")
-			for _, dependency := range dependencies {
-				fmt.Fprintf(out, "    %s -> %s\n", dependency.From, dependency.To)
-				for _, evidence := range dependency.Evidence {
-					fmt.Fprintf(out, "      %s %s -> %s\n", evidence.From, evidence.Kind, evidence.To)
-				}
-			}
 		}
 	}
-}
-
-func typeDependenciesForPackageHop(g *graph.Graph, from, to graph.SymbolID) []query.TypeDependency {
-	var dependencies []query.TypeDependency
-	for _, typeID := range typesInPackage(g, from) {
-		for _, dependency := range query.DirectTypeDependencies(g, typeID) {
-			target, exists := g.Node(dependency.To)
-			if exists && target.Parent == to {
-				dependencies = append(dependencies, dependency)
-			}
-		}
-	}
-	sort.Slice(dependencies, func(i, j int) bool {
-		if dependencies[i].From != dependencies[j].From {
-			return dependencies[i].From < dependencies[j].From
-		}
-		return dependencies[i].To < dependencies[j].To
-	})
-	return dependencies
-}
-
-func typesInPackage(g *graph.Graph, packageID graph.SymbolID) []graph.SymbolID {
-	var types []graph.SymbolID
-	for _, id := range g.Children(packageID) {
-		node, exists := g.Node(id)
-		if exists && (node.Kind == graph.NodeStruct || node.Kind == graph.NodeInterface) {
-			types = append(types, id)
-		}
-	}
-	sort.Slice(types, func(i, j int) bool { return types[i] < types[j] })
-	return types
 }
 
 func printPackageDependencyExplanation(out io.Writer, g *graph.Graph, from, to graph.SymbolID) {

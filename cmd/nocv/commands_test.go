@@ -85,7 +85,7 @@ func TestExecuteCommandsRenderFocusedDeterministicOutput(t *testing.T) {
 		{name: "check-forbidden-dependency", values: []string{string(ids.packageB), string(ids.packageA)}, want: []string{"Forbidden package dependency:", "No violation."}, unwanted: []string{"VIOLATION", "path 1:"}},
 		{name: "type-deps", values: []string{string(ids.service)}, want: []string{"Type dependencies:", string(ids.service), "-> " + string(ids.repository), "evidence:", "calls ->"}},
 		{name: "type-paths", values: []string{string(ids.service), string(ids.repository)}, want: []string{"Type dependency paths:", "path 1:", string(ids.service), "-> " + string(ids.repository), "evidence:"}},
-		{name: "inspect-dependency", values: []string{string(ids.packageA), string(ids.packageB)}, want: []string{"Dependency inspection:", "PACKAGE PATH 1", "HOP 1", "EXACT PACKAGE EVIDENCE", "TYPE", string(ids.service) + " -> " + string(ids.repository), "EXACT"}},
+		{name: "inspect-dependency", values: []string{string(ids.packageA), string(ids.packageB)}, want: []string{"Dependency inspection:", "PACKAGE PATH 1", "HOP 1", "TYPE", string(ids.service) + " -> " + string(ids.repository), "EXACT ONLY"}},
 		{name: "direct-deps", values: []string{string(ids.caller)}, want: []string{string(ids.caller), "calls ->", "accepts ->"}},
 		{name: "direct-dependents", values: []string{string(ids.repository)}, want: []string{string(ids.repository), "<- implements", "<- accepts"}},
 		{name: "impact", values: []string{string(ids.callee)}, want: []string{"Impact of", string(ids.caller), "path 1:"}},

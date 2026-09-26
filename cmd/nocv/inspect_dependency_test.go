@@ -38,8 +38,7 @@ func TestDependencyInspectionDrillsThroughMixedTransitiveFixture(t *testing.T) {
 		"example.com/typeview/app::Run calls -> example.com/typeview/service::Service::Create",
 		"example.com/typeview/service::Service -> example.com/typeview/repository::Repository",
 		"TYPE",
-		"EXACT PACKAGE EVIDENCE",
-		"EXACT",
+		"EXACT ONLY",
 	} {
 		if !strings.Contains(output, want) {
 			t.Errorf("inspection output lacks %q:\n%s", want, output)
@@ -50,8 +49,8 @@ func TestDependencyInspectionDrillsThroughMixedTransitiveFixture(t *testing.T) {
 		t.Errorf("package-function evidence rendered %d times, want only package evidence once:\n%s", count, output)
 	}
 	typeBacked := "example.com/typeview/service::Service::Create calls -> example.com/typeview/repository::Repository::Save"
-	if count := strings.Count(output, typeBacked); count != 3 {
-		t.Errorf("type-backed evidence rendered %d times, want package, type, and exact lineage:\n%s", count, output)
+	if count := strings.Count(output, typeBacked); count != 1 {
+		t.Errorf("type-backed evidence rendered %d times, want one classified occurrence:\n%s", count, output)
 	}
 	if strings.Contains(output, " imports -> ") {
 		t.Errorf("import leaked into semantic inspection:\n%s", output)
@@ -75,9 +74,13 @@ func TestDependencyInspectionDrillsThroughMixedTransitiveFixture(t *testing.T) {
 
 func TestDependencyInspectionShowsMultipleTypesInterfaceAndPackageFunctionEvidence(t *testing.T) {
 	g := inspectionFixture(t)
-	dependencies := typeDependenciesForPackageHop(g, "service", "repository")
+	paths := query.PackageDependencyPaths(g, "service", "repository")
+	if len(paths) != 1 || len(paths[0].Steps) != 1 {
+		t.Fatalf("package paths = %#v, want one direct step", paths)
+	}
+	dependencies := query.InspectPackageDependency(g, paths[0].Steps[0]).TypeDependencies
 	if len(dependencies) != 2 {
-		t.Fatalf("typeDependenciesForPackageHop() = %#v, want two relationships", dependencies)
+		t.Fatalf("InspectPackageDependency() type dependencies = %#v, want two relationships", dependencies)
 	}
 	if dependencies[0].From != "service::Service" || dependencies[0].To != "repository::Repository" || len(dependencies[0].Evidence) != 3 {
 		t.Fatalf("first dependency = %#v, want Service -> Repository with three exact facts", dependencies[0])

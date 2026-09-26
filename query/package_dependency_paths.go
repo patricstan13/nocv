@@ -154,8 +154,7 @@ func copyPackageDependency(dependency PackageDependency) PackageDependency {
 	copy := PackageDependency{From: dependency.From, To: dependency.To}
 	copy.Evidence = make([]Relationship, len(dependency.Evidence))
 	for index, relationship := range dependency.Evidence {
-		copy.Evidence[index] = relationship
-		copy.Evidence[index].Evidence = append([]graph.Location(nil), relationship.Evidence...)
+		copy.Evidence[index] = copyRelationship(relationship)
 	}
 	return copy
 }

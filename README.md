@@ -62,9 +62,9 @@ a semantic fact belong to represented types; package-level functions do not
 participate. Package dependency queries independently derive relationships from
 semantic facts crossing package boundaries.
 
-`inspect-dependency` is an exploratory cross-level workflow that shows a
-package dependency path and drills each package hop into any type-level
-relationships and their exact semantic evidence.
+`inspect-dependency` shows each package dependency hop, the type-level
+relationships that explain that hop, and any remaining exact semantic facts
+that have no type-level representation.
 
 Imports are stored direct package-level Go dependencies when both packages are
 represented in the loaded graph. They are distinct from NOCV semantic
