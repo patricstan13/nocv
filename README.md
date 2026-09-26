@@ -23,6 +23,7 @@ go run ./cmd/nocv signatures ./...
 go run ./cmd/nocv imports ./...
 go run ./cmd/nocv package-imports ./... nocv/query
 go run ./cmd/nocv package-importers ./... nocv/graph
+go run ./cmd/nocv import-cycle ./... nocv/graph nocv/cmd/nocv
 go run ./cmd/nocv direct-deps ./... nocv/query::Impact
 go run ./cmd/nocv direct-dependents ./... nocv/query::DirectDependents
 go run ./cmd/nocv impact ./... nocv/graph::Graph
@@ -52,6 +53,9 @@ represented in the loaded graph. They are distinct from NOCV semantic
 dependencies (`Calls`, `Implements`, `Embeds`, `Accepts`, and `Returns`) and
 from derived package dependency paths. External packages are not represented
 unless they are part of the analyzed package set.
+
+`import-cycle` checks whether a proposed direct package import would close an
+existing import path and therefore create a cycle.
 
 Query and workflow features that benefit from manual validation should expose
 a focused CLI command instead of adding unconditional demonstration output.

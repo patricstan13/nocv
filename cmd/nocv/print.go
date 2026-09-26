@@ -127,6 +127,27 @@ func printDirectImporters(out io.Writer, g *graph.Graph, id graph.SymbolID) {
 	}
 }
 
+func printImportCycleCheck(out io.Writer, g *graph.Graph, from, to graph.SymbolID) {
+	fmt.Fprintf(out, "Proposed import:\n  %s -> %s\n\n", from, to)
+	result := query.WouldCreateImportCycle(g, from, to)
+	if !result.WouldCycle {
+		fmt.Fprintln(out, "No import cycle would be created.")
+		return
+	}
+
+	fmt.Fprintln(out, "Would create import cycle.")
+	for index, path := range result.Paths {
+		fmt.Fprintf(out, "\nexisting path %d:\n", index+1)
+		for packageIndex, packageID := range path.Packages {
+			if packageIndex == 0 {
+				fmt.Fprintf(out, "  %s\n", packageID)
+			} else {
+				fmt.Fprintf(out, "  -> %s\n", packageID)
+			}
+		}
+	}
+}
+
 func printImpact(out io.Writer, g *graph.Graph, id graph.SymbolID) {
 	fmt.Fprintf(out, "Impact of %s:\n", id)
 	results := query.Impact(g, id)

@@ -22,6 +22,7 @@ var commandSpecs = map[string]commandSpec{
 	"imports":           {usage: "nocv imports <pattern>"},
 	"package-imports":   {usage: "nocv package-imports <pattern> <package-id>", extraCount: 1},
 	"package-importers": {usage: "nocv package-importers <pattern> <package-id>", extraCount: 1},
+	"import-cycle":      {usage: "nocv import-cycle <pattern> <from-package> <to-package>", extraCount: 2},
 	"direct-deps":       {usage: "nocv direct-deps <pattern> <symbol-id>", extraCount: 1},
 	"direct-dependents": {usage: "nocv direct-dependents <pattern> <symbol-id>", extraCount: 1},
 	"impact":            {usage: "nocv impact <pattern> <symbol-id>", extraCount: 1},
@@ -39,7 +40,7 @@ type invocation struct {
 
 func parseInvocation(args []string) (invocation, error) {
 	if len(args) == 0 {
-		return invocation{}, fmt.Errorf("usage: nocv <command> <pattern> [arguments...]\ncommands: tree, calls, implementations, embeddings, signatures, imports, package-imports, package-importers, direct-deps, direct-dependents, impact, paths, package-paths, package-deps, why-package-dep")
+		return invocation{}, fmt.Errorf("usage: nocv <command> <pattern> [arguments...]\ncommands: tree, calls, implementations, embeddings, signatures, imports, package-imports, package-importers, import-cycle, direct-deps, direct-dependents, impact, paths, package-paths, package-deps, why-package-dep")
 	}
 	spec, exists := commandSpecs[args[0]]
 	if !exists {
@@ -77,6 +78,16 @@ func executeCommand(out io.Writer, g *graph.Graph, invocation invocation) error 
 			return err
 		}
 		printDirectImporters(out, g, id)
+	case "import-cycle":
+		from := graph.SymbolID(invocation.values[0])
+		to := graph.SymbolID(invocation.values[1])
+		if err := requirePackage(g, from); err != nil {
+			return err
+		}
+		if err := requirePackage(g, to); err != nil {
+			return err
+		}
+		printImportCycleCheck(out, g, from, to)
 	case "direct-deps":
 		id := graph.SymbolID(invocation.values[0])
 		if err := requireSymbol(g, id); err != nil {
