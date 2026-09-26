@@ -25,6 +25,7 @@ go run ./cmd/nocv package-imports ./... nocv/query
 go run ./cmd/nocv package-importers ./... nocv/graph
 go run ./cmd/nocv import-cycle ./... nocv/graph nocv/cmd/nocv
 go run ./cmd/nocv check-forbidden-import ./... nocv/query nocv/graph
+go run ./cmd/nocv check-forbidden-dependency ./... nocv/cmd/nocv nocv/graph
 go run ./cmd/nocv direct-deps ./... nocv/query::Impact
 go run ./cmd/nocv direct-dependents ./... nocv/query::DirectDependents
 go run ./cmd/nocv impact ./... nocv/graph::Graph
@@ -61,6 +62,10 @@ existing import path and therefore create a cycle.
 `check-forbidden-import` checks whether one exact package directly imports
 another forbidden package. It does not evaluate transitive imports or semantic
 dependency paths.
+
+`check-forbidden-dependency` checks whether one exact package has any projected
+semantic dependency path to another exact package. It is distinct from
+`check-forbidden-import`, which checks only a direct Go import.
 
 Query and workflow features that benefit from manual validation should expose
 a focused CLI command instead of adding unconditional demonstration output.

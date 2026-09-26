@@ -163,6 +163,19 @@ func printForbiddenImportCheck(out io.Writer, g *graph.Graph, from, to graph.Sym
 	}
 }
 
+func printForbiddenDependencyCheck(out io.Writer, g *graph.Graph, from, to graph.SymbolID) {
+	fmt.Fprintf(out, "Forbidden package dependency:\n  %s -> %s\n\n", from, to)
+	violation, exists := query.CheckForbiddenPackageDependency(g, from, to)
+	if !exists {
+		fmt.Fprintln(out, "No violation.")
+		return
+	}
+
+	fmt.Fprintln(out, "VIOLATION")
+	fmt.Fprintln(out)
+	printPackagePathResults(out, violation.Paths)
+}
+
 func printImpact(out io.Writer, g *graph.Graph, id graph.SymbolID) {
 	fmt.Fprintf(out, "Impact of %s:\n", id)
 	results := query.Impact(g, id)
@@ -202,6 +215,10 @@ func printPackageDependencyPaths(out io.Writer, g *graph.Graph, from, to graph.S
 		fmt.Fprintln(out, "  (none)")
 		return
 	}
+	printPackagePathResults(out, paths)
+}
+
+func printPackagePathResults(out io.Writer, paths []query.PackageDependencyPath) {
 	for index, path := range paths {
 		fmt.Fprintf(out, "path %d:\n", index+1)
 		for packageIndex, packageID := range path.Packages {
