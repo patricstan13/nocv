@@ -32,6 +32,27 @@ func DirectTypeDependencies(g *graph.Graph, typeID graph.SymbolID) []TypeDepende
 	return copyTypeDependencies(typeDependencyView(g)[typeID])
 }
 
+// DirectTypeDependents returns direct derived type dependencies whose target
+// is typeID. Dependencies retain their natural From -> To orientation.
+func DirectTypeDependents(g *graph.Graph, typeID graph.SymbolID) []TypeDependency {
+	if !isTypeNode(g, typeID) {
+		return nil
+	}
+	view := typeDependencyView(g)
+	var dependents []TypeDependency
+	for _, dependencies := range view {
+		for _, dependency := range dependencies {
+			if dependency.To == typeID {
+				dependents = append(dependents, copyTypeDependency(dependency))
+			}
+		}
+	}
+	sort.Slice(dependents, func(i, j int) bool {
+		return dependents[i].From < dependents[j].From
+	})
+	return dependents
+}
+
 // TypeDependencyPaths returns every distinct simple route through the derived
 // semantic type view between two exact represented types.
 func TypeDependencyPaths(g *graph.Graph, from, to graph.SymbolID) []TypeDependencyPath {

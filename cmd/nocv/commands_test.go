@@ -25,6 +25,7 @@ func TestParseInvocationRejectsMissingUnknownAndWrongArguments(t *testing.T) {
 		{name: "missing type dependency endpoint", args: []string{"type-deps", "./..."}, want: "usage: nocv type-deps <pattern> <type-id>"},
 		{name: "missing type path endpoint", args: []string{"type-paths", "./...", "from"}, want: "usage: nocv type-paths <pattern> <from-type> <to-type>"},
 		{name: "missing inspection endpoint", args: []string{"inspect-dependency", "./...", "from"}, want: "usage: nocv inspect-dependency <pattern> <from-package> <to-package>"},
+		{name: "missing node inspection symbol", args: []string{"inspect-node", "./..."}, want: "usage: nocv inspect-node <pattern> <symbol-id>"},
 		{name: "extra tree argument", args: []string{"tree", "./...", "extra"}, want: "usage: nocv tree <pattern>"},
 	}
 	for _, test := range tests {
@@ -86,6 +87,7 @@ func TestExecuteCommandsRenderFocusedDeterministicOutput(t *testing.T) {
 		{name: "type-deps", values: []string{string(ids.service)}, want: []string{"Type dependencies:", string(ids.service), "-> " + string(ids.repository), "evidence:", "calls ->"}},
 		{name: "type-paths", values: []string{string(ids.service), string(ids.repository)}, want: []string{"Type dependency paths:", "path 1:", string(ids.service), "-> " + string(ids.repository), "evidence:"}},
 		{name: "inspect-dependency", values: []string{string(ids.packageA), string(ids.packageB)}, want: []string{"Dependency inspection:", "PACKAGE PATH 1", "HOP 1", "TYPE", string(ids.service) + " -> " + string(ids.repository), "EXACT ONLY"}},
+		{name: "inspect-node", values: []string{string(ids.service)}, want: []string{"Node inspection:", string(ids.service), "Kind:", "struct", "Parent:", string(ids.packageA), "Documentation:", "(none)", "Methods:", string(ids.caller), "Type dependencies:", string(ids.repository), "Direct semantic dependencies:", "implements ->", "embeds ->"}},
 		{name: "direct-deps", values: []string{string(ids.caller)}, want: []string{string(ids.caller), "calls ->", "accepts ->"}},
 		{name: "direct-dependents", values: []string{string(ids.repository)}, want: []string{string(ids.repository), "<- implements", "<- accepts"}},
 		{name: "impact", values: []string{string(ids.callee)}, want: []string{"Impact of", string(ids.caller), "path 1:"}},
@@ -149,6 +151,7 @@ func TestExecuteCommandReportsMissingAndInvalidSymbols(t *testing.T) {
 		{name: "type-paths", values: []string{string(ids.service), string(ids.caller)}, want: "symbol is not a type: " + string(ids.caller)},
 		{name: "inspect-dependency", values: []string{"missing", string(ids.packageB)}, want: "unknown package: missing"},
 		{name: "inspect-dependency", values: []string{string(ids.packageA), string(ids.repository)}, want: "symbol is not a package: " + string(ids.repository)},
+		{name: "inspect-node", values: []string{"missing"}, want: "unknown symbol: missing"},
 	}
 	for _, test := range tests {
 		t.Run(test.name+test.want, func(t *testing.T) {

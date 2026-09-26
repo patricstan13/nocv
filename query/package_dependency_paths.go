@@ -32,6 +32,28 @@ func DirectPackageDependencies(g *graph.Graph, packageID graph.SymbolID) []Packa
 	return copyPackageDependencies(packageDependencyView(g)[packageID])
 }
 
+// DirectPackageDependents returns direct derived semantic package dependencies
+// whose target is packageID. Dependencies retain their natural From -> To
+// orientation.
+func DirectPackageDependents(g *graph.Graph, packageID graph.SymbolID) []PackageDependency {
+	if !isPackageNode(g, packageID) {
+		return nil
+	}
+	view := packageDependencyView(g)
+	var dependents []PackageDependency
+	for _, dependencies := range view {
+		for _, dependency := range dependencies {
+			if dependency.To == packageID {
+				dependents = append(dependents, copyPackageDependency(dependency))
+			}
+		}
+	}
+	sort.Slice(dependents, func(i, j int) bool {
+		return dependents[i].From < dependents[j].From
+	})
+	return dependents
+}
+
 // PackageDependencyPaths returns every distinct simple route through the
 // derived semantic package view from one exact package to another.
 func PackageDependencyPaths(g *graph.Graph, from, to graph.SymbolID) []PackageDependencyPath {

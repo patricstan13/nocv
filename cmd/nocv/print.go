@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 
 	"nocv/graph"
 	"nocv/query"
@@ -306,6 +307,124 @@ func printDependencyInspection(out io.Writer, g *graph.Graph, from, to graph.Sym
 			for _, evidence := range inspection.ExactOnly {
 				fmt.Fprintf(out, "    %s %s -> %s\n", evidence.From, evidence.Kind, evidence.To)
 			}
+		}
+	}
+}
+
+func printNodeInspection(out io.Writer, g *graph.Graph, id graph.SymbolID) {
+	inspection, exists := query.InspectNode(g, id)
+	if !exists {
+		return
+	}
+	node := inspection.Node
+	fmt.Fprintf(out, "Node inspection:\n  %s\n\nKind:\n  %s\n", node.ID, node.Kind)
+	if node.Parent != "" {
+		fmt.Fprintf(out, "\nParent:\n  %s\n", node.Parent)
+	}
+	fmt.Fprintln(out, "\nLocation:")
+	if node.Location.File == "" {
+		fmt.Fprintln(out, "  (unknown)")
+	} else {
+		fmt.Fprintf(out, "  %s:%d\n", node.Location.File, node.Location.Offset)
+	}
+	fmt.Fprintln(out, "\nDocumentation:")
+	printDocumentation(out, node.Documentation, "  ")
+
+	switch {
+	case inspection.Package != nil:
+		detail := inspection.Package
+		printNodeList(out, "Types", detail.Types)
+		printNodeList(out, "Functions", detail.Functions)
+		printPackageDependenciesForNode(out, "Semantic dependencies", detail.Dependencies, false)
+		printPackageDependenciesForNode(out, "Semantic dependents", detail.Dependents, true)
+		printRelationshipsForNode(out, "Imports", detail.Imports, false)
+		printRelationshipsForNode(out, "Importers", detail.Importers, true)
+
+	case inspection.Type != nil:
+		detail := inspection.Type
+		printNodeList(out, "Methods", detail.Methods)
+		printTypeDependenciesForNode(out, "Type dependencies", detail.Dependencies, false)
+		printTypeDependenciesForNode(out, "Type dependents", detail.Dependents, true)
+		printRelationshipsForNode(out, "Direct semantic dependencies", detail.DirectDependencies, false)
+		printRelationshipsForNode(out, "Direct semantic dependents", detail.DirectDependents, true)
+
+	case inspection.Function != nil:
+		printRelationshipsForNode(out, "Dependencies", inspection.Function.Dependencies, false)
+		printRelationshipsForNode(out, "Dependents", inspection.Function.Dependents, true)
+	}
+}
+
+func printDocumentation(out io.Writer, documentation, indent string) {
+	if documentation == "" {
+		fmt.Fprintf(out, "%s(none)\n", indent)
+		return
+	}
+	for _, line := range strings.Split(documentation, "\n") {
+		fmt.Fprintf(out, "%s%s\n", indent, line)
+	}
+}
+
+func printNodeList(out io.Writer, heading string, nodes []graph.Node) {
+	fmt.Fprintf(out, "\n%s:\n", heading)
+	if len(nodes) == 0 {
+		fmt.Fprintln(out, "  (none)")
+		return
+	}
+	for _, node := range nodes {
+		fmt.Fprintf(out, "  %s (%s)\n", node.Name, node.ID)
+	}
+}
+
+func printPackageDependenciesForNode(out io.Writer, heading string, dependencies []query.PackageDependency, incoming bool) {
+	fmt.Fprintf(out, "\n%s:\n", heading)
+	if len(dependencies) == 0 {
+		fmt.Fprintln(out, "  (none)")
+		return
+	}
+	for _, dependency := range dependencies {
+		if incoming {
+			fmt.Fprintf(out, "  <- %s\n", dependency.From)
+		} else {
+			fmt.Fprintf(out, "  -> %s\n", dependency.To)
+		}
+		printNodeEvidence(out, dependency.Evidence)
+	}
+}
+
+func printTypeDependenciesForNode(out io.Writer, heading string, dependencies []query.TypeDependency, incoming bool) {
+	fmt.Fprintf(out, "\n%s:\n", heading)
+	if len(dependencies) == 0 {
+		fmt.Fprintln(out, "  (none)")
+		return
+	}
+	for _, dependency := range dependencies {
+		if incoming {
+			fmt.Fprintf(out, "  <- %s\n", dependency.From)
+		} else {
+			fmt.Fprintf(out, "  -> %s\n", dependency.To)
+		}
+		printNodeEvidence(out, dependency.Evidence)
+	}
+}
+
+func printNodeEvidence(out io.Writer, evidence []query.Relationship) {
+	fmt.Fprintln(out, "     evidence:")
+	for _, relationship := range evidence {
+		fmt.Fprintf(out, "       %s %s -> %s\n", relationship.From, relationship.Kind, relationship.To)
+	}
+}
+
+func printRelationshipsForNode(out io.Writer, heading string, relationships []query.Relationship, incoming bool) {
+	fmt.Fprintf(out, "\n%s:\n", heading)
+	if len(relationships) == 0 {
+		fmt.Fprintln(out, "  (none)")
+		return
+	}
+	for _, relationship := range relationships {
+		if incoming {
+			fmt.Fprintf(out, "  <- %s %s\n", relationship.Kind, relationship.From)
+		} else {
+			fmt.Fprintf(out, "  %s -> %s\n", relationship.Kind, relationship.To)
 		}
 	}
 }
