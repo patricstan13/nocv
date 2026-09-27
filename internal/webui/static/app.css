@@ -87,6 +87,9 @@ ul { margin: 0; padding: 0; list-style: none; }
 li { padding: 7px 0; color: #344054; border-bottom: 1px solid #edf0f4; font-size: 13px; overflow-wrap: anywhere; }
 li:last-child { border-bottom: 0; }
 .relationship { padding: 11px 0; }
+.package-relationship { padding: 0; }
+.package-relationship-button { display: block; width: 100%; padding: 8px 0; color: #155e75; background: transparent; border: 0; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; text-align: left; }
+.package-relationship-button:hover, .package-relationship-button:focus-visible { color: #0e7490; background: #ecfeff; outline: none; }
 .type-relationship-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .relationship strong { color: #155e75; }
 .relationship code, .symbol { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }

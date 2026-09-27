@@ -41,7 +41,7 @@ func TestClientFreezesPhysicsAndPreservesSemanticEdgeDirection(t *testing.T) {
 		`to: edge.from`,
 		`semanticFrom: edge.from`,
 		`semanticTo: edge.to`,
-		`showDependency(selected.semanticFrom, selected.semanticTo)`,
+		`openPackageDependency(selected.semanticFrom, selected.semanticTo, selected, false)`,
 	} {
 		if !strings.Contains(client, required) {
 			t.Errorf("client source lacks %q", required)
@@ -53,7 +53,8 @@ func TestClientUsesCompactProgressiveInspector(t *testing.T) {
 	client := readAsset(t, "static/app.js")
 	for _, required := range []string{
 		`inspector.scrollTop = 0`,
-		`section("Dependencies", detail.dependencies, dependencyTargetItem)`,
+		`section("Dependencies", detail.dependencies, packageDependencyItem)`,
+		`section("Dependents", detail.dependents, packageDependentItem)`,
 		`section("Imports", detail.imports, dependencyTargetItem)`,
 		`contentsSummary(detail)`,
 		`collapsibleRelationships(facts, 2, "Show evidence")`,
@@ -67,6 +68,34 @@ func TestClientUsesCompactProgressiveInspector(t *testing.T) {
 	for _, exhaustive := range []string{`section("Types"`, `section("Functions"`, `section("Imports", detail.imports, relationshipItem)`} {
 		if strings.Contains(client, exhaustive) {
 			t.Errorf("client still renders exhaustive package detail with %q", exhaustive)
+		}
+	}
+}
+
+func TestClientNavigatesPackageRelationshipsBySemanticIdentity(t *testing.T) {
+	client := readAsset(t, "static/app.js")
+	for _, required := range []string{
+		`function packageRelationshipItem(value, ref)`,
+		`button.title = ref`,
+		`button.setAttribute("aria-label", label + " (" + ref + ")")`,
+		`button.addEventListener("click", () => navigateToPackageDependency(value))`,
+		`return packageRelationshipItem(value, value.to)`,
+		`return packageRelationshipItem(value, value.from)`,
+		`function findPackageEdge(relationship)`,
+		`edge.semanticFrom === relationship.from && edge.semanticTo === relationship.to`,
+		`packageNetwork.setSelection({ edges: [edge.id] }`,
+		`nodes: [edge.from, edge.to]`,
+		`maxZoomLevel: 0.85`,
+		`openPackageDependency(relationship.from, relationship.to, edge, true)`,
+		`showDependency(from, to)`,
+	} {
+		if !strings.Contains(client, required) {
+			t.Errorf("client relationship navigation source lacks %q", required)
+		}
+	}
+	for _, forbidden := range []string{`/api/relationship`, `/api/focus`, `/api/package-edge`} {
+		if strings.Contains(client, forbidden) {
+			t.Errorf("client relationship navigation source contains forbidden API %q", forbidden)
 		}
 	}
 }
@@ -290,6 +319,29 @@ func TestNodeAPIUsesInspectNodePresentation(t *testing.T) {
 	}
 	if len(result.Package.Imports) != 2 || result.Package.Imports[0].To != "example.com/import-only" {
 		t.Errorf("imports = %#v", result.Package.Imports)
+	}
+}
+
+func TestNodeAPIPreservesDependencyDirectionForRelationshipNavigation(t *testing.T) {
+	response := request(t, Handler(webFixture(t)), http.MethodGet, "/api/node?id=example.com%2Fservice")
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var result nodeInspection
+	decode(t, response, &result)
+	if result.Package == nil {
+		t.Fatal("service package inspection is missing")
+	}
+	if len(result.Package.Dependencies) != 1 || len(result.Package.Dependents) != 1 {
+		t.Fatalf("service relationships = dependencies %#v, dependents %#v", result.Package.Dependencies, result.Package.Dependents)
+	}
+	dependency := result.Package.Dependencies[0]
+	if dependency.From != "example.com/service" || dependency.To != "example.com/repository" {
+		t.Errorf("service dependency = %s -> %s, want semantic direction service -> repository", dependency.From, dependency.To)
+	}
+	dependent := result.Package.Dependents[0]
+	if dependent.From != "example.com/app" || dependent.To != "example.com/service" {
+		t.Errorf("service dependent = %s -> %s, want semantic direction app -> service", dependent.From, dependent.To)
 	}
 }
 

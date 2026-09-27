@@ -59,11 +59,13 @@ uses physics for its initial layout and then freezes for stable manual
 exploration. Package search locates and focuses an existing package node
 without filtering or changing the graph. Select a package to inspect
 its documentation, declarations, semantic neighbors, and separately modeled
-imports. Select an edge to inspect the type-level and exact-only facts that
-establish that direct dependency. A contextual type drilldown shows only the
-type relationships explaining that selected package dependency. Package-level
-facts with no type owner remain available as exact-only evidence and are
-intentionally absent from the type graph. The current interface intentionally
+imports. Its Dependencies and Dependents jump directly to the corresponding
+package relationship in the graph. Select an edge to inspect the type-level
+and exact-only facts that establish that direct dependency. A contextual type
+drilldown shows only the type relationships explaining that selected package
+dependency. Package-level facts with no type owner remain available as
+exact-only evidence and are intentionally absent from the type graph. The
+current interface intentionally
 has no reload, persistence, global type graph, type search, or function graph.
 
 The graph model is language-independent. Go syntax trees are used only inside

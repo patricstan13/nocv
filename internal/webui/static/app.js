@@ -16,6 +16,7 @@
   let typeNetwork;
   let typeFreezeFallback;
   let currentPackageDependency;
+  let packageLabels = new Map();
 
   function element(tag, text, className) {
     const item = document.createElement(tag);
@@ -72,6 +73,31 @@
 
   function dependencySourceItem(value) {
     return element("li", value.from, "symbol");
+  }
+
+  function packageLabel(ref) {
+    const components = ref.split("/");
+    return packageLabels.get(ref) || components[components.length - 1];
+  }
+
+  function packageRelationshipItem(value, ref) {
+    const item = element("li", undefined, "package-relationship");
+    const label = packageLabel(ref);
+    const button = element("button", label, "package-relationship-button");
+    button.type = "button";
+    button.title = ref;
+    button.setAttribute("aria-label", label + " (" + ref + ")");
+    button.addEventListener("click", () => navigateToPackageDependency(value));
+    item.appendChild(button);
+    return item;
+  }
+
+  function packageDependencyItem(value) {
+    return packageRelationshipItem(value, value.to);
+  }
+
+  function packageDependentItem(value) {
+    return packageRelationshipItem(value, value.from);
   }
 
   function contentsSummary(detail) {
@@ -239,8 +265,8 @@
         element("h3", "Documentation"),
         element("p", result.node.documentation || "No package documentation.", result.node.documentation ? "documentation" : "muted"),
       ];
-      parts.push(...section("Dependencies", detail.dependencies, dependencyTargetItem));
-      parts.push(...section("Dependents", detail.dependents, dependencySourceItem));
+      parts.push(...section("Dependencies", detail.dependencies, packageDependencyItem));
+      parts.push(...section("Dependents", detail.dependents, packageDependentItem));
       parts.push(...section("Imports", detail.imports, dependencyTargetItem));
       parts.push(...section("Imported by", detail.importers, dependencySourceItem));
       parts.push(...contentsSummary(detail));
@@ -300,6 +326,29 @@
     } catch (error) {
       showError(error);
     }
+  }
+
+  function findPackageEdge(relationship) {
+    return packageEdges.get().find((edge) => edge.semanticFrom === relationship.from && edge.semanticTo === relationship.to);
+  }
+
+  function openPackageDependency(from, to, edge, focusEndpoints) {
+    if (edge) {
+      packageNetwork.setSelection({ edges: [edge.id] }, { unselectAll: true, highlightEdges: false });
+      if (focusEndpoints) {
+        packageNetwork.fit({
+          nodes: [edge.from, edge.to],
+          maxZoomLevel: 0.85,
+          animation: { duration: 450, easingFunction: "easeInOutQuad" },
+        });
+      }
+    }
+    showDependency(from, to);
+  }
+
+  function navigateToPackageDependency(relationship) {
+    const edge = findPackageEdge(relationship);
+    openPackageDependency(relationship.from, relationship.to, edge, true);
   }
 
   function showTypeDrilldown(result) {
@@ -445,6 +494,7 @@
 
   getJSON("/api/packages").then((data) => {
     const packageNodes = data.nodes.slice();
+    packageLabels = new Map(packageNodes.map((node) => [node.id, node.label]));
     const nodes = new vis.DataSet(packageNodes.map((node) => ({
       id: node.id,
       label: node.label,
@@ -500,7 +550,7 @@
         showPackage(params.nodes[0]);
       } else if (params.edges.length > 0) {
         const selected = packageEdges.get(params.edges[0]);
-        showDependency(selected.semanticFrom, selected.semanticTo);
+        openPackageDependency(selected.semanticFrom, selected.semanticTo, selected, false);
       }
     });
   }).catch(showError);
