@@ -3,6 +3,9 @@
 
   const inspector = document.getElementById("inspector");
   const networkElement = document.getElementById("network");
+  const searchInput = document.getElementById("package-search-input");
+  const searchResults = document.getElementById("package-search-results");
+  const SEARCH_RESULT_LIMIT = 10;
 
   function element(tag, text, className) {
     const item = document.createElement(tag);
@@ -96,6 +99,118 @@
     return value.file + (value.offset ? ":" + value.offset : "");
   }
 
+  function compareText(left, right) {
+    if (left < right) return -1;
+    if (left > right) return 1;
+    return 0;
+  }
+
+  function searchPackages(packageNodes, query) {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) return { matches: [], total: 0 };
+
+    const ranked = packageNodes.map((node) => {
+      const label = node.label.toLowerCase();
+      const ref = node.id.toLowerCase();
+      let rank = 4;
+      if (label === normalized) rank = 0;
+      else if (label.startsWith(normalized)) rank = 1;
+      else if (label.includes(normalized)) rank = 2;
+      else if (ref.includes(normalized)) rank = 3;
+      return { node, rank, label, ref };
+    }).filter((candidate) => candidate.rank < 4);
+
+    ranked.sort((left, right) => left.rank - right.rank || compareText(left.label, right.label) || compareText(left.ref, right.ref));
+    return {
+      matches: ranked.slice(0, SEARCH_RESULT_LIMIT).map((candidate) => candidate.node),
+      total: ranked.length,
+    };
+  }
+
+  function setupPackageSearch(packageNodes, network) {
+    let visibleResults = [];
+    let activeIndex = -1;
+
+    function closeSearchResults() {
+      searchResults.hidden = true;
+      searchInput.setAttribute("aria-expanded", "false");
+      activeIndex = -1;
+    }
+
+    function setActiveIndex(index) {
+      if (visibleResults.length === 0) return;
+      activeIndex = (index + visibleResults.length) % visibleResults.length;
+      Array.from(searchResults.querySelectorAll(".package-search-result")).forEach((item, itemIndex) => {
+        const active = itemIndex === activeIndex;
+        item.classList.toggle("is-active", active);
+        item.setAttribute("aria-selected", String(active));
+        if (active) item.scrollIntoView({ block: "nearest" });
+      });
+    }
+
+    function selectSearchResult(node) {
+      network.selectNodes([node.id], true);
+      network.focus(node.id, {
+        scale: 0.75,
+        animation: { duration: 450, easingFunction: "easeInOutQuad" },
+      });
+      showPackage(node.id);
+      closeSearchResults();
+    }
+
+    function renderSearchResults() {
+      const query = searchInput.value;
+      if (!query.trim()) {
+        visibleResults = [];
+        searchResults.replaceChildren();
+        closeSearchResults();
+        return;
+      }
+
+      const result = searchPackages(packageNodes, query);
+      visibleResults = result.matches;
+      const parts = [];
+      visibleResults.forEach((node, index) => {
+        const item = element("button", undefined, "package-search-result");
+        item.type = "button";
+        item.setAttribute("role", "option");
+        item.setAttribute("aria-selected", "false");
+        item.appendChild(element("span", node.label, "package-search-label"));
+        item.appendChild(element("span", node.id, "package-search-ref"));
+        item.addEventListener("mouseenter", () => setActiveIndex(index));
+        item.addEventListener("click", () => selectSearchResult(node));
+        parts.push(item);
+      });
+      if (result.total === 0) {
+        parts.push(element("div", "No matching packages", "package-search-status"));
+      } else if (result.total > visibleResults.length) {
+        parts.push(element("div", "+ " + (result.total - visibleResults.length) + " more matches", "package-search-status"));
+      }
+      searchResults.replaceChildren(...parts);
+      searchResults.hidden = false;
+      searchInput.setAttribute("aria-expanded", "true");
+      activeIndex = visibleResults.length > 0 ? 0 : -1;
+      if (activeIndex >= 0) setActiveIndex(activeIndex);
+    }
+
+    searchInput.addEventListener("input", renderSearchResults);
+    searchInput.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeSearchResults();
+      } else if (event.key === "ArrowDown" && visibleResults.length > 0) {
+        event.preventDefault();
+        setActiveIndex(activeIndex + 1);
+      } else if (event.key === "ArrowUp" && visibleResults.length > 0) {
+        event.preventDefault();
+        setActiveIndex(activeIndex - 1);
+      } else if (event.key === "Enter" && activeIndex >= 0) {
+        event.preventDefault();
+        selectSearchResult(visibleResults[activeIndex]);
+      }
+    });
+  }
+
   async function showPackage(id) {
     try {
       const result = await getJSON("/api/node?id=" + encodeURIComponent(id));
@@ -155,7 +270,8 @@
   }
 
   getJSON("/api/packages").then((data) => {
-    const nodes = new vis.DataSet(data.nodes.map((node) => ({
+    const packageNodes = data.nodes.slice();
+    const nodes = new vis.DataSet(packageNodes.map((node) => ({
       id: node.id,
       label: node.label,
       title: node.id,
@@ -203,6 +319,7 @@
     network.once("stabilizationIterationsDone", freezePhysics);
     network.once("stabilized", freezePhysics);
     freezeFallback = window.setTimeout(freezePhysics, 8000);
+    setupPackageSearch(packageNodes, network);
 
     network.on("click", (params) => {
       if (params.nodes.length > 0) {

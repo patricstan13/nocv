@@ -27,6 +27,20 @@ header {
   border-bottom: 1px solid #27334c;
 }
 
+.brand { flex: 0 0 auto; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.package-search { position: relative; flex: 0 1 360px; min-width: 150px; }
+.package-search-input { width: 100%; padding: 9px 11px; color: #172033; background: #fff; border: 1px solid #475569; border-radius: 7px; outline: none; font: inherit; font-size: 13px; }
+.package-search-input:focus { border-color: #38bdf8; box-shadow: 0 0 0 3px rgb(56 189 248 / 20%); }
+.package-search-results { position: absolute; z-index: 20; top: calc(100% + 6px); right: 0; left: 0; max-height: min(420px, calc(100vh - 100px)); overflow: auto; color: #172033; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 14px 32px rgb(15 23 42 / 20%); }
+.package-search-result { display: block; width: 100%; padding: 9px 11px; text-align: left; color: inherit; background: transparent; border: 0; border-bottom: 1px solid #edf0f4; cursor: pointer; }
+.package-search-result:last-of-type { border-bottom: 0; }
+.package-search-result:hover, .package-search-result.is-active { background: #ecfeff; }
+.package-search-label, .package-search-ref { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.package-search-label { font-size: 13px; font-weight: 700; }
+.package-search-ref { margin-top: 2px; color: #697586; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
+.package-search-status { padding: 10px 11px; color: #697586; font-size: 12px; }
+
 h1, h2, h3, p { margin-top: 0; }
 h1 { margin-bottom: 0; font-size: 22px; letter-spacing: -0.02em; }
 h2 { font-size: 19px; line-height: 1.3; overflow-wrap: anywhere; }
@@ -77,6 +91,9 @@ li:last-child { border-bottom: 0; }
 
 @media (max-width: 760px) {
   header { height: 64px; padding: 10px 16px; }
+  .brand .eyebrow { display: none; }
+  .brand h1 { font-size: 16px; }
+  .package-search { flex: 1 1 auto; }
   .legend { display: none; }
   main { grid-template-columns: 1fr; grid-template-rows: 55% 45%; height: calc(100vh - 64px); min-height: 0; }
   #inspector { border-top: 1px solid #d7dee8; border-left: 0; padding: 18px; }

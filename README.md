@@ -56,7 +56,8 @@ architectural reading, arrows point from a dependency to the package that uses
 it: if `format` depends on `ast`, the canvas shows `ast → format`. NOCV's
 underlying model still records this as `format` depending on `ast`. The graph
 uses physics for its initial layout and then freezes for stable manual
-exploration. Select a package to inspect
+exploration. Package search locates and focuses an existing package node
+without filtering or changing the graph. Select a package to inspect
 its documentation, declarations, semantic neighbors, and separately modeled
 imports. Select an edge to inspect the type-level and exact-only facts that
 establish that direct dependency. The first slice intentionally has no reload,

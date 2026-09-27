@@ -71,10 +71,47 @@ func TestClientUsesCompactProgressiveInspector(t *testing.T) {
 	}
 }
 
+func TestClientSearchesRanksAndFocusesExistingPackages(t *testing.T) {
+	client := readAsset(t, "static/app.js")
+	for _, required := range []string{
+		`const SEARCH_RESULT_LIMIT = 10`,
+		`function searchPackages(packageNodes, query)`,
+		`query.trim().toLowerCase()`,
+		`if (label === normalized) rank = 0`,
+		`else if (label.startsWith(normalized)) rank = 1`,
+		`else if (label.includes(normalized)) rank = 2`,
+		`else if (ref.includes(normalized)) rank = 3`,
+		`compareText(left.label, right.label) || compareText(left.ref, right.ref)`,
+		`ranked.slice(0, SEARCH_RESULT_LIMIT)`,
+		`event.key === "ArrowDown"`,
+		`event.key === "ArrowUp"`,
+		`event.key === "Enter"`,
+		`event.key === "Escape"`,
+		`network.selectNodes([node.id], true)`,
+		`network.focus(node.id`,
+		`showPackage(node.id)`,
+		`setupPackageSearch(packageNodes, network)`,
+	} {
+		if !strings.Contains(client, required) {
+			t.Errorf("client search source lacks %q", required)
+		}
+	}
+	for _, mutation := range []string{"nodes.remove(", "nodes.clear(", "nodes.update(", "edges.remove(", "edges.clear(", "edges.update("} {
+		if strings.Contains(client, mutation) {
+			t.Errorf("search source may mutate graph data through %q", mutation)
+		}
+	}
+}
+
 func TestEmbeddedAssetsPreserveCanvasSizingAndHaveNoMissingSourceMap(t *testing.T) {
 	index := readAsset(t, "static/index.html")
 	if !strings.Contains(index, "dependency → dependent") {
 		t.Fatal("package explorer legend does not explain visual edge direction")
+	}
+	for _, required := range []string{`id="package-search-input"`, `placeholder="Search packages..."`, `role="combobox"`, `role="listbox"`} {
+		if !strings.Contains(index, required) {
+			t.Errorf("package explorer search markup lacks %q", required)
+		}
 	}
 	stylesheet := readAsset(t, "static/app.css")
 	for _, required := range []string{
@@ -164,6 +201,29 @@ func TestPackagesAPIIsDeterministicAndExcludesImports(t *testing.T) {
 	}
 	if !reflect.DeepEqual(result.Edges, wantEdges) {
 		t.Errorf("edges = %#v, want semantic-only %#v", result.Edges, wantEdges)
+	}
+}
+
+func TestPackagesAPIPreservesRefsForDuplicateLabels(t *testing.T) {
+	g := graph.New()
+	for _, node := range []webNode{
+		{ID: "example.com/a/internal", Kind: graph.NodePackage, Name: "internal"},
+		{ID: "example.com/b/internal", Kind: graph.NodePackage, Name: "internal"},
+	} {
+		if err := addWebNode(g, node); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	response := request(t, Handler(g), http.MethodGet, "/api/packages")
+	var result packageGraph
+	decode(t, response, &result)
+	want := []packageNode{
+		{ID: "example.com/a/internal", Label: "internal"},
+		{ID: "example.com/b/internal", Label: "internal"},
+	}
+	if response.Code != http.StatusOK || !reflect.DeepEqual(result.Nodes, want) {
+		t.Fatalf("duplicate-label packages = status %d, nodes %#v; want %#v", response.Code, result.Nodes, want)
 	}
 }
 
