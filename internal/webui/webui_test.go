@@ -375,6 +375,56 @@ func TestNodeAPIPreservesDependencyDirectionForRelationshipNavigation(t *testing
 	}
 }
 
+func TestNodeAPISerializesSymbolCentricTypeAndFunctionInspection(t *testing.T) {
+	handler := Handler(webFixture(t))
+
+	typeResponse := request(t, handler, http.MethodGet, "/api/node?id=example.com%2Fservice%3A%3AService")
+	if typeResponse.Code != http.StatusOK {
+		t.Fatalf("type status = %d, body = %s", typeResponse.Code, typeResponse.Body.String())
+	}
+	var typeResult nodeInspection
+	decode(t, typeResponse, &typeResult)
+	if typeResult.Type == nil || len(typeResult.Type.Methods) != 1 {
+		t.Fatalf("type inspection = %#v", typeResult.Type)
+	}
+	method := typeResult.Type.Methods[0]
+	if method.Ref != "example.com/service::Service::Create" || method.Kind != "function" || method.Name != "Create" ||
+		method.ParentRef != "example.com/service::Service" || method.ParentName != "Service" {
+		t.Errorf("method summary = %#v", method)
+	}
+	if len(typeResult.Type.DirectDependencies) != 1 || len(typeResult.Type.DirectDependents) != 0 {
+		t.Fatalf("type exact relationships = %#v / %#v", typeResult.Type.DirectDependencies, typeResult.Type.DirectDependents)
+	}
+	direct := typeResult.Type.DirectDependencies[0]
+	if direct.From.Ref != "example.com/service::Service" || direct.To.Ref != "example.com/service::Base" ||
+		direct.To.ParentRef != "example.com/service" || direct.Kind != "embeds" {
+		t.Errorf("type direct relationship = %#v", direct)
+	}
+
+	functionResponse := request(t, handler, http.MethodGet, "/api/node?id=example.com%2Fservice%3A%3AService%3A%3ACreate")
+	if functionResponse.Code != http.StatusOK {
+		t.Fatalf("function status = %d, body = %s", functionResponse.Code, functionResponse.Body.String())
+	}
+	var functionResult nodeInspection
+	decode(t, functionResponse, &functionResult)
+	detail := functionResult.Function
+	if detail == nil || len(detail.Calls) != 1 || len(detail.CalledBy) != 1 || len(detail.Accepts) != 1 {
+		t.Fatalf("function inspection = %#v", detail)
+	}
+	call := detail.Calls[0]
+	if call.From.Ref != "example.com/service::Service::Create" || call.From.ParentName != "Service" ||
+		call.To.Ref != "example.com/repository::Repository::Save" || call.To.ParentRef != "example.com/repository::Repository" ||
+		call.Kind != "calls" || len(call.Evidence) != 1 || call.Evidence[0].Offset != 110 {
+		t.Errorf("call relationship = %#v", call)
+	}
+	if detail.CalledBy[0].From.Ref != "example.com/app::Run" || detail.CalledBy[0].From.ParentRef != "example.com/app" {
+		t.Errorf("called-by relationship = %#v", detail.CalledBy[0])
+	}
+	if detail.Accepts[0].To.Ref != "example.com/repository::Repository" || detail.Accepts[0].To.Kind != "interface" {
+		t.Errorf("accepts relationship = %#v", detail.Accepts[0])
+	}
+}
+
 func TestDependencyAPISeparatesTypeAndExactOnlyEvidence(t *testing.T) {
 	handler := Handler(webFixture(t))
 
@@ -456,15 +506,16 @@ func decode(t *testing.T, response *httptest.ResponseRecorder, target any) {
 func webFixture(t *testing.T) *graph.Graph {
 	t.Helper()
 	const (
-		app        = graph.SymbolRef("example.com/app")
-		service    = graph.SymbolRef("example.com/service")
-		repository = graph.SymbolRef("example.com/repository")
-		importOnly = graph.SymbolRef("example.com/import-only")
-		appRun     = graph.SymbolRef("example.com/app::Run")
-		serviceT   = graph.SymbolRef("example.com/service::Service")
-		serviceRun = graph.SymbolRef("example.com/service::Service::Create")
-		repoT      = graph.SymbolRef("example.com/repository::Repository")
-		repoSave   = graph.SymbolRef("example.com/repository::Repository::Save")
+		app         = graph.SymbolRef("example.com/app")
+		service     = graph.SymbolRef("example.com/service")
+		repository  = graph.SymbolRef("example.com/repository")
+		importOnly  = graph.SymbolRef("example.com/import-only")
+		appRun      = graph.SymbolRef("example.com/app::Run")
+		serviceT    = graph.SymbolRef("example.com/service::Service")
+		serviceBase = graph.SymbolRef("example.com/service::Base")
+		serviceRun  = graph.SymbolRef("example.com/service::Service::Create")
+		repoT       = graph.SymbolRef("example.com/repository::Repository")
+		repoSave    = graph.SymbolRef("example.com/repository::Repository::Save")
 	)
 	g := graph.New()
 	nodes := []webNode{
@@ -474,6 +525,7 @@ func webFixture(t *testing.T) *graph.Graph {
 		{ID: importOnly, Kind: graph.NodePackage, Name: "importonly"},
 		{ID: appRun, Kind: graph.NodeFunction, Name: "Run", Parent: app, Location: graph.Location{File: "app.go", Offset: 40}},
 		{ID: serviceT, Kind: graph.NodeStruct, Name: "Service", Parent: service, Location: graph.Location{File: "service.go", Offset: 20}},
+		{ID: serviceBase, Kind: graph.NodeStruct, Name: "Base", Parent: service, Location: graph.Location{File: "service.go", Offset: 30}},
 		{ID: serviceRun, Kind: graph.NodeFunction, Name: "Create", Parent: serviceT, Location: graph.Location{File: "service.go", Offset: 80}},
 		{ID: repoT, Kind: graph.NodeInterface, Name: "Repository", Parent: repository, Location: graph.Location{File: "repository.go", Offset: 15}},
 		{ID: repoSave, Kind: graph.NodeFunction, Name: "Save", Parent: repoT, Location: graph.Location{File: "repository.go", Offset: 45}},
@@ -489,6 +541,7 @@ func webFixture(t *testing.T) *graph.Graph {
 		{From: appRun, To: serviceRun, Kind: graph.EdgeCalls, Evidence: []graph.Location{{File: "app.go", Offset: 70}}},
 		{From: serviceRun, To: repoSave, Kind: graph.EdgeCalls, Evidence: []graph.Location{{File: "service.go", Offset: 110}}},
 		{From: serviceRun, To: repoT, Kind: graph.EdgeAccepts, Evidence: []graph.Location{{File: "service.go", Offset: 90}}},
+		{From: serviceT, To: serviceBase, Kind: graph.EdgeEmbeds, Evidence: []graph.Location{{File: "service.go", Offset: 35}}},
 	}
 	for _, edge := range edges {
 		if err := addWebEdge(g, edge); err != nil {

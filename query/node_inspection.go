@@ -26,21 +26,47 @@ type PackageInspection struct {
 	Importers    []Relationship
 }
 
+// SymbolSummary identifies a graph symbol and its structural parent without
+// exposing graph-internal node identity.
+type SymbolSummary struct {
+	Ref        graph.SymbolRef
+	Kind       graph.NodeKind
+	Name       string
+	ParentRef  graph.SymbolRef
+	ParentName string
+}
+
+// SymbolRelationship is an exact semantic relationship with both endpoints
+// resolved for human-oriented inspection. Evidence remains supporting detail
+// for the generic semantic fact stored by the graph.
+type SymbolRelationship struct {
+	From     SymbolSummary
+	To       SymbolSummary
+	Kind     graph.EdgeKind
+	Evidence []graph.Location
+}
+
 // TypeInspection describes direct methods, projected type relationships, and
 // exact semantic relationships attached directly to the type declaration.
 type TypeInspection struct {
-	Methods            []graph.Node
+	Methods            []SymbolSummary
 	Dependencies       []TypeDependency
 	Dependents         []TypeDependency
-	DirectDependencies []Relationship
-	DirectDependents   []Relationship
+	DirectDependencies []SymbolRelationship
+	DirectDependents   []SymbolRelationship
 }
 
-// FunctionInspection describes exact direct semantic relationships involving
-// one package function, struct method, or interface method.
+// FunctionInspection organizes the exact semantic relationships involving one
+// package function, struct method, or interface method. Calls, Accepts,
+// Returns, and Implements are outgoing; CalledBy and ImplementedBy are
+// incoming.
 type FunctionInspection struct {
-	Dependencies []Relationship
-	Dependents   []Relationship
+	Calls         []SymbolRelationship
+	CalledBy      []SymbolRelationship
+	Accepts       []SymbolRelationship
+	Returns       []SymbolRelationship
+	Implements    []SymbolRelationship
+	ImplementedBy []SymbolRelationship
 }
 
 // InspectNode returns a detached, kind-specific read model for one represented
@@ -83,28 +109,91 @@ func InspectNode(g *graph.Graph, id graph.SymbolRef) (NodeInspection, bool) {
 		detail := &TypeInspection{
 			Dependencies:       DirectTypeDependencies(g, id),
 			Dependents:         DirectTypeDependents(g, id),
-			DirectDependencies: DirectDependencies(g, id),
-			DirectDependents:   DirectDependents(g, id),
+			DirectDependencies: symbolRelationships(g, DirectDependencies(g, id)),
+			DirectDependents:   symbolRelationships(g, DirectDependents(g, id)),
 		}
 		for _, childID := range g.Children(node.ID) {
 			child, childExists := g.Node(childID)
 			if childExists && child.Kind == graph.NodeFunction {
-				detail.Methods = append(detail.Methods, *child)
+				detail.Methods = append(detail.Methods, symbolSummary(g, *child))
 			}
 		}
-		sortNodes(detail.Methods)
+		sortSymbolSummaries(detail.Methods)
 		inspection.Type = detail
 
 	case graph.NodeFunction:
-		inspection.Function = &FunctionInspection{
-			Dependencies: DirectDependencies(g, id),
-			Dependents:   DirectDependents(g, id),
+		detail := &FunctionInspection{}
+		for _, relationship := range symbolRelationships(g, DirectDependencies(g, id)) {
+			switch relationship.Kind {
+			case graph.EdgeCalls:
+				detail.Calls = append(detail.Calls, relationship)
+			case graph.EdgeAccepts:
+				detail.Accepts = append(detail.Accepts, relationship)
+			case graph.EdgeReturns:
+				detail.Returns = append(detail.Returns, relationship)
+			case graph.EdgeImplements:
+				detail.Implements = append(detail.Implements, relationship)
+			}
 		}
+		for _, relationship := range symbolRelationships(g, DirectDependents(g, id)) {
+			switch relationship.Kind {
+			case graph.EdgeCalls:
+				detail.CalledBy = append(detail.CalledBy, relationship)
+			case graph.EdgeImplements:
+				detail.ImplementedBy = append(detail.ImplementedBy, relationship)
+			}
+		}
+		inspection.Function = detail
 
 	default:
 		return NodeInspection{}, false
 	}
 	return inspection, true
+}
+
+func symbolSummary(g *graph.Graph, node graph.Node) SymbolSummary {
+	result := SymbolSummary{Ref: node.Ref, Kind: node.Kind, Name: node.Name}
+	if parent, exists := g.Node(node.Parent); exists {
+		result.ParentRef = parent.Ref
+		result.ParentName = parent.Name
+	}
+	return result
+}
+
+func symbolRelationships(g *graph.Graph, relationships []Relationship) []SymbolRelationship {
+	result := make([]SymbolRelationship, 0, len(relationships))
+	for _, relationship := range relationships {
+		from, fromExists := g.NodeByRef(relationship.From)
+		to, toExists := g.NodeByRef(relationship.To)
+		if !fromExists || !toExists {
+			continue
+		}
+		result = append(result, SymbolRelationship{
+			From:     symbolSummary(g, *from),
+			To:       symbolSummary(g, *to),
+			Kind:     relationship.Kind,
+			Evidence: append([]graph.Location(nil), relationship.Evidence...),
+		})
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].From.Ref != result[j].From.Ref {
+			return result[i].From.Ref < result[j].From.Ref
+		}
+		if result[i].To.Ref != result[j].To.Ref {
+			return result[i].To.Ref < result[j].To.Ref
+		}
+		return result[i].Kind < result[j].Kind
+	})
+	return result
+}
+
+func sortSymbolSummaries(summaries []SymbolSummary) {
+	sort.Slice(summaries, func(i, j int) bool {
+		if summaries[i].Name != summaries[j].Name {
+			return summaries[i].Name < summaries[j].Name
+		}
+		return summaries[i].Ref < summaries[j].Ref
+	})
 }
 
 func sortNodes(nodes []graph.Node) {

@@ -62,16 +62,35 @@ type packageInspection struct {
 }
 
 type typeInspection struct {
-	Methods            []nodeInfo       `json:"methods"`
-	Dependencies       []typeDependency `json:"dependencies"`
-	Dependents         []typeDependency `json:"dependents"`
-	DirectDependencies []relationship   `json:"directDependencies"`
-	DirectDependents   []relationship   `json:"directDependents"`
+	Methods            []symbolSummary      `json:"methods"`
+	Dependencies       []typeDependency     `json:"dependencies"`
+	Dependents         []typeDependency     `json:"dependents"`
+	DirectDependencies []symbolRelationship `json:"directDependencies"`
+	DirectDependents   []symbolRelationship `json:"directDependents"`
 }
 
 type functionInspection struct {
-	Dependencies []relationship `json:"dependencies"`
-	Dependents   []relationship `json:"dependents"`
+	Calls         []symbolRelationship `json:"calls"`
+	CalledBy      []symbolRelationship `json:"calledBy"`
+	Accepts       []symbolRelationship `json:"accepts"`
+	Returns       []symbolRelationship `json:"returns"`
+	Implements    []symbolRelationship `json:"implements"`
+	ImplementedBy []symbolRelationship `json:"implementedBy"`
+}
+
+type symbolSummary struct {
+	Ref        graph.SymbolRef `json:"ref"`
+	Kind       string          `json:"kind"`
+	Name       string          `json:"name"`
+	ParentRef  graph.SymbolRef `json:"parentRef,omitempty"`
+	ParentName string          `json:"parentName,omitempty"`
+}
+
+type symbolRelationship struct {
+	From     symbolSummary `json:"from"`
+	To       symbolSummary `json:"to"`
+	Kind     string        `json:"kind"`
+	Evidence []location    `json:"evidence"`
 }
 
 type packageDependency struct {
@@ -208,17 +227,21 @@ func presentNodeInspection(g *graph.Graph, source query.NodeInspection) nodeInsp
 	}
 	if source.Type != nil {
 		result.Type = &typeInspection{
-			Methods:            presentNodes(g, source.Type.Methods),
+			Methods:            presentSymbolSummaries(source.Type.Methods),
 			Dependencies:       presentTypeDependencies(source.Type.Dependencies),
 			Dependents:         presentTypeDependencies(source.Type.Dependents),
-			DirectDependencies: presentRelationships(source.Type.DirectDependencies),
-			DirectDependents:   presentRelationships(source.Type.DirectDependents),
+			DirectDependencies: presentSymbolRelationships(source.Type.DirectDependencies),
+			DirectDependents:   presentSymbolRelationships(source.Type.DirectDependents),
 		}
 	}
 	if source.Function != nil {
 		result.Function = &functionInspection{
-			Dependencies: presentRelationships(source.Function.Dependencies),
-			Dependents:   presentRelationships(source.Function.Dependents),
+			Calls:         presentSymbolRelationships(source.Function.Calls),
+			CalledBy:      presentSymbolRelationships(source.Function.CalledBy),
+			Accepts:       presentSymbolRelationships(source.Function.Accepts),
+			Returns:       presentSymbolRelationships(source.Function.Returns),
+			Implements:    presentSymbolRelationships(source.Function.Implements),
+			ImplementedBy: presentSymbolRelationships(source.Function.ImplementedBy),
 		}
 	}
 	return result
@@ -250,6 +273,36 @@ func presentNodes(g *graph.Graph, source []graph.Node) []nodeInfo {
 	result := make([]nodeInfo, 0, len(source))
 	for _, node := range source {
 		result = append(result, presentNode(g, node))
+	}
+	return result
+}
+
+func presentSymbolSummaries(source []query.SymbolSummary) []symbolSummary {
+	result := make([]symbolSummary, 0, len(source))
+	for _, summary := range source {
+		result = append(result, presentSymbolSummary(summary))
+	}
+	return result
+}
+
+func presentSymbolSummary(source query.SymbolSummary) symbolSummary {
+	return symbolSummary{
+		Ref: source.Ref, Kind: source.Kind.String(), Name: source.Name,
+		ParentRef: source.ParentRef, ParentName: source.ParentName,
+	}
+}
+
+func presentSymbolRelationships(source []query.SymbolRelationship) []symbolRelationship {
+	result := make([]symbolRelationship, 0, len(source))
+	for _, item := range source {
+		evidence := make([]location, 0, len(item.Evidence))
+		for _, itemLocation := range item.Evidence {
+			evidence = append(evidence, location{File: itemLocation.File, Offset: itemLocation.Offset})
+		}
+		result = append(result, symbolRelationship{
+			From: presentSymbolSummary(item.From), To: presentSymbolSummary(item.To),
+			Kind: item.Kind.String(), Evidence: evidence,
+		})
 	}
 	return result
 }

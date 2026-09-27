@@ -346,15 +346,20 @@ func printNodeInspection(out io.Writer, g *graph.Graph, id graph.SymbolRef) {
 
 	case inspection.Type != nil:
 		detail := inspection.Type
-		printNodeList(out, "Methods", detail.Methods)
+		printSymbolSummaryList(out, "Methods", detail.Methods)
 		printTypeDependenciesForNode(out, "Type dependencies", detail.Dependencies, false)
 		printTypeDependenciesForNode(out, "Type dependents", detail.Dependents, true)
-		printRelationshipsForNode(out, "Direct semantic dependencies", detail.DirectDependencies, false)
-		printRelationshipsForNode(out, "Direct semantic dependents", detail.DirectDependents, true)
+		printSymbolRelationshipsForNode(out, "Direct semantic dependencies", detail.DirectDependencies, false)
+		printSymbolRelationshipsForNode(out, "Direct semantic dependents", detail.DirectDependents, true)
 
 	case inspection.Function != nil:
-		printRelationshipsForNode(out, "Dependencies", inspection.Function.Dependencies, false)
-		printRelationshipsForNode(out, "Dependents", inspection.Function.Dependents, true)
+		detail := inspection.Function
+		printSymbolRelationshipsForNode(out, "Calls", detail.Calls, false)
+		printSymbolRelationshipsForNode(out, "Called by", detail.CalledBy, true)
+		printSymbolRelationshipsForNode(out, "Accepts", detail.Accepts, false)
+		printSymbolRelationshipsForNode(out, "Returns", detail.Returns, false)
+		printSymbolRelationshipsForNode(out, "Implements", detail.Implements, false)
+		printSymbolRelationshipsForNode(out, "Implemented by", detail.ImplementedBy, true)
 	}
 }
 
@@ -376,6 +381,17 @@ func printNodeList(out io.Writer, heading string, nodes []graph.Node) {
 	}
 	for _, node := range nodes {
 		fmt.Fprintf(out, "  %s (%s)\n", node.Name, node.Ref)
+	}
+}
+
+func printSymbolSummaryList(out io.Writer, heading string, summaries []query.SymbolSummary) {
+	fmt.Fprintf(out, "\n%s:\n", heading)
+	if len(summaries) == 0 {
+		fmt.Fprintln(out, "  (none)")
+		return
+	}
+	for _, summary := range summaries {
+		fmt.Fprintf(out, "  %s (%s)\n", summary.Name, summary.Ref)
 	}
 }
 
@@ -429,6 +445,21 @@ func printRelationshipsForNode(out io.Writer, heading string, relationships []qu
 			fmt.Fprintf(out, "  <- %s %s\n", relationship.Kind, relationship.From)
 		} else {
 			fmt.Fprintf(out, "  %s -> %s\n", relationship.Kind, relationship.To)
+		}
+	}
+}
+
+func printSymbolRelationshipsForNode(out io.Writer, heading string, relationships []query.SymbolRelationship, incoming bool) {
+	fmt.Fprintf(out, "\n%s:\n", heading)
+	if len(relationships) == 0 {
+		fmt.Fprintln(out, "  (none)")
+		return
+	}
+	for _, relationship := range relationships {
+		if incoming {
+			fmt.Fprintf(out, "  <- %s %s\n", relationship.Kind, relationship.From.Ref)
+		} else {
+			fmt.Fprintf(out, "  %s -> %s\n", relationship.Kind, relationship.To.Ref)
 		}
 	}
 }

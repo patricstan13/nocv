@@ -59,7 +59,9 @@
     const item = element("li", undefined, "relationship");
     const summary = element("div");
     summary.appendChild(element("strong", value.kind));
-    summary.appendChild(document.createTextNode("  " + value.from + " → " + value.to));
+    const from = typeof value.from === "string" ? value.from : value.from.ref;
+    const to = typeof value.to === "string" ? value.to : value.to.ref;
+    summary.appendChild(document.createTextNode("  " + from + " → " + to));
     item.appendChild(summary);
     const evidence = value.evidence || [];
     if (evidence.length > 0) {

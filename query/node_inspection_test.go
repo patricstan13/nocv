@@ -66,8 +66,13 @@ func TestInspectNodeTypeAndFunctionUseProjectedAndExactSemantics(t *testing.T) {
 		"example.com/types::Service::Update",
 		ids.serviceValidate,
 	}
-	if got := nodeIDs(service.Type.Methods); !reflect.DeepEqual(got, wantMethods) {
+	if got := summaryRefs(service.Type.Methods); !reflect.DeepEqual(got, wantMethods) {
 		t.Errorf("Service methods = %v, want %v", got, wantMethods)
+	}
+	createSummary := service.Type.Methods[0]
+	if createSummary.Ref != ids.serviceCreate || createSummary.Kind != graph.NodeFunction || createSummary.Name != "Create" ||
+		createSummary.ParentRef != ids.service || createSummary.ParentName != "Service" {
+		t.Errorf("Service.Create summary = %#v", createSummary)
 	}
 	if len(service.Type.Dependencies) != 2 || service.Type.Dependencies[0].To != ids.contract || service.Type.Dependencies[1].To != ids.repository {
 		t.Errorf("Service type dependencies = %#v", service.Type.Dependencies)
@@ -77,6 +82,11 @@ func TestInspectNodeTypeAndFunctionUseProjectedAndExactSemantics(t *testing.T) {
 	}
 	if len(service.Type.DirectDependencies) != 2 {
 		t.Errorf("Service direct exact dependencies = %#v, want Implements and Embeds", service.Type.DirectDependencies)
+	}
+	if service.Type.DirectDependencies[0].From.Ref != ids.service || service.Type.DirectDependencies[0].From.Name != "Service" ||
+		service.Type.DirectDependencies[0].From.ParentRef != ids.pkg || service.Type.DirectDependencies[0].To.Ref != ids.contract ||
+		service.Type.DirectDependencies[0].To.Kind != graph.NodeInterface || service.Type.DirectDependencies[0].To.ParentRef != ids.otherPackage {
+		t.Errorf("Service direct exact dependency summaries = %#v", service.Type.DirectDependencies)
 	}
 	if len(service.Type.DirectDependents) != 0 {
 		t.Errorf("Service direct exact dependents = %#v, want empty", service.Type.DirectDependents)
@@ -92,34 +102,50 @@ func TestInspectNodeTypeAndFunctionUseProjectedAndExactSemantics(t *testing.T) {
 	if !ok || create.Function == nil || inspectionParentRef(g, create.Node) != ids.service {
 		t.Fatalf("InspectNode(Service.Create) = %#v, %v", create, ok)
 	}
-	wantOutgoingKinds := map[graph.EdgeKind]bool{
-		graph.EdgeCalls: true, graph.EdgeImplements: true, graph.EdgeAccepts: true, graph.EdgeReturns: true,
+	if len(create.Function.Calls) != 3 || len(create.Function.Accepts) != 1 || len(create.Function.Returns) != 1 ||
+		len(create.Function.Implements) != 1 || len(create.Function.CalledBy) != 1 || len(create.Function.ImplementedBy) != 0 {
+		t.Fatalf("Service.Create categories = %#v", create.Function)
 	}
-	for _, relationship := range create.Function.Dependencies {
-		wantOutgoingKinds[relationship.Kind] = false
+	if got, want := relationshipTargets(create.Function.Calls), []graph.SymbolRef{
+		"example.com/other::Repository::Save", ids.helper, ids.serviceValidate,
+	}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Service.Create calls = %v, want %v", got, want)
 	}
-	for kind, missing := range wantOutgoingKinds {
-		if missing {
-			t.Errorf("Service.Create dependencies lack %s: %#v", kind, create.Function.Dependencies)
-		}
+	if create.Function.Accepts[0].To.Ref != ids.repository || create.Function.Accepts[0].To.Name != "Repository" ||
+		create.Function.Returns[0].To.Ref != ids.repository || create.Function.Implements[0].To.Ref != "example.com/other::Contract::Execute" {
+		t.Errorf("Service.Create categorized endpoints = %#v", create.Function)
 	}
-	if len(create.Function.Dependents) != 1 || create.Function.Dependents[0].From != ids.run || create.Function.Dependents[0].Kind != graph.EdgeCalls {
-		t.Errorf("Service.Create dependents = %#v", create.Function.Dependents)
+	calledBy := create.Function.CalledBy[0]
+	if calledBy.From.Ref != ids.run || calledBy.Kind != graph.EdgeCalls || calledBy.From.ParentRef != ids.pkg || calledBy.From.ParentName != "types" {
+		t.Errorf("Service.Create called by = %#v", calledBy)
+	}
+	if got, want := create.Function.Calls[0].Evidence, []graph.Location{{File: "types.go", Offset: 0}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Service.Create call evidence = %#v, want %#v", got, want)
 	}
 
 	interfaceMethod, ok := query.InspectNode(g, "example.com/other::Contract::Execute")
 	if !ok || interfaceMethod.Function == nil || inspectionParentRef(g, interfaceMethod.Node) != ids.contract {
 		t.Fatalf("InspectNode(Contract.Execute) = %#v, %v", interfaceMethod, ok)
 	}
-	if len(interfaceMethod.Function.Dependencies) != 1 || interfaceMethod.Function.Dependencies[0].Kind != graph.EdgeAccepts {
-		t.Errorf("Contract.Execute dependencies = %#v", interfaceMethod.Function.Dependencies)
+	if len(interfaceMethod.Function.Accepts) != 1 || interfaceMethod.Function.Accepts[0].Kind != graph.EdgeAccepts {
+		t.Errorf("Contract.Execute accepts = %#v", interfaceMethod.Function.Accepts)
 	}
-	if len(interfaceMethod.Function.Dependents) != 1 || interfaceMethod.Function.Dependents[0].Kind != graph.EdgeImplements {
-		t.Errorf("Contract.Execute dependents = %#v", interfaceMethod.Function.Dependents)
+	if len(interfaceMethod.Function.ImplementedBy) != 1 || interfaceMethod.Function.ImplementedBy[0].Kind != graph.EdgeImplements ||
+		interfaceMethod.Function.ImplementedBy[0].To.ParentName != "Contract" {
+		t.Errorf("Contract.Execute implemented by = %#v", interfaceMethod.Function.ImplementedBy)
+	}
+	contract, ok := query.InspectNode(g, ids.contract)
+	if !ok || contract.Type == nil || len(contract.Type.Methods) != 1 {
+		t.Fatalf("InspectNode(Contract) = %#v, %v", contract, ok)
+	}
+	interfaceSummary := contract.Type.Methods[0]
+	if interfaceSummary.Ref != "example.com/other::Contract::Execute" || interfaceSummary.Name != "Execute" ||
+		interfaceSummary.Kind != graph.NodeFunction || interfaceSummary.ParentRef != ids.contract || interfaceSummary.ParentName != "Contract" {
+		t.Errorf("Contract.Execute method summary = %#v", interfaceSummary)
 	}
 
 	packageFunction, ok := query.InspectNode(g, ids.run)
-	if !ok || packageFunction.Function == nil || inspectionParentRef(g, packageFunction.Node) != ids.pkg || len(packageFunction.Function.Dependencies) != 1 {
+	if !ok || packageFunction.Function == nil || inspectionParentRef(g, packageFunction.Node) != ids.pkg || len(packageFunction.Function.Calls) != 1 {
 		t.Fatalf("InspectNode(Run) = %#v, %v", packageFunction, ok)
 	}
 }
@@ -137,12 +163,13 @@ func TestInspectNodeIntegratesDocumentationAndAnalyzerSemantics(t *testing.T) {
 	}
 	service, ok := query.InspectNode(documentationGraph, documentationPackage+"::Service")
 	if !ok || service.Type == nil || service.Node.Documentation != "Service coordinates order creation.\n\nIt validates requests before persistence." ||
-		len(service.Type.Methods) != 1 || service.Type.Methods[0].Documentation != "Create persists a new order." {
+		len(service.Type.Methods) != 1 || service.Type.Methods[0].Ref != documentationPackage+"::Service::Create" {
 		t.Fatalf("documented Service inspection = %#v, %v", service, ok)
 	}
 	repository, ok := query.InspectNode(documentationGraph, documentationPackage+"::Repository")
 	if !ok || repository.Type == nil || repository.Node.Documentation != "Repository defines persistence behavior." ||
-		len(repository.Type.Methods) != 1 || repository.Type.Methods[0].Documentation != "Save persists an entity." {
+		len(repository.Type.Methods) != 1 || repository.Type.Methods[0].Ref != documentationPackage+"::Repository::Save" ||
+		repository.Type.Methods[0].ParentName != "Repository" {
 		t.Fatalf("documented Repository inspection = %#v, %v", repository, ok)
 	}
 	interfaceMethod, ok := query.InspectNode(documentationGraph, documentationPackage+"::Repository::Save")
@@ -174,7 +201,7 @@ func TestInspectNodeIntegratesDocumentationAndAnalyzerSemantics(t *testing.T) {
 		t.Errorf("typeview Service inspection lost declaration location: %#v", typeView.Node.Location)
 	}
 	functionView, ok := query.InspectNode(typeGraph, "example.com/typeview/service::Service::Create")
-	if !ok || functionView.Function == nil || len(functionView.Function.Dependencies) != 2 || len(functionView.Function.Dependents) != 1 {
+	if !ok || functionView.Function == nil || len(functionView.Function.Calls) != 1 || len(functionView.Function.Accepts) != 1 || len(functionView.Function.CalledBy) != 1 {
 		t.Fatalf("typeview Service.Create inspection = %#v, %v", functionView, ok)
 	}
 	if functionView.Node.Location.File == "" {
@@ -209,7 +236,7 @@ func TestInspectNodeIsDetachedAndDoesNotChangeExistingQueries(t *testing.T) {
 	typeInspection.Type.Methods[0].Name = "mutated method"
 	typeInspection.Type.Dependencies[0].Evidence[0].Evidence[0].Offset = 902
 	functionInspection, _ := query.InspectNode(g, ids.serviceCreate)
-	functionInspection.Function.Dependencies[0].Evidence[0].Offset = 903
+	functionInspection.Function.Calls[0].Evidence[0].Offset = 903
 	packageDependents := query.DirectPackageDependents(g, ids.otherPackage)
 	packageDependents[0].Evidence[0].Evidence[0].Offset = 904
 	typeDependents := query.DirectTypeDependents(g, ids.repository)
@@ -223,7 +250,7 @@ func TestInspectNodeIsDetachedAndDoesNotChangeExistingQueries(t *testing.T) {
 		t.Fatalf("type inspection retained returned-result mutation: %#v", freshType)
 	}
 	freshFunction, _ := query.InspectNode(g, ids.serviceCreate)
-	if freshFunction.Function.Dependencies[0].Evidence[0].Offset >= 900 {
+	if freshFunction.Function.Calls[0].Evidence[0].Offset >= 900 {
 		t.Fatalf("function inspection retained returned-result mutation: %#v", freshFunction)
 	}
 
@@ -275,6 +302,22 @@ func nodeIDs(nodes []graph.Node) []graph.SymbolRef {
 		ids[index] = node.Ref
 	}
 	return ids
+}
+
+func summaryRefs(summaries []query.SymbolSummary) []graph.SymbolRef {
+	refs := make([]graph.SymbolRef, len(summaries))
+	for index, summary := range summaries {
+		refs[index] = summary.Ref
+	}
+	return refs
+}
+
+func relationshipTargets(relationships []query.SymbolRelationship) []graph.SymbolRef {
+	refs := make([]graph.SymbolRef, len(relationships))
+	for index, relationship := range relationships {
+		refs[index] = relationship.To.Ref
+	}
+	return refs
 }
 
 func inspectionParentRef(g *graph.Graph, node graph.Node) graph.SymbolRef {
