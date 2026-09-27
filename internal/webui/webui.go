@@ -21,14 +21,14 @@ type packageGraph struct {
 }
 
 type packageNode struct {
-	ID    graph.SymbolID `json:"id"`
-	Label string         `json:"label"`
+	ID    graph.SymbolRef `json:"id"`
+	Label string          `json:"label"`
 }
 
 type packageEdge struct {
-	ID   string         `json:"id"`
-	From graph.SymbolID `json:"from"`
-	To   graph.SymbolID `json:"to"`
+	ID   string          `json:"id"`
+	From graph.SymbolRef `json:"from"`
+	To   graph.SymbolRef `json:"to"`
 }
 
 type nodeInspection struct {
@@ -39,12 +39,12 @@ type nodeInspection struct {
 }
 
 type nodeInfo struct {
-	ID            graph.SymbolID `json:"id"`
-	Name          string         `json:"name"`
-	Kind          string         `json:"kind"`
-	Parent        graph.SymbolID `json:"parent,omitempty"`
-	Location      *location      `json:"location,omitempty"`
-	Documentation string         `json:"documentation,omitempty"`
+	ID            graph.SymbolRef `json:"id"`
+	Name          string          `json:"name"`
+	Kind          string          `json:"kind"`
+	Parent        graph.SymbolRef `json:"parent,omitempty"`
+	Location      *location       `json:"location,omitempty"`
+	Documentation string          `json:"documentation,omitempty"`
 }
 
 type location struct {
@@ -75,22 +75,22 @@ type functionInspection struct {
 }
 
 type packageDependency struct {
-	From     graph.SymbolID `json:"from"`
-	To       graph.SymbolID `json:"to"`
-	Evidence []relationship `json:"evidence"`
+	From     graph.SymbolRef `json:"from"`
+	To       graph.SymbolRef `json:"to"`
+	Evidence []relationship  `json:"evidence"`
 }
 
 type typeDependency struct {
-	From     graph.SymbolID `json:"from"`
-	To       graph.SymbolID `json:"to"`
-	Evidence []relationship `json:"evidence"`
+	From     graph.SymbolRef `json:"from"`
+	To       graph.SymbolRef `json:"to"`
+	Evidence []relationship  `json:"evidence"`
 }
 
 type relationship struct {
-	From     graph.SymbolID `json:"from"`
-	To       graph.SymbolID `json:"to"`
-	Kind     string         `json:"kind"`
-	Evidence []location     `json:"evidence"`
+	From     graph.SymbolRef `json:"from"`
+	To       graph.SymbolRef `json:"to"`
+	Kind     string          `json:"kind"`
+	Evidence []location      `json:"evidence"`
 }
 
 type dependencyInspection struct {
@@ -113,8 +113,8 @@ func Handler(g *graph.Graph) http.Handler {
 			if node.Kind != graph.NodePackage {
 				continue
 			}
-			response.Nodes = append(response.Nodes, packageNode{ID: node.ID, Label: node.Name})
-			for _, dependency := range query.DirectPackageDependencies(g, node.ID) {
+			response.Nodes = append(response.Nodes, packageNode{ID: node.Ref, Label: node.Name})
+			for _, dependency := range query.DirectPackageDependencies(g, node.Ref) {
 				response.Edges = append(response.Edges, packageEdge{
 					ID:   edgeID(dependency.From, dependency.To),
 					From: dependency.From,
@@ -125,7 +125,7 @@ func Handler(g *graph.Graph) http.Handler {
 		writeJSON(w, http.StatusOK, response)
 	}))
 	mux.HandleFunc("/api/node", getOnly(func(w http.ResponseWriter, r *http.Request) {
-		id := graph.SymbolID(r.URL.Query().Get("id"))
+		id := graph.SymbolRef(r.URL.Query().Get("id"))
 		if id == "" {
 			writeError(w, http.StatusBadRequest, "missing id query parameter")
 			return
@@ -135,11 +135,11 @@ func Handler(g *graph.Graph) http.Handler {
 			writeError(w, http.StatusNotFound, "node not found")
 			return
 		}
-		writeJSON(w, http.StatusOK, presentNodeInspection(inspection))
+		writeJSON(w, http.StatusOK, presentNodeInspection(g, inspection))
 	}))
 	mux.HandleFunc("/api/package-dependency", getOnly(func(w http.ResponseWriter, r *http.Request) {
-		from := graph.SymbolID(r.URL.Query().Get("from"))
-		to := graph.SymbolID(r.URL.Query().Get("to"))
+		from := graph.SymbolRef(r.URL.Query().Get("from"))
+		to := graph.SymbolRef(r.URL.Query().Get("to"))
 		if from == "" || to == "" {
 			writeError(w, http.StatusBadRequest, "missing from or to query parameter")
 			return
@@ -190,16 +190,16 @@ func getOnly(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func edgeID(from, to graph.SymbolID) string {
+func edgeID(from, to graph.SymbolRef) string {
 	return fmt.Sprintf("%d:%s>%d:%s", len(from), from, len(to), to)
 }
 
-func presentNodeInspection(source query.NodeInspection) nodeInspection {
-	result := nodeInspection{Node: presentNode(source.Node)}
+func presentNodeInspection(g *graph.Graph, source query.NodeInspection) nodeInspection {
+	result := nodeInspection{Node: presentNode(g, source.Node)}
 	if source.Package != nil {
 		result.Package = &packageInspection{
-			Types:        presentNodes(source.Package.Types),
-			Functions:    presentNodes(source.Package.Functions),
+			Types:        presentNodes(g, source.Package.Types),
+			Functions:    presentNodes(g, source.Package.Functions),
 			Dependencies: presentPackageDependencies(source.Package.Dependencies),
 			Dependents:   presentPackageDependencies(source.Package.Dependents),
 			Imports:      presentRelationships(source.Package.Imports),
@@ -208,7 +208,7 @@ func presentNodeInspection(source query.NodeInspection) nodeInspection {
 	}
 	if source.Type != nil {
 		result.Type = &typeInspection{
-			Methods:            presentNodes(source.Type.Methods),
+			Methods:            presentNodes(g, source.Type.Methods),
 			Dependencies:       presentTypeDependencies(source.Type.Dependencies),
 			Dependents:         presentTypeDependencies(source.Type.Dependents),
 			DirectDependencies: presentRelationships(source.Type.DirectDependencies),
@@ -232,10 +232,13 @@ func presentDependencyInspection(source query.PackageDependencyInspection) depen
 	}
 }
 
-func presentNode(source graph.Node) nodeInfo {
+func presentNode(g *graph.Graph, source graph.Node) nodeInfo {
 	result := nodeInfo{
-		ID: source.ID, Name: source.Name, Kind: source.Kind.String(), Parent: source.Parent,
+		ID: source.Ref, Name: source.Name, Kind: source.Kind.String(),
 		Documentation: source.Documentation,
+	}
+	if parent, exists := g.Node(source.Parent); exists {
+		result.Parent = parent.Ref
 	}
 	if source.Location.File != "" || source.Location.Offset != 0 {
 		result.Location = &location{File: source.Location.File, Offset: source.Location.Offset}
@@ -243,10 +246,10 @@ func presentNode(source graph.Node) nodeInfo {
 	return result
 }
 
-func presentNodes(source []graph.Node) []nodeInfo {
+func presentNodes(g *graph.Graph, source []graph.Node) []nodeInfo {
 	result := make([]nodeInfo, 0, len(source))
 	for _, node := range source {
-		result = append(result, presentNode(node))
+		result = append(result, presentNode(g, node))
 	}
 	return result
 }

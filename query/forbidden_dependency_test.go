@@ -25,7 +25,7 @@ func TestCheckForbiddenPackageDependencyPreservesProjectedRoutesAndEvidence(t *t
 	if violation.From != ids.app || violation.To != ids.repository || !reflect.DeepEqual(violation.Paths, beforePaths) {
 		t.Fatalf("dependency violation = %#v, want endpoints and paths %#v", violation, beforePaths)
 	}
-	wantRoutes := [][]graph.SymbolID{
+	wantRoutes := [][]graph.SymbolRef{
 		{ids.app, ids.repository},
 		{ids.app, ids.cache, ids.repository},
 		{ids.app, ids.service, ids.repository},
@@ -84,7 +84,7 @@ func TestForbiddenImportAndSemanticDependencyRulesRemainDistinct(t *testing.T) {
 
 func TestCheckForbiddenPackageDependencyValidatesExactDistinctPackages(t *testing.T) {
 	g, ids := forbiddenDependencyFixture(t)
-	for _, endpoints := range [][2]graph.SymbolID{
+	for _, endpoints := range [][2]graph.SymbolRef{
 		{ids.repository, ids.app}, // no semantic path
 		{ids.app, ids.app},
 		{"missing", ids.repository},
@@ -117,13 +117,13 @@ func TestCheckForbiddenPackageDependencyFindsNOCVPaths(t *testing.T) {
 }
 
 type forbiddenDependencyIDs struct {
-	app            graph.SymbolID
-	cache          graph.SymbolID
-	plugin         graph.SymbolID
-	repository     graph.SymbolID
-	service        graph.SymbolID
-	appRun         graph.SymbolID
-	repositorySave graph.SymbolID
+	app            graph.SymbolRef
+	cache          graph.SymbolRef
+	plugin         graph.SymbolRef
+	repository     graph.SymbolRef
+	service        graph.SymbolRef
+	appRun         graph.SymbolRef
+	repositorySave graph.SymbolRef
 }
 
 func forbiddenDependencyFixture(t *testing.T) (*graph.Graph, forbiddenDependencyIDs) {
@@ -138,10 +138,10 @@ func forbiddenDependencyFixture(t *testing.T) (*graph.Graph, forbiddenDependency
 		repositorySave: "example.com/repository::Save",
 	}
 	g := graph.New()
-	for _, id := range []graph.SymbolID{ids.app, ids.cache, ids.plugin, ids.repository, ids.service} {
-		mustAddPackagePathNode(t, g, graph.Node{ID: id, Kind: graph.NodePackage, Name: string(id)})
+	for _, id := range []graph.SymbolRef{ids.app, ids.cache, ids.plugin, ids.repository, ids.service} {
+		mustAddPackagePathNode(t, g, testNode{ID: id, Kind: graph.NodePackage, Name: string(id)})
 	}
-	nodes := []graph.Node{
+	nodes := []testNode{
 		{ID: ids.appRun, Kind: graph.NodeFunction, Name: "Run", Parent: ids.app},
 		{ID: "example.com/app::Alternate", Kind: graph.NodeFunction, Name: "Alternate", Parent: ids.app},
 		{ID: "example.com/app::Direct", Kind: graph.NodeFunction, Name: "Direct", Parent: ids.app},
@@ -154,7 +154,7 @@ func forbiddenDependencyFixture(t *testing.T) (*graph.Graph, forbiddenDependency
 	for _, node := range nodes {
 		mustAddPackagePathNode(t, g, node)
 	}
-	edges := []graph.Edge{
+	edges := []testEdge{
 		{From: "example.com/app::Direct", To: ids.repositorySave, Kind: graph.EdgeCalls},
 		{From: ids.appRun, To: "example.com/cache::Get", Kind: graph.EdgeCalls},
 		{From: "example.com/cache::Get", To: ids.repositorySave, Kind: graph.EdgeCalls},

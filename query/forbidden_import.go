@@ -5,8 +5,8 @@ import "nocv/graph"
 // PackageImportViolation is one forbidden direct package import together with
 // every source location where that import is declared.
 type PackageImportViolation struct {
-	From     graph.SymbolID
-	To       graph.SymbolID
+	From     graph.SymbolRef
+	To       graph.SymbolRef
 	Evidence []graph.Location
 }
 
@@ -14,8 +14,8 @@ type PackageImportViolation struct {
 // to exists. It does not inspect transitive imports or semantic dependencies.
 func CheckForbiddenPackageImport(
 	g *graph.Graph,
-	from graph.SymbolID,
-	to graph.SymbolID,
+	from graph.SymbolRef,
+	to graph.SymbolRef,
 ) (PackageImportViolation, bool) {
 	if !isPackageNode(g, from) || !isPackageNode(g, to) {
 		return PackageImportViolation{}, false

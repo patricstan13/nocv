@@ -2,6 +2,7 @@ package webui
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
@@ -198,18 +199,18 @@ func decode(t *testing.T, response *httptest.ResponseRecorder, target any) {
 func webFixture(t *testing.T) *graph.Graph {
 	t.Helper()
 	const (
-		app        = graph.SymbolID("example.com/app")
-		service    = graph.SymbolID("example.com/service")
-		repository = graph.SymbolID("example.com/repository")
-		importOnly = graph.SymbolID("example.com/import-only")
-		appRun     = graph.SymbolID("example.com/app::Run")
-		serviceT   = graph.SymbolID("example.com/service::Service")
-		serviceRun = graph.SymbolID("example.com/service::Service::Create")
-		repoT      = graph.SymbolID("example.com/repository::Repository")
-		repoSave   = graph.SymbolID("example.com/repository::Repository::Save")
+		app        = graph.SymbolRef("example.com/app")
+		service    = graph.SymbolRef("example.com/service")
+		repository = graph.SymbolRef("example.com/repository")
+		importOnly = graph.SymbolRef("example.com/import-only")
+		appRun     = graph.SymbolRef("example.com/app::Run")
+		serviceT   = graph.SymbolRef("example.com/service::Service")
+		serviceRun = graph.SymbolRef("example.com/service::Service::Create")
+		repoT      = graph.SymbolRef("example.com/repository::Repository")
+		repoSave   = graph.SymbolRef("example.com/repository::Repository::Save")
 	)
 	g := graph.New()
-	nodes := []graph.Node{
+	nodes := []webNode{
 		{ID: app, Kind: graph.NodePackage, Name: "app", Documentation: "Package app starts the workflow."},
 		{ID: service, Kind: graph.NodePackage, Name: "service", Documentation: "Package service owns application behavior."},
 		{ID: repository, Kind: graph.NodePackage, Name: "repository"},
@@ -221,11 +222,11 @@ func webFixture(t *testing.T) *graph.Graph {
 		{ID: repoSave, Kind: graph.NodeFunction, Name: "Save", Parent: repoT, Location: graph.Location{File: "repository.go", Offset: 45}},
 	}
 	for _, node := range nodes {
-		if err := g.AddNode(node); err != nil {
+		if err := addWebNode(g, node); err != nil {
 			t.Fatalf("AddNode(%s): %v", node.ID, err)
 		}
 	}
-	edges := []graph.Edge{
+	edges := []webEdge{
 		{From: app, To: service, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "app.go", Offset: 8}}},
 		{From: app, To: importOnly, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "app.go", Offset: 16}}},
 		{From: appRun, To: serviceRun, Kind: graph.EdgeCalls, Evidence: []graph.Location{{File: "app.go", Offset: 70}}},
@@ -233,9 +234,50 @@ func webFixture(t *testing.T) *graph.Graph {
 		{From: serviceRun, To: repoT, Kind: graph.EdgeAccepts, Evidence: []graph.Location{{File: "service.go", Offset: 90}}},
 	}
 	for _, edge := range edges {
-		if err := g.AddEdge(edge); err != nil {
+		if err := addWebEdge(g, edge); err != nil {
 			t.Fatalf("AddEdge(%s): %v", edge.Kind, err)
 		}
 	}
 	return g
+}
+
+type webNode struct {
+	ID            graph.SymbolRef
+	Kind          graph.NodeKind
+	Name          string
+	Parent        graph.SymbolRef
+	Location      graph.Location
+	Documentation string
+}
+
+type webEdge struct {
+	From     graph.SymbolRef
+	To       graph.SymbolRef
+	Kind     graph.EdgeKind
+	Evidence []graph.Location
+}
+
+func addWebNode(g *graph.Graph, node webNode) error {
+	var parent graph.NodeID
+	if node.Parent != "" {
+		var exists bool
+		parent, exists = g.Resolve(node.Parent)
+		if !exists {
+			return fmt.Errorf("parent %q does not exist", node.Parent)
+		}
+	}
+	_, err := g.AddNode(graph.Node{
+		Ref: node.ID, Kind: node.Kind, Name: node.Name, Parent: parent,
+		Location: node.Location, Documentation: node.Documentation,
+	})
+	return err
+}
+
+func addWebEdge(g *graph.Graph, edge webEdge) error {
+	from, fromExists := g.Resolve(edge.From)
+	to, toExists := g.Resolve(edge.To)
+	if !fromExists || !toExists {
+		return fmt.Errorf("edge endpoint missing: %q -> %q", edge.From, edge.To)
+	}
+	return g.AddEdge(graph.Edge{From: from, To: to, Kind: edge.Kind, Evidence: edge.Evidence})
 }

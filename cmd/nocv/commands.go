@@ -21,22 +21,22 @@ var commandSpecs = map[string]commandSpec{
 	"embeddings":                 {usage: "nocv embeddings <pattern>"},
 	"signatures":                 {usage: "nocv signatures <pattern>"},
 	"imports":                    {usage: "nocv imports <pattern>"},
-	"package-imports":            {usage: "nocv package-imports <pattern> <package-id>", extraCount: 1},
-	"package-importers":          {usage: "nocv package-importers <pattern> <package-id>", extraCount: 1},
+	"package-imports":            {usage: "nocv package-imports <pattern> <package-ref>", extraCount: 1},
+	"package-importers":          {usage: "nocv package-importers <pattern> <package-ref>", extraCount: 1},
 	"import-cycle":               {usage: "nocv import-cycle <pattern> <from-package> <to-package>", extraCount: 2},
 	"check-forbidden-import":     {usage: "nocv check-forbidden-import <pattern> <from-package> <to-package>", extraCount: 2},
 	"check-forbidden-dependency": {usage: "nocv check-forbidden-dependency <pattern> <from-package> <to-package>", extraCount: 2},
-	"direct-deps":                {usage: "nocv direct-deps <pattern> <symbol-id>", extraCount: 1},
-	"direct-dependents":          {usage: "nocv direct-dependents <pattern> <symbol-id>", extraCount: 1},
-	"impact":                     {usage: "nocv impact <pattern> <symbol-id>", extraCount: 1},
+	"direct-deps":                {usage: "nocv direct-deps <pattern> <symbol-ref>", extraCount: 1},
+	"direct-dependents":          {usage: "nocv direct-dependents <pattern> <symbol-ref>", extraCount: 1},
+	"impact":                     {usage: "nocv impact <pattern> <symbol-ref>", extraCount: 1},
 	"paths":                      {usage: "nocv paths <pattern> <from-symbol> <to-symbol>", extraCount: 2},
 	"package-paths":              {usage: "nocv package-paths <pattern> <from-package> <to-package>", extraCount: 2},
 	"package-deps":               {usage: "nocv package-deps <pattern>"},
 	"why-package-dep":            {usage: "nocv why-package-dep <pattern> <from-package> <to-package>", extraCount: 2},
-	"type-deps":                  {usage: "nocv type-deps <pattern> <type-id>", extraCount: 1},
+	"type-deps":                  {usage: "nocv type-deps <pattern> <type-ref>", extraCount: 1},
 	"type-paths":                 {usage: "nocv type-paths <pattern> <from-type> <to-type>", extraCount: 2},
 	"inspect-dependency":         {usage: "nocv inspect-dependency <pattern> <from-package> <to-package>", extraCount: 2},
-	"inspect-node":               {usage: "nocv inspect-node <pattern> <symbol-id>", extraCount: 1},
+	"inspect-node":               {usage: "nocv inspect-node <pattern> <symbol-ref>", extraCount: 1},
 }
 
 type invocation struct {
@@ -76,20 +76,20 @@ func executeCommand(out io.Writer, g *graph.Graph, invocation invocation) error 
 	case "imports":
 		printEdges(out, g, "Imports", graph.EdgeImports)
 	case "package-imports":
-		id := graph.SymbolID(invocation.values[0])
+		id := graph.SymbolRef(invocation.values[0])
 		if err := requirePackage(g, id); err != nil {
 			return err
 		}
 		printDirectImports(out, g, id)
 	case "package-importers":
-		id := graph.SymbolID(invocation.values[0])
+		id := graph.SymbolRef(invocation.values[0])
 		if err := requirePackage(g, id); err != nil {
 			return err
 		}
 		printDirectImporters(out, g, id)
 	case "import-cycle":
-		from := graph.SymbolID(invocation.values[0])
-		to := graph.SymbolID(invocation.values[1])
+		from := graph.SymbolRef(invocation.values[0])
+		to := graph.SymbolRef(invocation.values[1])
 		if err := requirePackage(g, from); err != nil {
 			return err
 		}
@@ -98,8 +98,8 @@ func executeCommand(out io.Writer, g *graph.Graph, invocation invocation) error 
 		}
 		printImportCycleCheck(out, g, from, to)
 	case "check-forbidden-import":
-		from := graph.SymbolID(invocation.values[0])
-		to := graph.SymbolID(invocation.values[1])
+		from := graph.SymbolRef(invocation.values[0])
+		to := graph.SymbolRef(invocation.values[1])
 		if err := requirePackage(g, from); err != nil {
 			return err
 		}
@@ -108,8 +108,8 @@ func executeCommand(out io.Writer, g *graph.Graph, invocation invocation) error 
 		}
 		printForbiddenImportCheck(out, g, from, to)
 	case "check-forbidden-dependency":
-		from := graph.SymbolID(invocation.values[0])
-		to := graph.SymbolID(invocation.values[1])
+		from := graph.SymbolRef(invocation.values[0])
+		to := graph.SymbolRef(invocation.values[1])
 		if err := requirePackage(g, from); err != nil {
 			return err
 		}
@@ -118,26 +118,26 @@ func executeCommand(out io.Writer, g *graph.Graph, invocation invocation) error 
 		}
 		printForbiddenDependencyCheck(out, g, from, to)
 	case "direct-deps":
-		id := graph.SymbolID(invocation.values[0])
+		id := graph.SymbolRef(invocation.values[0])
 		if err := requireSymbol(g, id); err != nil {
 			return err
 		}
 		printDirectDependencies(out, g, id)
 	case "direct-dependents":
-		id := graph.SymbolID(invocation.values[0])
+		id := graph.SymbolRef(invocation.values[0])
 		if err := requireSymbol(g, id); err != nil {
 			return err
 		}
 		printDirectDependents(out, g, id)
 	case "impact":
-		id := graph.SymbolID(invocation.values[0])
+		id := graph.SymbolRef(invocation.values[0])
 		if err := requireSymbol(g, id); err != nil {
 			return err
 		}
 		printImpact(out, g, id)
 	case "paths":
-		from := graph.SymbolID(invocation.values[0])
-		to := graph.SymbolID(invocation.values[1])
+		from := graph.SymbolRef(invocation.values[0])
+		to := graph.SymbolRef(invocation.values[1])
 		if err := requireSymbol(g, from); err != nil {
 			return err
 		}
@@ -146,8 +146,8 @@ func executeCommand(out io.Writer, g *graph.Graph, invocation invocation) error 
 		}
 		printDependencyPaths(out, g, from, to)
 	case "package-paths":
-		from := graph.SymbolID(invocation.values[0])
-		to := graph.SymbolID(invocation.values[1])
+		from := graph.SymbolRef(invocation.values[0])
+		to := graph.SymbolRef(invocation.values[1])
 		if err := requirePackage(g, from); err != nil {
 			return err
 		}
@@ -158,8 +158,8 @@ func executeCommand(out io.Writer, g *graph.Graph, invocation invocation) error 
 	case "package-deps":
 		printPackageDependencies(out, g)
 	case "why-package-dep":
-		from := graph.SymbolID(invocation.values[0])
-		to := graph.SymbolID(invocation.values[1])
+		from := graph.SymbolRef(invocation.values[0])
+		to := graph.SymbolRef(invocation.values[1])
 		if err := requirePackage(g, from); err != nil {
 			return err
 		}
@@ -168,14 +168,14 @@ func executeCommand(out io.Writer, g *graph.Graph, invocation invocation) error 
 		}
 		printPackageDependencyExplanation(out, g, from, to)
 	case "type-deps":
-		id := graph.SymbolID(invocation.values[0])
+		id := graph.SymbolRef(invocation.values[0])
 		if err := requireType(g, id); err != nil {
 			return err
 		}
 		printDirectTypeDependencies(out, g, id)
 	case "type-paths":
-		from := graph.SymbolID(invocation.values[0])
-		to := graph.SymbolID(invocation.values[1])
+		from := graph.SymbolRef(invocation.values[0])
+		to := graph.SymbolRef(invocation.values[1])
 		if err := requireType(g, from); err != nil {
 			return err
 		}
@@ -184,8 +184,8 @@ func executeCommand(out io.Writer, g *graph.Graph, invocation invocation) error 
 		}
 		printTypeDependencyPaths(out, g, from, to)
 	case "inspect-dependency":
-		from := graph.SymbolID(invocation.values[0])
-		to := graph.SymbolID(invocation.values[1])
+		from := graph.SymbolRef(invocation.values[0])
+		to := graph.SymbolRef(invocation.values[1])
 		if err := requirePackage(g, from); err != nil {
 			return err
 		}
@@ -194,7 +194,7 @@ func executeCommand(out io.Writer, g *graph.Graph, invocation invocation) error 
 		}
 		printDependencyInspection(out, g, from, to)
 	case "inspect-node":
-		id := graph.SymbolID(invocation.values[0])
+		id := graph.SymbolRef(invocation.values[0])
 		if err := requireSymbol(g, id); err != nil {
 			return err
 		}
@@ -205,15 +205,15 @@ func executeCommand(out io.Writer, g *graph.Graph, invocation invocation) error 
 	return nil
 }
 
-func requireSymbol(g *graph.Graph, id graph.SymbolID) error {
-	if _, exists := g.Node(id); !exists {
+func requireSymbol(g *graph.Graph, id graph.SymbolRef) error {
+	if _, exists := g.NodeByRef(id); !exists {
 		return fmt.Errorf("unknown symbol: %s", id)
 	}
 	return nil
 }
 
-func requirePackage(g *graph.Graph, id graph.SymbolID) error {
-	node, exists := g.Node(id)
+func requirePackage(g *graph.Graph, id graph.SymbolRef) error {
+	node, exists := g.NodeByRef(id)
 	if !exists {
 		return fmt.Errorf("unknown package: %s", id)
 	}
@@ -223,8 +223,8 @@ func requirePackage(g *graph.Graph, id graph.SymbolID) error {
 	return nil
 }
 
-func requireType(g *graph.Graph, id graph.SymbolID) error {
-	node, exists := g.Node(id)
+func requireType(g *graph.Graph, id graph.SymbolRef) error {
+	node, exists := g.NodeByRef(id)
 	if !exists {
 		return fmt.Errorf("unknown symbol: %s", id)
 	}

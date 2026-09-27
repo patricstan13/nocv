@@ -18,11 +18,11 @@ func TestWouldCreateImportCyclePreservesEverySimpleReversePath(t *testing.T) {
 	want := query.ImportCycleCheck{
 		WouldCycle: true,
 		Paths: []query.ImportPath{
-			{Packages: []graph.SymbolID{ids.a, ids.d}},
-			{Packages: []graph.SymbolID{ids.a, ids.b, ids.d}},
-			{Packages: []graph.SymbolID{ids.a, ids.c, ids.d}},
-			{Packages: []graph.SymbolID{ids.a, ids.b, ids.x, ids.d}},
-			{Packages: []graph.SymbolID{ids.a, ids.c, ids.x, ids.d}},
+			{Packages: []graph.SymbolRef{ids.a, ids.d}},
+			{Packages: []graph.SymbolRef{ids.a, ids.b, ids.d}},
+			{Packages: []graph.SymbolRef{ids.a, ids.c, ids.d}},
+			{Packages: []graph.SymbolRef{ids.a, ids.b, ids.x, ids.d}},
+			{Packages: []graph.SymbolRef{ids.a, ids.c, ids.x, ids.d}},
 		},
 	}
 	got := query.WouldCreateImportCycle(g, ids.d, ids.a)
@@ -48,18 +48,18 @@ func TestWouldCreateImportCycleIgnoresSemanticEdgesAndReportsNoPath(t *testing.T
 
 func TestWouldCreateImportCycleIsSafeOnExistingCycle(t *testing.T) {
 	g := graph.New()
-	for _, id := range []graph.SymbolID{"p", "q", "r"} {
-		if err := g.AddNode(graph.Node{ID: id, Kind: graph.NodePackage, Name: string(id)}); err != nil {
+	for _, id := range []graph.SymbolRef{"p", "q", "r"} {
+		if err := addTestNode(g, testNode{ID: id, Kind: graph.NodePackage, Name: string(id)}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for _, endpoints := range [][2]graph.SymbolID{{"p", "q"}, {"q", "p"}, {"q", "r"}} {
-		if err := g.AddEdge(graph.Edge{From: endpoints[0], To: endpoints[1], Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "fixture.go"}}}); err != nil {
+	for _, endpoints := range [][2]graph.SymbolRef{{"p", "q"}, {"q", "p"}, {"q", "r"}} {
+		if err := addTestEdge(g, testEdge{From: endpoints[0], To: endpoints[1], Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "fixture.go"}}}); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	want := query.ImportCycleCheck{WouldCycle: true, Paths: []query.ImportPath{{Packages: []graph.SymbolID{"p", "q", "r"}}}}
+	want := query.ImportCycleCheck{WouldCycle: true, Paths: []query.ImportPath{{Packages: []graph.SymbolRef{"p", "q", "r"}}}}
 	if got := query.WouldCreateImportCycle(g, "r", "p"); !reflect.DeepEqual(got, want) {
 		t.Fatalf("cycle-safe result = %#v, want %#v", got, want)
 	}
@@ -81,7 +81,7 @@ func TestWouldCreateImportCycleValidatesEndpointsAndTreatsSelfImportAsCycle(t *t
 
 	wantSelf := query.ImportCycleCheck{
 		WouldCycle: true,
-		Paths:      []query.ImportPath{{Packages: []graph.SymbolID{ids.a}}},
+		Paths:      []query.ImportPath{{Packages: []graph.SymbolRef{ids.a}}},
 	}
 	if got := query.WouldCreateImportCycle(g, ids.a, ids.a); !reflect.DeepEqual(got, wantSelf) {
 		t.Fatalf("self-import result = %#v, want %#v", got, wantSelf)
@@ -98,7 +98,7 @@ func TestWouldCreateImportCycleFindsNOCVReversePaths(t *testing.T) {
 	if !result.WouldCycle {
 		t.Fatal("graph -> cmd/nocv was not identified as cycle-producing")
 	}
-	want := []graph.SymbolID{"nocv/cmd/nocv", "nocv/query", "nocv/graph"}
+	want := []graph.SymbolRef{"nocv/cmd/nocv", "nocv/query", "nocv/graph"}
 	for _, path := range result.Paths {
 		if reflect.DeepEqual(path.Packages, want) {
 			return
@@ -108,13 +108,13 @@ func TestWouldCreateImportCycleFindsNOCVReversePaths(t *testing.T) {
 }
 
 type importCycleIDs struct {
-	a         graph.SymbolID
-	b         graph.SymbolID
-	c         graph.SymbolID
-	d         graph.SymbolID
-	x         graph.SymbolID
-	aFunction graph.SymbolID
-	dFunction graph.SymbolID
+	a         graph.SymbolRef
+	b         graph.SymbolRef
+	c         graph.SymbolRef
+	d         graph.SymbolRef
+	x         graph.SymbolRef
+	aFunction graph.SymbolRef
+	dFunction graph.SymbolRef
 }
 
 func importCycleFixture(t *testing.T) (*graph.Graph, importCycleIDs) {
@@ -129,21 +129,21 @@ func importCycleFixture(t *testing.T) (*graph.Graph, importCycleIDs) {
 		dFunction: "d::Run",
 	}
 	g := graph.New()
-	for _, id := range []graph.SymbolID{ids.a, ids.b, ids.c, ids.d, ids.x} {
-		if err := g.AddNode(graph.Node{ID: id, Kind: graph.NodePackage, Name: string(id)}); err != nil {
+	for _, id := range []graph.SymbolRef{ids.a, ids.b, ids.c, ids.d, ids.x} {
+		if err := addTestNode(g, testNode{ID: id, Kind: graph.NodePackage, Name: string(id)}); err != nil {
 			t.Fatalf("AddNode(%q): %v", id, err)
 		}
 	}
-	for _, node := range []graph.Node{
+	for _, node := range []testNode{
 		{ID: ids.aFunction, Kind: graph.NodeFunction, Name: "Run", Parent: ids.a},
 		{ID: ids.dFunction, Kind: graph.NodeFunction, Name: "Run", Parent: ids.d},
 	} {
-		if err := g.AddNode(node); err != nil {
+		if err := addTestNode(g, node); err != nil {
 			t.Fatalf("AddNode(%q): %v", node.ID, err)
 		}
 	}
 
-	imports := [][2]graph.SymbolID{
+	imports := [][2]graph.SymbolRef{
 		{ids.a, ids.d},
 		{ids.a, ids.b},
 		{ids.a, ids.c},
@@ -155,14 +155,14 @@ func importCycleFixture(t *testing.T) (*graph.Graph, importCycleIDs) {
 		{ids.a, ids.d}, // repeated fact exercises defensive path deduplication
 	}
 	for index, endpoints := range imports {
-		if err := g.AddEdge(graph.Edge{
+		if err := addTestEdge(g, testEdge{
 			From: endpoints[0], To: endpoints[1], Kind: graph.EdgeImports,
 			Evidence: []graph.Location{{File: "fixture.go", Offset: index}},
 		}); err != nil {
 			t.Fatalf("AddEdge(imports, %q -> %q): %v", endpoints[0], endpoints[1], err)
 		}
 	}
-	if err := g.AddEdge(graph.Edge{
+	if err := addTestEdge(g, testEdge{
 		From: ids.dFunction, To: ids.aFunction, Kind: graph.EdgeCalls,
 		Evidence: []graph.Location{{File: "fixture.go", Offset: 100}},
 	}); err != nil {

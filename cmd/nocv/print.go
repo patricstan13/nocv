@@ -15,12 +15,12 @@ func printTree(out io.Writer, g *graph.Graph) {
 		if node.Kind != graph.NodePackage {
 			continue
 		}
-		fmt.Fprintf(out, "%s [package] (%s)\n", node.Name, node.ID)
+		fmt.Fprintf(out, "%s [package] (%s)\n", node.Name, node.Ref)
 		printChildren(out, g, node.ID, "")
 	}
 }
 
-func printChildren(out io.Writer, g *graph.Graph, parent graph.SymbolID, indent string) {
+func printChildren(out io.Writer, g *graph.Graph, parent graph.NodeID, indent string) {
 	children := g.Children(parent)
 	for index, id := range children {
 		node, _ := g.Node(id)
@@ -44,12 +44,13 @@ func printEdges(out io.Writer, g *graph.Graph, heading string, kind graph.EdgeKi
 			continue
 		}
 		printed = true
-		fmt.Fprintln(out, node.ID)
+		fmt.Fprintln(out, node.Ref)
 		for _, edge := range edges {
+			target, _ := g.Node(edge.To)
 			if kind == graph.EdgeCalls {
-				fmt.Fprintf(out, "  calls -> %s (%d call site(s))\n", edge.To, len(edge.Evidence))
+				fmt.Fprintf(out, "  calls -> %s (%d call site(s))\n", target.Ref, len(edge.Evidence))
 			} else {
-				fmt.Fprintf(out, "  %s -> %s\n", edge.Kind, edge.To)
+				fmt.Fprintf(out, "  %s -> %s\n", edge.Kind, target.Ref)
 			}
 		}
 	}
@@ -70,9 +71,10 @@ func printSignatures(out io.Writer, g *graph.Graph) {
 			continue
 		}
 		printed = true
-		fmt.Fprintln(out, node.ID)
+		fmt.Fprintln(out, node.Ref)
 		for _, edge := range edges {
-			fmt.Fprintf(out, "  %s -> %s\n", edge.Kind, edge.To)
+			target, _ := g.Node(edge.To)
+			fmt.Fprintf(out, "  %s -> %s\n", edge.Kind, target.Ref)
 		}
 	}
 	if !printed {
@@ -80,7 +82,7 @@ func printSignatures(out io.Writer, g *graph.Graph) {
 	}
 }
 
-func printDirectDependencies(out io.Writer, g *graph.Graph, id graph.SymbolID) {
+func printDirectDependencies(out io.Writer, g *graph.Graph, id graph.SymbolRef) {
 	fmt.Fprintln(out, id)
 	relationships := query.DirectDependencies(g, id)
 	if len(relationships) == 0 {
@@ -92,7 +94,7 @@ func printDirectDependencies(out io.Writer, g *graph.Graph, id graph.SymbolID) {
 	}
 }
 
-func printDirectDependents(out io.Writer, g *graph.Graph, id graph.SymbolID) {
+func printDirectDependents(out io.Writer, g *graph.Graph, id graph.SymbolRef) {
 	fmt.Fprintln(out, id)
 	relationships := query.DirectDependents(g, id)
 	if len(relationships) == 0 {
@@ -104,7 +106,7 @@ func printDirectDependents(out io.Writer, g *graph.Graph, id graph.SymbolID) {
 	}
 }
 
-func printDirectImports(out io.Writer, g *graph.Graph, id graph.SymbolID) {
+func printDirectImports(out io.Writer, g *graph.Graph, id graph.SymbolRef) {
 	fmt.Fprintln(out, id)
 	relationships := query.DirectImports(g, id)
 	if len(relationships) == 0 {
@@ -116,7 +118,7 @@ func printDirectImports(out io.Writer, g *graph.Graph, id graph.SymbolID) {
 	}
 }
 
-func printDirectImporters(out io.Writer, g *graph.Graph, id graph.SymbolID) {
+func printDirectImporters(out io.Writer, g *graph.Graph, id graph.SymbolRef) {
 	fmt.Fprintln(out, id)
 	relationships := query.DirectImporters(g, id)
 	if len(relationships) == 0 {
@@ -128,7 +130,7 @@ func printDirectImporters(out io.Writer, g *graph.Graph, id graph.SymbolID) {
 	}
 }
 
-func printImportCycleCheck(out io.Writer, g *graph.Graph, from, to graph.SymbolID) {
+func printImportCycleCheck(out io.Writer, g *graph.Graph, from, to graph.SymbolRef) {
 	fmt.Fprintf(out, "Proposed import:\n  %s -> %s\n\n", from, to)
 	result := query.WouldCreateImportCycle(g, from, to)
 	if !result.WouldCycle {
@@ -149,7 +151,7 @@ func printImportCycleCheck(out io.Writer, g *graph.Graph, from, to graph.SymbolI
 	}
 }
 
-func printForbiddenImportCheck(out io.Writer, g *graph.Graph, from, to graph.SymbolID) {
+func printForbiddenImportCheck(out io.Writer, g *graph.Graph, from, to graph.SymbolRef) {
 	fmt.Fprintf(out, "Forbidden package import:\n  %s -> %s\n\n", from, to)
 	violation, exists := query.CheckForbiddenPackageImport(g, from, to)
 	if !exists {
@@ -164,7 +166,7 @@ func printForbiddenImportCheck(out io.Writer, g *graph.Graph, from, to graph.Sym
 	}
 }
 
-func printForbiddenDependencyCheck(out io.Writer, g *graph.Graph, from, to graph.SymbolID) {
+func printForbiddenDependencyCheck(out io.Writer, g *graph.Graph, from, to graph.SymbolRef) {
 	fmt.Fprintf(out, "Forbidden package dependency:\n  %s -> %s\n\n", from, to)
 	violation, exists := query.CheckForbiddenPackageDependency(g, from, to)
 	if !exists {
@@ -177,7 +179,7 @@ func printForbiddenDependencyCheck(out io.Writer, g *graph.Graph, from, to graph
 	printPackagePathResults(out, violation.Paths)
 }
 
-func printImpact(out io.Writer, g *graph.Graph, id graph.SymbolID) {
+func printImpact(out io.Writer, g *graph.Graph, id graph.SymbolRef) {
 	fmt.Fprintf(out, "Impact of %s:\n", id)
 	results := query.Impact(g, id)
 	if len(results) == 0 {
@@ -190,7 +192,7 @@ func printImpact(out io.Writer, g *graph.Graph, id graph.SymbolID) {
 	}
 }
 
-func printDependencyPaths(out io.Writer, g *graph.Graph, from, to graph.SymbolID) {
+func printDependencyPaths(out io.Writer, g *graph.Graph, from, to graph.SymbolRef) {
 	fmt.Fprintf(out, "Dependency paths: %s -> %s\n", from, to)
 	paths := query.DependencyPaths(g, from, to)
 	if len(paths) == 0 {
@@ -209,7 +211,7 @@ func printSemanticPaths(out io.Writer, paths []query.SemanticPath, indent string
 	}
 }
 
-func printPackageDependencyPaths(out io.Writer, g *graph.Graph, from, to graph.SymbolID) {
+func printPackageDependencyPaths(out io.Writer, g *graph.Graph, from, to graph.SymbolRef) {
 	fmt.Fprintf(out, "Package dependency paths: %s -> %s\n", from, to)
 	paths := query.PackageDependencyPaths(g, from, to)
 	if len(paths) == 0 {
@@ -233,7 +235,7 @@ func printPackagePathResults(out io.Writer, paths []query.PackageDependencyPath)
 	}
 }
 
-func printDirectTypeDependencies(out io.Writer, g *graph.Graph, id graph.SymbolID) {
+func printDirectTypeDependencies(out io.Writer, g *graph.Graph, id graph.SymbolRef) {
 	fmt.Fprintf(out, "Type dependencies:\n  %s\n", id)
 	dependencies := query.DirectTypeDependencies(g, id)
 	if len(dependencies) == 0 {
@@ -249,7 +251,7 @@ func printDirectTypeDependencies(out io.Writer, g *graph.Graph, id graph.SymbolI
 	}
 }
 
-func printTypeDependencyPaths(out io.Writer, g *graph.Graph, from, to graph.SymbolID) {
+func printTypeDependencyPaths(out io.Writer, g *graph.Graph, from, to graph.SymbolRef) {
 	fmt.Fprintf(out, "Type dependency paths: %s -> %s\n", from, to)
 	paths := query.TypeDependencyPaths(g, from, to)
 	if len(paths) == 0 {
@@ -269,7 +271,7 @@ func printTypeDependencyPaths(out io.Writer, g *graph.Graph, from, to graph.Symb
 	}
 }
 
-func printDependencyInspection(out io.Writer, g *graph.Graph, from, to graph.SymbolID) {
+func printDependencyInspection(out io.Writer, g *graph.Graph, from, to graph.SymbolRef) {
 	fmt.Fprintf(out, "Dependency inspection:\n  %s -> %s\n", from, to)
 	paths := query.PackageDependencyPaths(g, from, to)
 	if len(paths) == 0 {
@@ -311,15 +313,15 @@ func printDependencyInspection(out io.Writer, g *graph.Graph, from, to graph.Sym
 	}
 }
 
-func printNodeInspection(out io.Writer, g *graph.Graph, id graph.SymbolID) {
+func printNodeInspection(out io.Writer, g *graph.Graph, id graph.SymbolRef) {
 	inspection, exists := query.InspectNode(g, id)
 	if !exists {
 		return
 	}
 	node := inspection.Node
-	fmt.Fprintf(out, "Node inspection:\n  %s\n\nKind:\n  %s\n", node.ID, node.Kind)
-	if node.Parent != "" {
-		fmt.Fprintf(out, "\nParent:\n  %s\n", node.Parent)
+	fmt.Fprintf(out, "Node inspection:\n  %s\n\nKind:\n  %s\n", node.Ref, node.Kind)
+	if parent, exists := g.Node(node.Parent); exists {
+		fmt.Fprintf(out, "\nParent:\n  %s\n", parent.Ref)
 	}
 	if node.Kind != graph.NodePackage {
 		fmt.Fprintln(out, "\nLocation:")
@@ -373,7 +375,7 @@ func printNodeList(out io.Writer, heading string, nodes []graph.Node) {
 		return
 	}
 	for _, node := range nodes {
-		fmt.Fprintf(out, "  %s (%s)\n", node.Name, node.ID)
+		fmt.Fprintf(out, "  %s (%s)\n", node.Name, node.Ref)
 	}
 }
 
@@ -431,7 +433,7 @@ func printRelationshipsForNode(out io.Writer, heading string, relationships []qu
 	}
 }
 
-func printPackageDependencyExplanation(out io.Writer, g *graph.Graph, from, to graph.SymbolID) {
+func printPackageDependencyExplanation(out io.Writer, g *graph.Graph, from, to graph.SymbolRef) {
 	fmt.Fprintf(out, "Package call dependency explanation: %s -> %s\n", from, to)
 	explanation, exists := query.WhyDependsOn(g, from, to)
 	if !exists {
@@ -446,13 +448,15 @@ func printPackageDependencyExplanation(out io.Writer, g *graph.Graph, from, to g
 	}
 }
 
-func sortedOutgoing(g *graph.Graph, id graph.SymbolID, kinds ...graph.EdgeKind) []*graph.Edge {
+func sortedOutgoing(g *graph.Graph, id graph.NodeID, kinds ...graph.EdgeKind) []*graph.Edge {
 	edges := g.Outgoing(id, kinds...)
 	sort.Slice(edges, func(i, j int) bool {
 		if edges[i].Kind != edges[j].Kind {
 			return edges[i].Kind < edges[j].Kind
 		}
-		return edges[i].To < edges[j].To
+		left, _ := g.Node(edges[i].To)
+		right, _ := g.Node(edges[j].To)
+		return left.Ref < right.Ref
 	})
 	return edges
 }

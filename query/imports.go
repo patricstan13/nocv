@@ -8,12 +8,13 @@ import (
 
 // DirectImports returns represented packages imported directly by packageID.
 // Import relationships are separate from semantic dependency navigation.
-func DirectImports(g *graph.Graph, packageID graph.SymbolID) []Relationship {
+func DirectImports(g *graph.Graph, packageID graph.SymbolRef) []Relationship {
 	if !isPackageNode(g, packageID) {
 		return nil
 	}
 
-	relationships := copyRelationships(g.Outgoing(packageID, graph.EdgeImports))
+	id, _ := g.Resolve(packageID)
+	relationships := copyRelationships(g, g.Outgoing(id, graph.EdgeImports))
 	sort.Slice(relationships, func(i, j int) bool {
 		return relationships[i].To < relationships[j].To
 	})
@@ -22,12 +23,13 @@ func DirectImports(g *graph.Graph, packageID graph.SymbolID) []Relationship {
 
 // DirectImporters returns represented packages that directly import packageID.
 // Import relationships are separate from semantic dependent navigation.
-func DirectImporters(g *graph.Graph, packageID graph.SymbolID) []Relationship {
+func DirectImporters(g *graph.Graph, packageID graph.SymbolRef) []Relationship {
 	if !isPackageNode(g, packageID) {
 		return nil
 	}
 
-	relationships := copyRelationships(g.Incoming(packageID, graph.EdgeImports))
+	id, _ := g.Resolve(packageID)
+	relationships := copyRelationships(g, g.Incoming(id, graph.EdgeImports))
 	sort.Slice(relationships, func(i, j int) bool {
 		return relationships[i].From < relationships[j].From
 	})

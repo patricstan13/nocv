@@ -11,40 +11,50 @@ import (
 // packages. Evidence contains every stored cross-package semantic fact that
 // establishes the package relationship.
 type PackageDependency struct {
-	From     graph.SymbolID
-	To       graph.SymbolID
+	From     graph.SymbolRef
+	To       graph.SymbolRef
 	Evidence []Relationship
 }
 
 // PackageDependencyPath is one simple route through the derived semantic
 // package view. Each step carries evidence for exactly one package boundary.
 type PackageDependencyPath struct {
-	Packages []graph.SymbolID
+	Packages []graph.SymbolRef
 	Steps    []PackageDependency
+}
+
+type packageDependency struct {
+	to         graph.NodeID
+	dependency PackageDependency
 }
 
 // DirectPackageDependencies returns direct derived semantic package
 // dependencies originating from one exact package.
-func DirectPackageDependencies(g *graph.Graph, packageID graph.SymbolID) []PackageDependency {
-	if !isPackageNode(g, packageID) {
+func DirectPackageDependencies(g *graph.Graph, packageID graph.SymbolRef) []PackageDependency {
+	if g == nil {
 		return nil
 	}
-	return copyPackageDependencies(packageDependencyView(g)[packageID])
+	id, exists := g.Resolve(packageID)
+	if !exists || !isPackageNode(g, packageID) {
+		return nil
+	}
+	return publicPackageDependencies(packageDependencyView(g)[id])
 }
 
 // DirectPackageDependents returns direct derived semantic package dependencies
 // whose target is packageID. Dependencies retain their natural From -> To
 // orientation.
-func DirectPackageDependents(g *graph.Graph, packageID graph.SymbolID) []PackageDependency {
+func DirectPackageDependents(g *graph.Graph, packageID graph.SymbolRef) []PackageDependency {
 	if !isPackageNode(g, packageID) {
 		return nil
 	}
+	id, _ := g.Resolve(packageID)
 	view := packageDependencyView(g)
 	var dependents []PackageDependency
 	for _, dependencies := range view {
 		for _, dependency := range dependencies {
-			if dependency.To == packageID {
-				dependents = append(dependents, copyPackageDependency(dependency))
+			if dependency.to == id {
+				dependents = append(dependents, copyPackageDependency(dependency.dependency))
 			}
 		}
 	}
@@ -56,26 +66,32 @@ func DirectPackageDependents(g *graph.Graph, packageID graph.SymbolID) []Package
 
 // PackageDependencyPaths returns every distinct simple route through the
 // derived semantic package view from one exact package to another.
-func PackageDependencyPaths(g *graph.Graph, from, to graph.SymbolID) []PackageDependencyPath {
+func PackageDependencyPaths(g *graph.Graph, from, to graph.SymbolRef) []PackageDependencyPath {
 	if g == nil || from == to || !isPackageNode(g, from) || !isPackageNode(g, to) {
 		return nil
 	}
 
 	view := packageDependencyView(g)
+	fromID, _ := g.Resolve(from)
+	toID, _ := g.Resolve(to)
 	var paths []PackageDependencyPath
 	pathKeys := make(map[string]bool)
-	seen := map[graph.SymbolID]bool{from: true}
+	seen := map[graph.NodeID]bool{fromID: true}
 
-	var walk func(graph.SymbolID, []graph.SymbolID, []PackageDependency)
-	walk = func(current graph.SymbolID, packages []graph.SymbolID, steps []PackageDependency) {
+	var walk func(graph.NodeID, []graph.SymbolRef, []PackageDependency)
+	walk = func(current graph.NodeID, packages []graph.SymbolRef, steps []PackageDependency) {
 		for _, dependency := range view[current] {
-			next := dependency.To
+			next := dependency.to
 			if seen[next] {
 				continue
 			}
-			nextPackages := append(append([]graph.SymbolID(nil), packages...), next)
-			nextSteps := appendPackageDependency(steps, dependency)
-			if next == to {
+			nextNode, exists := g.Node(next)
+			if !exists {
+				continue
+			}
+			nextPackages := append(append([]graph.SymbolRef(nil), packages...), nextNode.Ref)
+			nextSteps := appendPackageDependency(steps, dependency.dependency)
+			if next == toID {
 				key := packageSequenceKey(nextPackages)
 				if !pathKeys[key] {
 					pathKeys[key] = true
@@ -89,7 +105,7 @@ func PackageDependencyPaths(g *graph.Graph, from, to graph.SymbolID) []PackageDe
 			delete(seen, next)
 		}
 	}
-	walk(from, []graph.SymbolID{from}, nil)
+	walk(fromID, []graph.SymbolRef{from}, nil)
 
 	sort.Slice(paths, func(i, j int) bool {
 		return packageSequenceLess(paths[i].Packages, paths[j].Packages)
@@ -97,50 +113,72 @@ func PackageDependencyPaths(g *graph.Graph, from, to graph.SymbolID) []PackageDe
 	return paths
 }
 
-func packageDependencyView(g *graph.Graph) map[graph.SymbolID][]PackageDependency {
-	bySourceAndTarget := make(map[graph.SymbolID]map[graph.SymbolID]*PackageDependency)
+func packageDependencyView(g *graph.Graph) map[graph.NodeID][]packageDependency {
+	bySourceAndTarget := make(map[graph.NodeID]map[graph.NodeID]*PackageDependency)
 	for _, node := range g.Nodes() {
 		if node.Kind == graph.NodePackage {
 			continue
 		}
-		from, exists := g.AncestorOfKind(node.ID, graph.NodePackage)
+		fromID, exists := g.AncestorOfKind(node.ID, graph.NodePackage)
 		if !exists {
 			continue
 		}
-		for _, relationship := range DirectDependencies(g, node.ID) {
-			to, exists := g.AncestorOfKind(relationship.To, graph.NodePackage)
-			if !exists || from == to {
+		for _, edge := range g.Outgoing(node.ID, directDependencyKinds...) {
+			toID, exists := g.AncestorOfKind(edge.To, graph.NodePackage)
+			if !exists || fromID == toID {
 				continue
 			}
-			byTarget := bySourceAndTarget[from]
-			if byTarget == nil {
-				byTarget = make(map[graph.SymbolID]*PackageDependency)
-				bySourceAndTarget[from] = byTarget
+			fromExact, fromExactExists := g.Node(edge.From)
+			toExact, toExactExists := g.Node(edge.To)
+			if !fromExactExists || !toExactExists {
+				continue
 			}
-			dependency := byTarget[to]
+			relationship := Relationship{From: fromExact.Ref, To: toExact.Ref, Kind: edge.Kind, Evidence: append([]graph.Location(nil), edge.Evidence...)}
+			fromPackage, fromExists := g.Node(fromID)
+			toPackage, toExists := g.Node(toID)
+			if !fromExists || !toExists {
+				continue
+			}
+			byTarget := bySourceAndTarget[fromID]
+			if byTarget == nil {
+				byTarget = make(map[graph.NodeID]*PackageDependency)
+				bySourceAndTarget[fromID] = byTarget
+			}
+			dependency := byTarget[toID]
 			if dependency == nil {
-				dependency = &PackageDependency{From: from, To: to}
-				byTarget[to] = dependency
+				dependency = &PackageDependency{From: fromPackage.Ref, To: toPackage.Ref}
+				byTarget[toID] = dependency
 			}
 			dependency.Evidence = append(dependency.Evidence, relationship)
 		}
 	}
 
-	view := make(map[graph.SymbolID][]PackageDependency, len(bySourceAndTarget))
+	view := make(map[graph.NodeID][]packageDependency, len(bySourceAndTarget))
 	for from, byTarget := range bySourceAndTarget {
-		dependencies := make([]PackageDependency, 0, len(byTarget))
-		for _, dependency := range byTarget {
+		dependencies := make([]packageDependency, 0, len(byTarget))
+		for to, dependency := range byTarget {
 			sort.Slice(dependency.Evidence, func(i, j int) bool {
 				return semanticRelationshipLess(dependency.Evidence[i], dependency.Evidence[j])
 			})
-			dependencies = append(dependencies, *dependency)
+			dependencies = append(dependencies, packageDependency{to: to, dependency: *dependency})
 		}
 		sort.Slice(dependencies, func(i, j int) bool {
-			return dependencies[i].To < dependencies[j].To
+			return dependencies[i].dependency.To < dependencies[j].dependency.To
 		})
 		view[from] = dependencies
 	}
 	return view
+}
+
+func publicPackageDependencies(dependencies []packageDependency) []PackageDependency {
+	result := make([]PackageDependency, len(dependencies))
+	for index, dependency := range dependencies {
+		result[index] = copyPackageDependency(dependency.dependency)
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }
 
 func semanticRelationshipLess(left, right Relationship) bool {
@@ -161,17 +199,6 @@ func appendPackageDependency(steps []PackageDependency, dependency PackageDepend
 	return append(result, copyPackageDependency(dependency))
 }
 
-func copyPackageDependencies(dependencies []PackageDependency) []PackageDependency {
-	if len(dependencies) == 0 {
-		return nil
-	}
-	result := make([]PackageDependency, len(dependencies))
-	for index, dependency := range dependencies {
-		result[index] = copyPackageDependency(dependency)
-	}
-	return result
-}
-
 func copyPackageDependency(dependency PackageDependency) PackageDependency {
 	copy := PackageDependency{From: dependency.From, To: dependency.To}
 	copy.Evidence = make([]Relationship, len(dependency.Evidence))
@@ -181,15 +208,15 @@ func copyPackageDependency(dependency PackageDependency) PackageDependency {
 	return copy
 }
 
-func isPackageNode(g *graph.Graph, id graph.SymbolID) bool {
+func isPackageNode(g *graph.Graph, id graph.SymbolRef) bool {
 	if g == nil {
 		return false
 	}
-	node, exists := g.Node(id)
+	node, exists := g.NodeByRef(id)
 	return exists && node.Kind == graph.NodePackage
 }
 
-func packageSequenceLess(left, right []graph.SymbolID) bool {
+func packageSequenceLess(left, right []graph.SymbolRef) bool {
 	if len(left) != len(right) {
 		return len(left) < len(right)
 	}
@@ -201,7 +228,7 @@ func packageSequenceLess(left, right []graph.SymbolID) bool {
 	return false
 }
 
-func packageSequenceKey(packages []graph.SymbolID) string {
+func packageSequenceKey(packages []graph.SymbolRef) string {
 	var key strings.Builder
 	for _, packageID := range packages {
 		writeSemanticPathID(&key, packageID)

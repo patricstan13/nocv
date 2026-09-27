@@ -18,9 +18,9 @@ func TestDependencyInspectionDrillsThroughMixedTransitiveFixture(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load(): %v", err)
 	}
-	app := graph.SymbolID("example.com/typeview/app")
-	repository := graph.SymbolID("example.com/typeview/repository")
-	serviceType := graph.SymbolID("example.com/typeview/service::Service")
+	app := graph.SymbolRef("example.com/typeview/app")
+	repository := graph.SymbolRef("example.com/typeview/repository")
+	serviceType := graph.SymbolRef("example.com/typeview/service::Service")
 
 	beforePackages := query.PackageDependencyPaths(g, app, repository)
 	beforeTypes := query.DirectTypeDependencies(g, serviceType)
@@ -139,7 +139,7 @@ func TestNodeInspectionOmitsPackageLocationButKeepsDeclarationLocations(t *testi
 		t.Fatalf("package inspection rendered a declaration location:\n%s", packageOutput.String())
 	}
 
-	for _, id := range []graph.SymbolID{
+	for _, id := range []graph.SymbolRef{
 		"example.com/typeview/service::Service",
 		"example.com/typeview/service::Service::Create",
 	} {
@@ -154,7 +154,7 @@ func TestNodeInspectionOmitsPackageLocationButKeepsDeclarationLocations(t *testi
 func inspectionFixture(t *testing.T) *graph.Graph {
 	t.Helper()
 	g := graph.New()
-	for _, node := range []graph.Node{
+	for _, node := range []fixtureNode{
 		{ID: "service", Kind: graph.NodePackage, Name: "service"},
 		{ID: "repository", Kind: graph.NodePackage, Name: "repository"},
 		{ID: "service::Service", Kind: graph.NodeStruct, Name: "Service", Parent: "service"},
@@ -167,11 +167,11 @@ func inspectionFixture(t *testing.T) *graph.Graph {
 		{ID: "repository::Repository::Save", Kind: graph.NodeFunction, Name: "Save", Parent: "repository::Repository"},
 		{ID: "repository::Audit::Record", Kind: graph.NodeFunction, Name: "Record", Parent: "repository::Audit"},
 	} {
-		if err := g.AddNode(node); err != nil {
+		if err := addFixtureNode(g, node); err != nil {
 			t.Fatalf("AddNode(%q): %v", node.ID, err)
 		}
 	}
-	for index, edge := range []graph.Edge{
+	for index, edge := range []fixtureEdge{
 		{From: "service::Migrate", To: "repository::Repository::Save", Kind: graph.EdgeCalls},
 		{From: "service::Service::Create", To: "repository::Repository::Save", Kind: graph.EdgeCalls},
 		{From: "service::Service", To: "repository::Repository", Kind: graph.EdgeImplements},
@@ -180,7 +180,7 @@ func inspectionFixture(t *testing.T) *graph.Graph {
 		{From: "service", To: "repository", Kind: graph.EdgeImports},
 	} {
 		edge.Evidence = []graph.Location{{File: "inspection.go", Offset: index}}
-		if err := g.AddEdge(edge); err != nil {
+		if err := addFixtureEdge(g, edge); err != nil {
 			t.Fatalf("AddEdge(%s, %q -> %q): %v", edge.Kind, edge.From, edge.To, err)
 		}
 	}

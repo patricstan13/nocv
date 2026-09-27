@@ -23,10 +23,10 @@ func TestParseInvocationRejectsMissingUnknownAndWrongArguments(t *testing.T) {
 		{name: "missing import cycle endpoint", args: []string{"import-cycle", "./...", "from"}, want: "usage: nocv import-cycle <pattern> <from-package> <to-package>"},
 		{name: "missing forbidden import endpoint", args: []string{"check-forbidden-import", "./...", "from"}, want: "usage: nocv check-forbidden-import <pattern> <from-package> <to-package>"},
 		{name: "missing forbidden dependency endpoint", args: []string{"check-forbidden-dependency", "./...", "from"}, want: "usage: nocv check-forbidden-dependency <pattern> <from-package> <to-package>"},
-		{name: "missing type dependency endpoint", args: []string{"type-deps", "./..."}, want: "usage: nocv type-deps <pattern> <type-id>"},
+		{name: "missing type dependency endpoint", args: []string{"type-deps", "./..."}, want: "usage: nocv type-deps <pattern> <type-ref>"},
 		{name: "missing type path endpoint", args: []string{"type-paths", "./...", "from"}, want: "usage: nocv type-paths <pattern> <from-type> <to-type>"},
 		{name: "missing inspection endpoint", args: []string{"inspect-dependency", "./...", "from"}, want: "usage: nocv inspect-dependency <pattern> <from-package> <to-package>"},
-		{name: "missing node inspection symbol", args: []string{"inspect-node", "./..."}, want: "usage: nocv inspect-node <pattern> <symbol-id>"},
+		{name: "missing node inspection symbol", args: []string{"inspect-node", "./..."}, want: "usage: nocv inspect-node <pattern> <symbol-ref>"},
 		{name: "extra tree argument", args: []string{"tree", "./...", "extra"}, want: "usage: nocv tree <pattern>"},
 	}
 	for _, test := range tests {
@@ -165,13 +165,13 @@ func TestExecuteCommandReportsMissingAndInvalidSymbols(t *testing.T) {
 }
 
 type cliIDs struct {
-	packageA   graph.SymbolID
-	packageB   graph.SymbolID
-	service    graph.SymbolID
-	base       graph.SymbolID
-	repository graph.SymbolID
-	caller     graph.SymbolID
-	callee     graph.SymbolID
+	packageA   graph.SymbolRef
+	packageB   graph.SymbolRef
+	service    graph.SymbolRef
+	base       graph.SymbolRef
+	repository graph.SymbolRef
+	caller     graph.SymbolRef
+	callee     graph.SymbolRef
 }
 
 func cliFixture(t *testing.T) (*graph.Graph, cliIDs) {
@@ -186,7 +186,7 @@ func cliFixture(t *testing.T) (*graph.Graph, cliIDs) {
 		callee:     "example.com/b::Repository::Save",
 	}
 	g := graph.New()
-	for _, node := range []graph.Node{
+	for _, node := range []fixtureNode{
 		{ID: ids.packageA, Kind: graph.NodePackage, Name: "a"},
 		{ID: ids.packageB, Kind: graph.NodePackage, Name: "b"},
 		{ID: ids.service, Kind: graph.NodeStruct, Name: "Service", Parent: ids.packageA},
@@ -195,11 +195,11 @@ func cliFixture(t *testing.T) (*graph.Graph, cliIDs) {
 		{ID: ids.caller, Kind: graph.NodeFunction, Name: "Run", Parent: ids.service},
 		{ID: ids.callee, Kind: graph.NodeFunction, Name: "Save", Parent: ids.repository},
 	} {
-		if err := g.AddNode(node); err != nil {
+		if err := addFixtureNode(g, node); err != nil {
 			t.Fatalf("AddNode(%q): %v", node.ID, err)
 		}
 	}
-	edges := []graph.Edge{
+	edges := []fixtureEdge{
 		{From: ids.packageA, To: ids.packageB, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "fixture.go", Offset: 1}}},
 		{From: ids.caller, To: ids.callee, Kind: graph.EdgeCalls, Evidence: []graph.Location{{File: "fixture.go", Offset: 20}, {File: "fixture.go", Offset: 40}}},
 		{From: ids.caller, To: ids.callee, Kind: graph.EdgeImplements, Evidence: []graph.Location{{File: "fixture.go", Offset: 10}}},
@@ -209,7 +209,7 @@ func cliFixture(t *testing.T) (*graph.Graph, cliIDs) {
 		{From: ids.caller, To: ids.base, Kind: graph.EdgeReturns, Evidence: []graph.Location{{File: "fixture.go", Offset: 8}}},
 	}
 	for _, edge := range edges {
-		if err := g.AddEdge(edge); err != nil {
+		if err := addFixtureEdge(g, edge); err != nil {
 			t.Fatalf("AddEdge(%s, %q -> %q): %v", edge.Kind, edge.From, edge.To, err)
 		}
 	}

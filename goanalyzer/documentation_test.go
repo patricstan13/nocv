@@ -16,10 +16,10 @@ func TestLoadAttachesDeclarationDocumentation(t *testing.T) {
 		t.Fatalf("Load(): %v", err)
 	}
 
-	const pkg = graph.SymbolID("example.com/documentation/service")
-	want := map[graph.SymbolID]struct {
+	const pkg = graph.SymbolRef("example.com/documentation/service")
+	want := map[graph.SymbolRef]struct {
 		kind          graph.NodeKind
-		parent        graph.SymbolID
+		parent        graph.SymbolRef
 		documentation string
 	}{
 		pkg: {
@@ -93,14 +93,15 @@ func TestLoadAttachesDeclarationDocumentation(t *testing.T) {
 		t.Fatalf("node count = %d, want %d: %#v", got, len(want), g.Nodes())
 	}
 	for id, expected := range want {
-		node, exists := g.Node(id)
+		node, exists := nodeByRef(g, id)
 		if !exists {
 			t.Errorf("missing node %q", id)
 			continue
 		}
-		if node.Kind != expected.kind || node.Parent != expected.parent || node.Documentation != expected.documentation {
+		actualParent := parentRef(g, node)
+		if node.Kind != expected.kind || actualParent != expected.parent || node.Documentation != expected.documentation {
 			t.Errorf("node %q = kind %s, parent %q, documentation %q; want kind %s, parent %q, documentation %q",
-				id, node.Kind, node.Parent, node.Documentation,
+				id, node.Kind, actualParent, node.Documentation,
 				expected.kind, expected.parent, expected.documentation)
 		}
 		if node.Kind == graph.NodePackage {
@@ -128,9 +129,9 @@ func TestLoadAttachesDeclarationDocumentation(t *testing.T) {
 	}
 }
 
-func assertDocumentationEdge(t *testing.T, g *graph.Graph, from, to graph.SymbolID, kind graph.EdgeKind) {
+func assertDocumentationEdge(t *testing.T, g *graph.Graph, from, to graph.SymbolRef, kind graph.EdgeKind) {
 	t.Helper()
-	for _, edge := range g.Outgoing(from, kind) {
+	for _, edge := range outgoingByRef(g, from, kind) {
 		if edge.To == to {
 			return
 		}

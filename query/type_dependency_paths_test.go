@@ -94,7 +94,7 @@ func TestTypeDependencyPathsTraverseDisconnectedMethodsAndPreserveRoutes(t *test
 	if exact := query.DependencyPaths(g, ids.serviceCreate, ids.storePut); len(exact) != 0 {
 		t.Fatalf("disconnected Repository methods unexpectedly formed exact path: %#v", exact)
 	}
-	wantTypes := [][]graph.SymbolID{
+	wantTypes := [][]graph.SymbolRef{
 		{ids.service, ids.cache, ids.store},
 		{ids.service, ids.repository, ids.store},
 	}
@@ -145,13 +145,13 @@ func TestAnalyzerPipelineProjectsTypeView(t *testing.T) {
 		t.Fatalf("Load(): %v", err)
 	}
 
-	service := graph.SymbolID("example.com/typeview/service::Service")
-	repository := graph.SymbolID("example.com/typeview/repository::Repository")
-	store := graph.SymbolID("example.com/typeview/store::Store")
-	create := graph.SymbolID("example.com/typeview/service::Service::Create")
-	save := graph.SymbolID("example.com/typeview/repository::Repository::Save")
-	put := graph.SymbolID("example.com/typeview/store::Store::Put")
-	run := graph.SymbolID("example.com/typeview/app::Run")
+	service := graph.SymbolRef("example.com/typeview/service::Service")
+	repository := graph.SymbolRef("example.com/typeview/repository::Repository")
+	store := graph.SymbolRef("example.com/typeview/store::Store")
+	create := graph.SymbolRef("example.com/typeview/service::Service::Create")
+	save := graph.SymbolRef("example.com/typeview/repository::Repository::Save")
+	put := graph.SymbolRef("example.com/typeview/store::Store::Put")
+	run := graph.SymbolRef("example.com/typeview/app::Run")
 
 	dependencies := query.DirectTypeDependencies(g, service)
 	if len(dependencies) != 1 || dependencies[0].To != repository || len(dependencies[0].Evidence) != 3 {
@@ -169,7 +169,7 @@ func TestAnalyzerPipelineProjectsTypeView(t *testing.T) {
 		t.Fatalf("disconnected analyzer methods formed exact path: %#v", got)
 	}
 	paths := query.TypeDependencyPaths(g, service, store)
-	if len(paths) != 1 || !reflect.DeepEqual(paths[0].Types, []graph.SymbolID{service, repository, store}) {
+	if len(paths) != 1 || !reflect.DeepEqual(paths[0].Types, []graph.SymbolRef{service, repository, store}) {
 		t.Fatalf("analyzer type paths = %#v, want Service -> Repository -> Store", paths)
 	}
 	if exact := query.DependencyPaths(g, create, save); len(exact) != 1 || len(exact[0].Steps) != 1 {
@@ -182,17 +182,17 @@ func TestAnalyzerPipelineProjectsTypeView(t *testing.T) {
 }
 
 type typeDependencyIDs struct {
-	pkg             graph.SymbolID
-	otherPackage    graph.SymbolID
-	service         graph.SymbolID
-	repository      graph.SymbolID
-	contract        graph.SymbolID
-	childInterface  graph.SymbolID
-	parentInterface graph.SymbolID
-	serviceCreate   graph.SymbolID
-	serviceValidate graph.SymbolID
-	run             graph.SymbolID
-	helper          graph.SymbolID
+	pkg             graph.SymbolRef
+	otherPackage    graph.SymbolRef
+	service         graph.SymbolRef
+	repository      graph.SymbolRef
+	contract        graph.SymbolRef
+	childInterface  graph.SymbolRef
+	parentInterface graph.SymbolRef
+	serviceCreate   graph.SymbolRef
+	serviceValidate graph.SymbolRef
+	run             graph.SymbolRef
+	helper          graph.SymbolRef
 }
 
 func typeDependencyFixture(t *testing.T) (*graph.Graph, typeDependencyIDs) {
@@ -211,7 +211,7 @@ func typeDependencyFixture(t *testing.T) (*graph.Graph, typeDependencyIDs) {
 		helper:          "example.com/other::helper",
 	}
 	g := graph.New()
-	for _, node := range []graph.Node{
+	for _, node := range []testNode{
 		{ID: ids.pkg, Kind: graph.NodePackage, Name: "types"},
 		{ID: ids.otherPackage, Kind: graph.NodePackage, Name: "other"},
 		{ID: ids.service, Kind: graph.NodeStruct, Name: "Service", Parent: ids.pkg},
@@ -232,7 +232,7 @@ func typeDependencyFixture(t *testing.T) (*graph.Graph, typeDependencyIDs) {
 	} {
 		mustAddPackagePathNode(t, g, node)
 	}
-	edges := []graph.Edge{
+	edges := []testEdge{
 		{From: ids.serviceCreate, To: "example.com/other::Repository::Save", Kind: graph.EdgeCalls},
 		{From: "example.com/types::Service::Update", To: "example.com/other::Repository::Update", Kind: graph.EdgeCalls},
 		{From: "example.com/types::Service::Delete", To: "example.com/other::Repository::Delete", Kind: graph.EdgeCalls},
@@ -257,12 +257,12 @@ func typeDependencyFixture(t *testing.T) (*graph.Graph, typeDependencyIDs) {
 }
 
 type typePathIDs struct {
-	service       graph.SymbolID
-	repository    graph.SymbolID
-	cache         graph.SymbolID
-	store         graph.SymbolID
-	serviceCreate graph.SymbolID
-	storePut      graph.SymbolID
+	service       graph.SymbolRef
+	repository    graph.SymbolRef
+	cache         graph.SymbolRef
+	store         graph.SymbolRef
+	serviceCreate graph.SymbolRef
+	storePut      graph.SymbolRef
 }
 
 func typePathFixture(t *testing.T) (*graph.Graph, typePathIDs) {
@@ -276,8 +276,8 @@ func typePathFixture(t *testing.T) (*graph.Graph, typePathIDs) {
 		storePut:      "types::Store::Put",
 	}
 	g := graph.New()
-	mustAddPackagePathNode(t, g, graph.Node{ID: "types", Kind: graph.NodePackage, Name: "types"})
-	for _, node := range []graph.Node{
+	mustAddPackagePathNode(t, g, testNode{ID: "types", Kind: graph.NodePackage, Name: "types"})
+	for _, node := range []testNode{
 		{ID: ids.service, Kind: graph.NodeStruct, Name: "Service", Parent: "types"},
 		{ID: ids.repository, Kind: graph.NodeStruct, Name: "Repository", Parent: "types"},
 		{ID: ids.cache, Kind: graph.NodeStruct, Name: "Cache", Parent: "types"},
@@ -292,7 +292,7 @@ func typePathFixture(t *testing.T) (*graph.Graph, typePathIDs) {
 	} {
 		mustAddPackagePathNode(t, g, node)
 	}
-	edges := []graph.Edge{
+	edges := []testEdge{
 		{From: ids.serviceCreate, To: "types::Repository::Save", Kind: graph.EdgeCalls},
 		{From: "types::Repository::Update", To: ids.storePut, Kind: graph.EdgeCalls},
 		{From: "types::Service::Cache", To: "types::Cache::Get", Kind: graph.EdgeCalls},

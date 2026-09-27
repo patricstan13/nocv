@@ -71,22 +71,22 @@ func TestImpactPreservesAllSimplePathsAndDeterministicOrdering(t *testing.T) {
 
 func TestImpactTerminatesCyclesWithPathLocalState(t *testing.T) {
 	g := graph.New()
-	pkgID := graph.PackageID("example.com/cycle")
-	a := graph.ChildID(pkgID, "A")
-	b := graph.ChildID(pkgID, "B")
-	c := graph.ChildID(pkgID, "C")
-	for _, node := range []graph.Node{
+	pkgID := graph.PackageRef("example.com/cycle")
+	a := graph.ChildRef(pkgID, "A")
+	b := graph.ChildRef(pkgID, "B")
+	c := graph.ChildRef(pkgID, "C")
+	for _, node := range []testNode{
 		{ID: pkgID, Kind: graph.NodePackage, Name: "cycle"},
 		{ID: a, Kind: graph.NodeFunction, Name: "A", Parent: pkgID},
 		{ID: b, Kind: graph.NodeFunction, Name: "B", Parent: pkgID},
 		{ID: c, Kind: graph.NodeFunction, Name: "C", Parent: pkgID},
 	} {
-		if err := g.AddNode(node); err != nil {
+		if err := addTestNode(g, node); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for offset, endpoints := range [][2]graph.SymbolID{{a, b}, {b, c}, {c, a}} {
-		if err := g.AddEdge(graph.Edge{
+	for offset, endpoints := range [][2]graph.SymbolRef{{a, b}, {b, c}, {c, a}} {
+		if err := addTestEdge(g, testEdge{
 			From:     endpoints[0],
 			To:       endpoints[1],
 			Kind:     graph.EdgeCalls,
@@ -113,18 +113,18 @@ func TestImpactTerminatesCyclesWithPathLocalState(t *testing.T) {
 
 func TestImpactTraversesEveryDirectSemanticKind(t *testing.T) {
 	g := graph.New()
-	pkgID := graph.PackageID("example.com/relationships")
-	base := graph.ChildID(pkgID, "Base")
-	child := graph.ChildID(pkgID, "Child")
-	contract := graph.ChildID(pkgID, "Contract")
-	implementation := graph.ChildID(pkgID, "Implementation")
-	acceptor := graph.ChildID(pkgID, "Accept")
-	returner := graph.ChildID(pkgID, "Return")
-	callee := graph.ChildID(pkgID, "Callee")
-	caller := graph.ChildID(pkgID, "Caller")
-	contractMethod := graph.ChildID(contract, "Run")
-	implementationMethod := graph.ChildID(implementation, "Run")
-	for _, node := range []graph.Node{
+	pkgID := graph.PackageRef("example.com/relationships")
+	base := graph.ChildRef(pkgID, "Base")
+	child := graph.ChildRef(pkgID, "Child")
+	contract := graph.ChildRef(pkgID, "Contract")
+	implementation := graph.ChildRef(pkgID, "Implementation")
+	acceptor := graph.ChildRef(pkgID, "Accept")
+	returner := graph.ChildRef(pkgID, "Return")
+	callee := graph.ChildRef(pkgID, "Callee")
+	caller := graph.ChildRef(pkgID, "Caller")
+	contractMethod := graph.ChildRef(contract, "Run")
+	implementationMethod := graph.ChildRef(implementation, "Run")
+	for _, node := range []testNode{
 		{ID: pkgID, Kind: graph.NodePackage, Name: "relationships"},
 		{ID: base, Kind: graph.NodeStruct, Name: "Base", Parent: pkgID},
 		{ID: child, Kind: graph.NodeStruct, Name: "Child", Parent: pkgID},
@@ -137,11 +137,11 @@ func TestImpactTraversesEveryDirectSemanticKind(t *testing.T) {
 		{ID: contractMethod, Kind: graph.NodeFunction, Name: "Run", Parent: contract},
 		{ID: implementationMethod, Kind: graph.NodeFunction, Name: "Run", Parent: implementation},
 	} {
-		if err := g.AddNode(node); err != nil {
+		if err := addTestNode(g, node); err != nil {
 			t.Fatal(err)
 		}
 	}
-	edges := []graph.Edge{
+	edges := []testEdge{
 		{From: child, To: base, Kind: graph.EdgeEmbeds},
 		{From: implementation, To: contract, Kind: graph.EdgeImplements},
 		{From: implementationMethod, To: contractMethod, Kind: graph.EdgeImplements},
@@ -151,14 +151,14 @@ func TestImpactTraversesEveryDirectSemanticKind(t *testing.T) {
 	}
 	for index := range edges {
 		edges[index].Evidence = []graph.Location{{File: "relationships.go", Offset: index}}
-		if err := g.AddEdge(edges[index]); err != nil {
+		if err := addTestEdge(g, edges[index]); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	tests := []struct {
-		changed graph.SymbolID
-		from    graph.SymbolID
+		changed graph.SymbolRef
+		from    graph.SymbolRef
 		kind    graph.EdgeKind
 	}{
 		{changed: base, from: child, kind: graph.EdgeEmbeds},
@@ -178,13 +178,13 @@ func TestImpactTraversesEveryDirectSemanticKind(t *testing.T) {
 
 func TestImpactExcludesStructuralAndProjectedRelationships(t *testing.T) {
 	g := graph.New()
-	pkgA := graph.PackageID("example.com/a")
-	pkgB := graph.PackageID("example.com/b")
-	typeA := graph.ChildID(pkgA, "Service")
-	typeB := graph.ChildID(pkgB, "Repository")
-	caller := graph.ChildID(typeA, "Call")
-	callee := graph.ChildID(typeB, "Save")
-	for _, node := range []graph.Node{
+	pkgA := graph.PackageRef("example.com/a")
+	pkgB := graph.PackageRef("example.com/b")
+	typeA := graph.ChildRef(pkgA, "Service")
+	typeB := graph.ChildRef(pkgB, "Repository")
+	caller := graph.ChildRef(typeA, "Call")
+	callee := graph.ChildRef(typeB, "Save")
+	for _, node := range []testNode{
 		{ID: pkgA, Kind: graph.NodePackage, Name: "a"},
 		{ID: pkgB, Kind: graph.NodePackage, Name: "b"},
 		{ID: typeA, Kind: graph.NodeStruct, Name: "Service", Parent: pkgA},
@@ -192,11 +192,11 @@ func TestImpactExcludesStructuralAndProjectedRelationships(t *testing.T) {
 		{ID: caller, Kind: graph.NodeFunction, Name: "Call", Parent: typeA},
 		{ID: callee, Kind: graph.NodeFunction, Name: "Save", Parent: typeB},
 	} {
-		if err := g.AddNode(node); err != nil {
+		if err := addTestNode(g, node); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := g.AddEdge(graph.Edge{
+	if err := addTestEdge(g, testEdge{
 		From: caller, To: callee, Kind: graph.EdgeCalls,
 		Evidence: []graph.Location{{File: "call.go"}},
 	}); err != nil {
@@ -231,7 +231,7 @@ func TestAnalyzerPipelineProvidesTransitiveImpactPaths(t *testing.T) {
 	}
 
 	results := query.Impact(g, "example.com/shop/orders::Order")
-	runCreateID := graph.SymbolID("example.com/shop/orders::RunCreate")
+	runCreateID := graph.SymbolRef("example.com/shop/orders::RunCreate")
 	var runCreate *query.ImpactResult
 	for index := range results {
 		if results[index].ID == runCreateID {
@@ -256,22 +256,22 @@ func TestSelfAnalysisAttributesImpactClosureCall(t *testing.T) {
 		t.Fatalf("Load(NOCV): %v", err)
 	}
 
-	impactID := graph.SymbolID("nocv/query::Impact")
-	directDependentsID := graph.SymbolID("nocv/query::DirectDependents")
+	impactID := graph.SymbolRef("nocv/query::Impact")
+	closureTarget := graph.SymbolRef("nocv/query::semanticPathLess")
 	dependencies := query.DirectDependencies(g, impactID)
 	foundCall := false
 	for _, relationship := range dependencies {
-		if relationship.Kind == graph.EdgeCalls && relationship.To == directDependentsID {
+		if relationship.Kind == graph.EdgeCalls && relationship.To == closureTarget {
 			foundCall = len(relationship.Evidence) == 1 && relationship.Evidence[0].File != ""
 			break
 		}
 	}
 	if !foundCall {
-		t.Fatalf("Impact direct dependencies lack closure call to DirectDependents: %#v", dependencies)
+		t.Fatalf("Impact direct dependencies lack closure call to semanticPathLess: %#v", dependencies)
 	}
 
-	if !hasOneStepImpact(query.Impact(g, directDependentsID), impactID, directDependentsID, graph.EdgeCalls) {
-		t.Fatal("impact analysis does not consume Impact -> DirectDependents closure call")
+	if !hasOneStepImpact(query.Impact(g, closureTarget), impactID, closureTarget, graph.EdgeCalls) {
+		t.Fatal("impact analysis does not consume Impact -> semanticPathLess closure call")
 	}
 
 	packagePaths := query.PackageDependencyPaths(g, "nocv/cmd/nocv", "nocv/query")
@@ -281,11 +281,11 @@ func TestSelfAnalysisAttributesImpactClosureCall(t *testing.T) {
 }
 
 type branchingImpactIDs struct {
-	changed graph.SymbolID
-	a       graph.SymbolID
-	b       graph.SymbolID
-	c       graph.SymbolID
-	d       graph.SymbolID
+	changed graph.SymbolRef
+	a       graph.SymbolRef
+	b       graph.SymbolRef
+	c       graph.SymbolRef
+	d       graph.SymbolRef
 }
 
 func branchingImpactFixture(t *testing.T) (*graph.Graph, branchingImpactIDs) {
@@ -298,8 +298,8 @@ func branchingImpactFixture(t *testing.T) (*graph.Graph, branchingImpactIDs) {
 		d:       "example.com/impact::D",
 	}
 	g := graph.New()
-	pkgID := graph.PackageID("example.com/impact")
-	for _, node := range []graph.Node{
+	pkgID := graph.PackageRef("example.com/impact")
+	for _, node := range []testNode{
 		{ID: pkgID, Kind: graph.NodePackage, Name: "impact"},
 		{ID: ids.changed, Kind: graph.NodeInterface, Name: "Changed", Parent: pkgID},
 		{ID: ids.a, Kind: graph.NodeFunction, Name: "A", Parent: pkgID},
@@ -307,11 +307,11 @@ func branchingImpactFixture(t *testing.T) (*graph.Graph, branchingImpactIDs) {
 		{ID: ids.c, Kind: graph.NodeFunction, Name: "C", Parent: pkgID},
 		{ID: ids.d, Kind: graph.NodeFunction, Name: "D", Parent: pkgID},
 	} {
-		if err := g.AddNode(node); err != nil {
+		if err := addTestNode(g, node); err != nil {
 			t.Fatal(err)
 		}
 	}
-	edges := []graph.Edge{
+	edges := []testEdge{
 		{From: ids.d, To: ids.a, Kind: graph.EdgeCalls},
 		{From: ids.a, To: ids.c, Kind: graph.EdgeCalls},
 		{From: ids.a, To: ids.changed, Kind: graph.EdgeReturns},
@@ -322,19 +322,19 @@ func branchingImpactFixture(t *testing.T) (*graph.Graph, branchingImpactIDs) {
 	}
 	for index := range edges {
 		edges[index].Evidence = []graph.Location{{File: "impact.go", Offset: index}}
-		if err := g.AddEdge(edges[index]); err != nil {
+		if err := addTestEdge(g, edges[index]); err != nil {
 			t.Fatal(err)
 		}
 	}
 	return g, ids
 }
 
-func assertSimpleImpactPath(t *testing.T, changed graph.SymbolID, path query.ImpactPath) {
+func assertSimpleImpactPath(t *testing.T, changed graph.SymbolRef, path query.ImpactPath) {
 	t.Helper()
 	if len(path.Steps) == 0 {
 		t.Fatal("impact path has no steps")
 	}
-	seen := make(map[graph.SymbolID]bool)
+	seen := make(map[graph.SymbolRef]bool)
 	for index, step := range path.Steps {
 		if index > 0 && path.Steps[index-1].To != step.From {
 			t.Fatalf("disconnected impact path: %#v", path)
@@ -352,7 +352,7 @@ func assertSimpleImpactPath(t *testing.T, changed graph.SymbolID, path query.Imp
 
 func hasOneStepImpact(
 	results []query.ImpactResult,
-	from, to graph.SymbolID,
+	from, to graph.SymbolRef,
 	kind graph.EdgeKind,
 ) bool {
 	for _, result := range results {

@@ -61,6 +61,13 @@ persistence, search, type graph, or function graph.
 The graph model is language-independent. Go syntax trees are used only inside
 `goanalyzer` and are converted into graph nodes and semantic edges before being
 returned. The CLI prints both the hierarchy and a simple `Calls` section.
+Every node has two deliberately separate identities: an opaque, graph-local
+`NodeID` used for storage and traversal, and a deterministic, human-readable
+`SymbolRef` used by commands and APIs (for example `nocv/query::Impact`). Node
+IDs start at 1 for each loaded graph and are never part of CLI or web output.
+When Go permits repeated declarations such as `init` or the blank identifier,
+their references receive deterministic source-order suffixes such as `#1` and
+`#2`; the declaration name itself remains unchanged.
 Nodes retain source-authored declaration documentation where available. For Go,
 this includes package, type, function, method, and interface-method doc
 comments; inline implementation comments are not modeled.

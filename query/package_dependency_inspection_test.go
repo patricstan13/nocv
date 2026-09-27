@@ -19,7 +19,7 @@ func TestInspectPackageDependencyPartitionsMixedEvidenceExactlyOnce(t *testing.T
 	if len(inspection.TypeDependencies) != 3 {
 		t.Fatalf("TypeDependencies = %#v, want Child->Parent, Service->Repository, and Worker->Audit", inspection.TypeDependencies)
 	}
-	wantPairs := [][2]graph.SymbolID{
+	wantPairs := [][2]graph.SymbolRef{
 		{"service::Child", "repository::Parent"},
 		{"service::Service", "repository::Repository"},
 		{"service::Worker", "repository::Audit"},
@@ -149,8 +149,8 @@ func TestInspectPackageDependencyReturnsDetachedResultsAndHandlesInvalidInput(t 
 }
 
 type inspectionRelationshipID struct {
-	from graph.SymbolID
-	to   graph.SymbolID
+	from graph.SymbolRef
+	to   graph.SymbolRef
 	kind graph.EdgeKind
 }
 
@@ -214,7 +214,7 @@ func inspectionID(relationship query.Relationship) inspectionRelationshipID {
 	return inspectionRelationshipID{from: relationship.From, to: relationship.To, kind: relationship.Kind}
 }
 
-func directPackageStep(t *testing.T, g *graph.Graph, from, to graph.SymbolID) query.PackageDependency {
+func directPackageStep(t *testing.T, g *graph.Graph, from, to graph.SymbolRef) query.PackageDependency {
 	t.Helper()
 	paths := query.PackageDependencyPaths(g, from, to)
 	if len(paths) != 1 || len(paths[0].Steps) != 1 {
@@ -235,7 +235,7 @@ func copyPackageDependencyForTest(dependency query.PackageDependency) query.Pack
 func packageInspectionFixture(t *testing.T) *graph.Graph {
 	t.Helper()
 	g := graph.New()
-	for _, node := range []graph.Node{
+	for _, node := range []testNode{
 		{ID: "app", Kind: graph.NodePackage, Name: "app"},
 		{ID: "service", Kind: graph.NodePackage, Name: "service"},
 		{ID: "repository", Kind: graph.NodePackage, Name: "repository"},
@@ -253,11 +253,11 @@ func packageInspectionFixture(t *testing.T) *graph.Graph {
 		{ID: "repository::Audit::Record", Kind: graph.NodeFunction, Name: "Record", Parent: "repository::Audit"},
 		{ID: "repository::helper", Kind: graph.NodeFunction, Name: "helper", Parent: "repository"},
 	} {
-		if err := g.AddNode(node); err != nil {
+		if err := addTestNode(g, node); err != nil {
 			t.Fatalf("AddNode(%q): %v", node.ID, err)
 		}
 	}
-	for index, edge := range []graph.Edge{
+	for index, edge := range []testEdge{
 		{From: "app::Run", To: "service::Service::Create", Kind: graph.EdgeCalls},
 		{From: "app::Run", To: "service::Service", Kind: graph.EdgeAccepts},
 		{From: "service::Migrate", To: "repository::Repository::Save", Kind: graph.EdgeCalls},
@@ -271,7 +271,7 @@ func packageInspectionFixture(t *testing.T) *graph.Graph {
 		{From: "service", To: "repository", Kind: graph.EdgeImports},
 	} {
 		edge.Evidence = []graph.Location{{File: "inspection.go", Offset: index}}
-		if err := g.AddEdge(edge); err != nil {
+		if err := addTestEdge(g, edge); err != nil {
 			t.Fatalf("AddEdge(%s, %q -> %q): %v", edge.Kind, edge.From, edge.To, err)
 		}
 	}

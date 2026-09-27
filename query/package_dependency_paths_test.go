@@ -13,15 +13,15 @@ import (
 
 func TestDirectPackageDependenciesAggregateBoundaryFactsAndIgnoreInternalAndImports(t *testing.T) {
 	g := graph.New()
-	a := graph.SymbolID("a")
-	b := graph.SymbolID("b")
-	c := graph.SymbolID("c")
-	plugin := graph.SymbolID("plugin")
-	for _, id := range []graph.SymbolID{a, b, c, plugin} {
-		mustAddPackagePathNode(t, g, graph.Node{ID: id, Kind: graph.NodePackage, Name: string(id)})
+	a := graph.SymbolRef("a")
+	b := graph.SymbolRef("b")
+	c := graph.SymbolRef("c")
+	plugin := graph.SymbolRef("plugin")
+	for _, id := range []graph.SymbolRef{a, b, c, plugin} {
+		mustAddPackagePathNode(t, g, testNode{ID: id, Kind: graph.NodePackage, Name: string(id)})
 	}
 
-	nodes := []graph.Node{
+	nodes := []testNode{
 		{ID: "a::Accept", Kind: graph.NodeFunction, Name: "Accept", Parent: a},
 		{ID: "a::Embed", Kind: graph.NodeStruct, Name: "Embed", Parent: a},
 		{ID: "a::Helper1", Kind: graph.NodeFunction, Name: "Helper1", Parent: a},
@@ -39,7 +39,7 @@ func TestDirectPackageDependenciesAggregateBoundaryFactsAndIgnoreInternalAndImpo
 		mustAddPackagePathNode(t, g, node)
 	}
 
-	edges := []graph.Edge{
+	edges := []testEdge{
 		{From: "a::Start", To: "a::Helper1", Kind: graph.EdgeCalls},
 		{From: "a::Helper1", To: "a::Helper2", Kind: graph.EdgeCalls},
 		{From: "a::Helper2", To: "b::Target", Kind: graph.EdgeCalls},
@@ -106,19 +106,19 @@ func TestDirectPackageDependenciesAggregateBoundaryFactsAndIgnoreInternalAndImpo
 
 func TestPackageDependencyPathsTraversePackageViewAcrossDisconnectedSymbols(t *testing.T) {
 	g := graph.New()
-	a := graph.SymbolID("a")
-	b := graph.SymbolID("b")
-	c := graph.SymbolID("c")
-	d := graph.SymbolID("d")
-	for _, id := range []graph.SymbolID{a, b, c, d} {
-		mustAddPackagePathNode(t, g, graph.Node{ID: id, Kind: graph.NodePackage, Name: string(id)})
+	a := graph.SymbolRef("a")
+	b := graph.SymbolRef("b")
+	c := graph.SymbolRef("c")
+	d := graph.SymbolRef("d")
+	for _, id := range []graph.SymbolRef{a, b, c, d} {
+		mustAddPackagePathNode(t, g, testNode{ID: id, Kind: graph.NodePackage, Name: string(id)})
 	}
-	for _, id := range []graph.SymbolID{"a::ToB", "a::ToC", "b::FromA", "b::ToD", "c::FromA", "c::ToD", "d::FromB", "d::FromC"} {
+	for _, id := range []graph.SymbolRef{"a::ToB", "a::ToC", "b::FromA", "b::ToD", "c::FromA", "c::ToD", "d::FromB", "d::FromC"} {
 		value := string(id)
-		parent := graph.SymbolID(value[:1])
-		mustAddPackagePathNode(t, g, graph.Node{ID: id, Kind: graph.NodeFunction, Name: value[3:], Parent: parent})
+		parent := graph.SymbolRef(value[:1])
+		mustAddPackagePathNode(t, g, testNode{ID: id, Kind: graph.NodeFunction, Name: value[3:], Parent: parent})
 	}
-	edges := []graph.Edge{
+	edges := []testEdge{
 		{From: "a::ToB", To: "b::FromA", Kind: graph.EdgeCalls},
 		{From: "b::ToD", To: "d::FromB", Kind: graph.EdgeCalls},
 		{From: "a::ToC", To: "c::FromA", Kind: graph.EdgeCalls},
@@ -133,7 +133,7 @@ func TestPackageDependencyPathsTraversePackageViewAcrossDisconnectedSymbols(t *t
 	if exact := query.DependencyPaths(g, "a::ToB", "d::FromB"); len(exact) != 0 {
 		t.Fatalf("disconnected B symbols unexpectedly formed exact path: %#v", exact)
 	}
-	wantPackages := [][]graph.SymbolID{{a, b, d}, {a, c, d}}
+	wantPackages := [][]graph.SymbolRef{{a, b, d}, {a, c, d}}
 	paths := query.PackageDependencyPaths(g, a, d)
 	if len(paths) != len(wantPackages) {
 		t.Fatalf("PackageDependencyPaths(a, d) = %#v, want two routes", paths)
@@ -158,12 +158,12 @@ func TestPackageDependencyPathsTraversePackageViewAcrossDisconnectedSymbols(t *t
 
 func TestPackageViewCollapsesInternalChainsWithoutChangingExactPaths(t *testing.T) {
 	g := graph.New()
-	a := graph.SymbolID("a")
-	b := graph.SymbolID("b")
-	for _, id := range []graph.SymbolID{a, b} {
-		mustAddPackagePathNode(t, g, graph.Node{ID: id, Kind: graph.NodePackage, Name: string(id)})
+	a := graph.SymbolRef("a")
+	b := graph.SymbolRef("b")
+	for _, id := range []graph.SymbolRef{a, b} {
+		mustAddPackagePathNode(t, g, testNode{ID: id, Kind: graph.NodePackage, Name: string(id)})
 	}
-	for _, node := range []graph.Node{
+	for _, node := range []testNode{
 		{ID: "a::Start", Kind: graph.NodeFunction, Name: "Start", Parent: a},
 		{ID: "a::Helper1", Kind: graph.NodeFunction, Name: "Helper1", Parent: a},
 		{ID: "a::Helper2", Kind: graph.NodeFunction, Name: "Helper2", Parent: a},
@@ -173,7 +173,7 @@ func TestPackageViewCollapsesInternalChainsWithoutChangingExactPaths(t *testing.
 	} {
 		mustAddPackagePathNode(t, g, node)
 	}
-	edges := []graph.Edge{
+	edges := []testEdge{
 		{From: "a::Start", To: "a::Helper1", Kind: graph.EdgeCalls},
 		{From: "a::Helper1", To: "a::Helper2", Kind: graph.EdgeCalls},
 		{From: "a::Helper2", To: "b::Target", Kind: graph.EdgeCalls},
@@ -204,10 +204,10 @@ func TestPackageViewCollapsesInternalChainsWithoutChangingExactPaths(t *testing.
 
 func TestPackageDependencyPathsValidateExactPackageEndpoints(t *testing.T) {
 	g := graph.New()
-	a := graph.SymbolID("a")
-	b := graph.SymbolID("b")
-	function := graph.SymbolID("a::Run")
-	for _, node := range []graph.Node{
+	a := graph.SymbolRef("a")
+	b := graph.SymbolRef("b")
+	function := graph.SymbolRef("a::Run")
+	for _, node := range []testNode{
 		{ID: a, Kind: graph.NodePackage, Name: "a"},
 		{ID: b, Kind: graph.NodePackage, Name: "b"},
 		{ID: function, Kind: graph.NodeFunction, Name: "Run", Parent: a},
@@ -235,15 +235,15 @@ func TestAnalyzerPipelineBuildsPackageViewWithoutChangingExactPaths(t *testing.T
 		t.Fatalf("Load(): %v", err)
 	}
 
-	app := graph.SymbolID("example.com/shop/app")
-	service := graph.SymbolID("example.com/shop/service")
-	repository := graph.SymbolID("example.com/shop/repository")
-	run := graph.SymbolID("example.com/shop/app::Run")
-	create := graph.SymbolID("example.com/shop/service::Create")
-	update := graph.SymbolID("example.com/shop/service::Update")
-	save := graph.SymbolID("example.com/shop/repository::Save")
+	app := graph.SymbolRef("example.com/shop/app")
+	service := graph.SymbolRef("example.com/shop/service")
+	repository := graph.SymbolRef("example.com/shop/repository")
+	run := graph.SymbolRef("example.com/shop/app::Run")
+	create := graph.SymbolRef("example.com/shop/service::Create")
+	update := graph.SymbolRef("example.com/shop/service::Update")
+	save := graph.SymbolRef("example.com/shop/repository::Save")
 	want := []query.PackageDependencyPath{{
-		Packages: []graph.SymbolID{app, service, repository},
+		Packages: []graph.SymbolRef{app, service, repository},
 		Steps: []query.PackageDependency{
 			{From: app, To: service, Evidence: []query.Relationship{
 				{From: run, To: create, Kind: graph.EdgeCalls, Evidence: graphEvidence(g, run, create, graph.EdgeCalls)},
@@ -267,9 +267,11 @@ func TestAnalyzerPipelineBuildsPackageViewWithoutChangingExactPaths(t *testing.T
 	}
 }
 
-func graphEvidence(g *graph.Graph, from, to graph.SymbolID, kind graph.EdgeKind) []graph.Location {
-	for _, edge := range g.Outgoing(from, kind) {
-		if edge.To == to {
+func graphEvidence(g *graph.Graph, from, to graph.SymbolRef, kind graph.EdgeKind) []graph.Location {
+	fromID, _ := g.Resolve(from)
+	toID, _ := g.Resolve(to)
+	for _, edge := range g.Outgoing(fromID, kind) {
+		if edge.To == toID {
 			return edge.Evidence
 		}
 	}
@@ -286,16 +288,16 @@ func relationshipOrderLess(left, right query.Relationship) bool {
 	return left.To < right.To
 }
 
-func mustAddPackagePathNode(t *testing.T, g *graph.Graph, node graph.Node) {
+func mustAddPackagePathNode(t *testing.T, g *graph.Graph, node testNode) {
 	t.Helper()
-	if err := g.AddNode(node); err != nil {
+	if err := addTestNode(g, node); err != nil {
 		t.Fatalf("AddNode(%q): %v", node.ID, err)
 	}
 }
 
-func mustAddPackagePathEdge(t *testing.T, g *graph.Graph, edge graph.Edge) {
+func mustAddPackagePathEdge(t *testing.T, g *graph.Graph, edge testEdge) {
 	t.Helper()
-	if err := g.AddEdge(edge); err != nil {
+	if err := addTestEdge(g, edge); err != nil {
 		t.Fatalf("AddEdge(%s, %q -> %q): %v", edge.Kind, edge.From, edge.To, err)
 	}
 }

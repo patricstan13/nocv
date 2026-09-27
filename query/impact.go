@@ -9,7 +9,7 @@ import (
 // ImpactResult identifies one potentially affected node and every distinct
 // simple semantic dependency path from that node to the changed node.
 type ImpactResult struct {
-	ID    graph.SymbolID
+	ID    graph.SymbolRef
 	Paths []SemanticPath
 }
 
@@ -19,50 +19,56 @@ type ImpactPath = SemanticPath
 type ImpactStep = SemanticStep
 
 // Impact returns all represented nodes with a semantic dependency path to id.
-// Paths are simple: no SymbolID is visited more than once within one path.
-func Impact(g *graph.Graph, id graph.SymbolID) []ImpactResult {
+// Paths are simple: no node is visited more than once within one path.
+func Impact(g *graph.Graph, id graph.SymbolRef) []ImpactResult {
 	if g == nil {
 		return nil
 	}
-	if _, exists := g.Node(id); !exists {
+	idNode, exists := g.Resolve(id)
+	if !exists {
 		return nil
 	}
 
-	byID := make(map[graph.SymbolID]*ImpactResult)
-	pathKeys := make(map[graph.SymbolID]map[string]bool)
-	seen := map[graph.SymbolID]bool{id: true}
+	byID := make(map[graph.SymbolRef]*ImpactResult)
+	pathKeys := make(map[graph.SymbolRef]map[string]bool)
+	seen := map[graph.NodeID]bool{idNode: true}
 
-	var walk func(graph.SymbolID, []SemanticStep)
-	walk = func(current graph.SymbolID, path []SemanticStep) {
-		for _, relationship := range DirectDependents(g, current) {
-			dependent := relationship.From
+	var walk func(graph.NodeID, []SemanticStep)
+	walk = func(current graph.NodeID, path []SemanticStep) {
+		for _, edge := range g.Incoming(current, directDependencyKinds...) {
+			dependent := edge.From
 			if seen[dependent] {
+				continue
+			}
+			fromNode, fromExists := g.Node(edge.From)
+			toNode, toExists := g.Node(edge.To)
+			if !fromExists || !toExists {
 				continue
 			}
 
 			nextPath := make([]SemanticStep, len(path)+1)
 			nextPath[0] = SemanticStep{
-				From: relationship.From,
-				To:   relationship.To,
-				Kind: relationship.Kind,
+				From: fromNode.Ref,
+				To:   toNode.Ref,
+				Kind: edge.Kind,
 			}
 			copy(nextPath[1:], path)
 
 			key := semanticPathKey(nextPath)
-			keys := pathKeys[dependent]
+			keys := pathKeys[fromNode.Ref]
 			if keys == nil {
 				keys = make(map[string]bool)
-				pathKeys[dependent] = keys
+				pathKeys[fromNode.Ref] = keys
 			}
 			if keys[key] {
 				continue
 			}
 			keys[key] = true
 
-			result := byID[dependent]
+			result := byID[fromNode.Ref]
 			if result == nil {
-				result = &ImpactResult{ID: dependent}
-				byID[dependent] = result
+				result = &ImpactResult{ID: fromNode.Ref}
+				byID[fromNode.Ref] = result
 			}
 			result.Paths = append(result.Paths, SemanticPath{Steps: nextPath})
 
@@ -71,7 +77,7 @@ func Impact(g *graph.Graph, id graph.SymbolID) []ImpactResult {
 			delete(seen, dependent)
 		}
 	}
-	walk(id, nil)
+	walk(idNode, nil)
 
 	results := make([]ImpactResult, 0, len(byID))
 	for _, result := range byID {

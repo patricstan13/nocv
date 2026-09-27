@@ -11,39 +11,49 @@ import (
 // structs or interfaces. Evidence contains every stored semantic fact that
 // establishes the type relationship.
 type TypeDependency struct {
-	From     graph.SymbolID
-	To       graph.SymbolID
+	From     graph.SymbolRef
+	To       graph.SymbolRef
 	Evidence []Relationship
 }
 
 // TypeDependencyPath is one simple route through the derived semantic type
 // view. Each step carries evidence for exactly one type boundary.
 type TypeDependencyPath struct {
-	Types []graph.SymbolID
+	Types []graph.SymbolRef
 	Steps []TypeDependency
+}
+
+type typeDependency struct {
+	to         graph.NodeID
+	dependency TypeDependency
 }
 
 // DirectTypeDependencies returns direct derived semantic dependencies from one
 // exact represented struct or interface.
-func DirectTypeDependencies(g *graph.Graph, typeID graph.SymbolID) []TypeDependency {
-	if !isTypeNode(g, typeID) {
+func DirectTypeDependencies(g *graph.Graph, typeID graph.SymbolRef) []TypeDependency {
+	if g == nil {
 		return nil
 	}
-	return copyTypeDependencies(typeDependencyView(g)[typeID])
+	id, exists := g.Resolve(typeID)
+	if !exists || !isTypeNode(g, typeID) {
+		return nil
+	}
+	return publicTypeDependencies(typeDependencyView(g)[id])
 }
 
 // DirectTypeDependents returns direct derived type dependencies whose target
 // is typeID. Dependencies retain their natural From -> To orientation.
-func DirectTypeDependents(g *graph.Graph, typeID graph.SymbolID) []TypeDependency {
+func DirectTypeDependents(g *graph.Graph, typeID graph.SymbolRef) []TypeDependency {
 	if !isTypeNode(g, typeID) {
 		return nil
 	}
+	id, _ := g.Resolve(typeID)
 	view := typeDependencyView(g)
 	var dependents []TypeDependency
 	for _, dependencies := range view {
 		for _, dependency := range dependencies {
-			if dependency.To == typeID {
-				dependents = append(dependents, copyTypeDependency(dependency))
+			if dependency.to == id {
+				dependents = append(dependents, copyTypeDependency(dependency.dependency))
 			}
 		}
 	}
@@ -55,26 +65,32 @@ func DirectTypeDependents(g *graph.Graph, typeID graph.SymbolID) []TypeDependenc
 
 // TypeDependencyPaths returns every distinct simple route through the derived
 // semantic type view between two exact represented types.
-func TypeDependencyPaths(g *graph.Graph, from, to graph.SymbolID) []TypeDependencyPath {
+func TypeDependencyPaths(g *graph.Graph, from, to graph.SymbolRef) []TypeDependencyPath {
 	if g == nil || from == to || !isTypeNode(g, from) || !isTypeNode(g, to) {
 		return nil
 	}
 
 	view := typeDependencyView(g)
+	fromID, _ := g.Resolve(from)
+	toID, _ := g.Resolve(to)
 	var paths []TypeDependencyPath
 	pathKeys := make(map[string]bool)
-	seen := map[graph.SymbolID]bool{from: true}
+	seen := map[graph.NodeID]bool{fromID: true}
 
-	var walk func(graph.SymbolID, []graph.SymbolID, []TypeDependency)
-	walk = func(current graph.SymbolID, types []graph.SymbolID, steps []TypeDependency) {
+	var walk func(graph.NodeID, []graph.SymbolRef, []TypeDependency)
+	walk = func(current graph.NodeID, types []graph.SymbolRef, steps []TypeDependency) {
 		for _, dependency := range view[current] {
-			next := dependency.To
+			next := dependency.to
 			if seen[next] {
 				continue
 			}
-			nextTypes := append(append([]graph.SymbolID(nil), types...), next)
-			nextSteps := appendTypeDependency(steps, dependency)
-			if next == to {
+			nextNode, exists := g.Node(next)
+			if !exists {
+				continue
+			}
+			nextTypes := append(append([]graph.SymbolRef(nil), types...), nextNode.Ref)
+			nextSteps := appendTypeDependency(steps, dependency.dependency)
+			if next == toID {
 				key := typeSequenceKey(nextTypes)
 				if !pathKeys[key] {
 					pathKeys[key] = true
@@ -88,7 +104,7 @@ func TypeDependencyPaths(g *graph.Graph, from, to graph.SymbolID) []TypeDependen
 			delete(seen, next)
 		}
 	}
-	walk(from, []graph.SymbolID{from}, nil)
+	walk(fromID, []graph.SymbolRef{from}, nil)
 
 	sort.Slice(paths, func(i, j int) bool {
 		return typeSequenceLess(paths[i].Types, paths[j].Types)
@@ -96,56 +112,67 @@ func TypeDependencyPaths(g *graph.Graph, from, to graph.SymbolID) []TypeDependen
 	return paths
 }
 
-func typeDependencyView(g *graph.Graph) map[graph.SymbolID][]TypeDependency {
-	bySourceAndTarget := make(map[graph.SymbolID]map[graph.SymbolID]*TypeDependency)
+func typeDependencyView(g *graph.Graph) map[graph.NodeID][]typeDependency {
+	bySourceAndTarget := make(map[graph.NodeID]map[graph.NodeID]*TypeDependency)
 	for _, node := range g.Nodes() {
 		from, exists := typeOwner(g, node.ID)
 		if !exists {
 			continue
 		}
-		for _, relationship := range DirectDependencies(g, node.ID) {
-			to, exists := typeOwner(g, relationship.To)
+		for _, edge := range g.Outgoing(node.ID, directDependencyKinds...) {
+			to, exists := typeOwner(g, edge.To)
 			if !exists || from == to {
+				continue
+			}
+			fromExact, fromExists := g.Node(edge.From)
+			toExact, toExists := g.Node(edge.To)
+			if !fromExists || !toExists {
+				continue
+			}
+			relationship := Relationship{From: fromExact.Ref, To: toExact.Ref, Kind: edge.Kind, Evidence: append([]graph.Location(nil), edge.Evidence...)}
+			fromType, fromExists := g.Node(from)
+			toType, toExists := g.Node(to)
+			if !fromExists || !toExists {
 				continue
 			}
 			byTarget := bySourceAndTarget[from]
 			if byTarget == nil {
-				byTarget = make(map[graph.SymbolID]*TypeDependency)
+				byTarget = make(map[graph.NodeID]*TypeDependency)
 				bySourceAndTarget[from] = byTarget
 			}
 			dependency := byTarget[to]
 			if dependency == nil {
-				dependency = &TypeDependency{From: from, To: to}
+				dependency = &TypeDependency{From: fromType.Ref, To: toType.Ref}
 				byTarget[to] = dependency
 			}
 			dependency.Evidence = append(dependency.Evidence, relationship)
 		}
 	}
 
-	view := make(map[graph.SymbolID][]TypeDependency, len(bySourceAndTarget))
+	view := make(map[graph.NodeID][]typeDependency, len(bySourceAndTarget))
 	for from, byTarget := range bySourceAndTarget {
-		dependencies := make([]TypeDependency, 0, len(byTarget))
-		for _, dependency := range byTarget {
+		dependencies := make([]typeDependency, 0, len(byTarget))
+		for to, dependency := range byTarget {
 			sort.Slice(dependency.Evidence, func(i, j int) bool {
 				return semanticRelationshipLess(dependency.Evidence[i], dependency.Evidence[j])
 			})
-			dependencies = append(dependencies, *dependency)
+			dependencies = append(dependencies, typeDependency{to: to, dependency: *dependency})
 		}
 		sort.Slice(dependencies, func(i, j int) bool {
-			return dependencies[i].To < dependencies[j].To
+			return dependencies[i].dependency.To < dependencies[j].dependency.To
 		})
 		view[from] = dependencies
 	}
 	return view
 }
 
-func typeOwner(g *graph.Graph, id graph.SymbolID) (graph.SymbolID, bool) {
+func typeOwner(g *graph.Graph, id graph.NodeID) (graph.NodeID, bool) {
 	if g == nil {
-		return "", false
+		return 0, false
 	}
 	node, exists := g.Node(id)
 	if !exists {
-		return "", false
+		return 0, false
 	}
 	switch node.Kind {
 	case graph.NodeStruct, graph.NodeInterface:
@@ -156,14 +183,25 @@ func typeOwner(g *graph.Graph, id graph.SymbolID) (graph.SymbolID, bool) {
 			return parent.ID, true
 		}
 	}
-	return "", false
+	return 0, false
 }
 
-func isTypeNode(g *graph.Graph, id graph.SymbolID) bool {
+func publicTypeDependencies(dependencies []typeDependency) []TypeDependency {
+	result := make([]TypeDependency, len(dependencies))
+	for index, dependency := range dependencies {
+		result[index] = copyTypeDependency(dependency.dependency)
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+func isTypeNode(g *graph.Graph, id graph.SymbolRef) bool {
 	if g == nil {
 		return false
 	}
-	node, exists := g.Node(id)
+	node, exists := g.NodeByRef(id)
 	return exists && (node.Kind == graph.NodeStruct || node.Kind == graph.NodeInterface)
 }
 
@@ -175,17 +213,6 @@ func appendTypeDependency(steps []TypeDependency, dependency TypeDependency) []T
 	return append(result, copyTypeDependency(dependency))
 }
 
-func copyTypeDependencies(dependencies []TypeDependency) []TypeDependency {
-	if len(dependencies) == 0 {
-		return nil
-	}
-	result := make([]TypeDependency, len(dependencies))
-	for index, dependency := range dependencies {
-		result[index] = copyTypeDependency(dependency)
-	}
-	return result
-}
-
 func copyTypeDependency(dependency TypeDependency) TypeDependency {
 	copy := TypeDependency{From: dependency.From, To: dependency.To}
 	copy.Evidence = make([]Relationship, len(dependency.Evidence))
@@ -195,7 +222,7 @@ func copyTypeDependency(dependency TypeDependency) TypeDependency {
 	return copy
 }
 
-func typeSequenceLess(left, right []graph.SymbolID) bool {
+func typeSequenceLess(left, right []graph.SymbolRef) bool {
 	if len(left) != len(right) {
 		return len(left) < len(right)
 	}
@@ -207,7 +234,7 @@ func typeSequenceLess(left, right []graph.SymbolID) bool {
 	return false
 }
 
-func typeSequenceKey(types []graph.SymbolID) string {
+func typeSequenceKey(types []graph.SymbolRef) string {
 	var key strings.Builder
 	for _, typeID := range types {
 		writeSemanticPathID(&key, typeID)

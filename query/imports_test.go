@@ -79,13 +79,13 @@ func TestImportsRemainSeparateFromSemanticQueries(t *testing.T) {
 }
 
 type importIDs struct {
-	app             graph.SymbolID
-	plugin          graph.SymbolID
-	repository      graph.SymbolID
-	service         graph.SymbolID
-	worker          graph.SymbolID
-	appFunction     graph.SymbolID
-	serviceFunction graph.SymbolID
+	app             graph.SymbolRef
+	plugin          graph.SymbolRef
+	repository      graph.SymbolRef
+	service         graph.SymbolRef
+	worker          graph.SymbolRef
+	appFunction     graph.SymbolRef
+	serviceFunction graph.SymbolRef
 }
 
 func importFixture(t *testing.T) (*graph.Graph, importIDs) {
@@ -100,7 +100,7 @@ func importFixture(t *testing.T) (*graph.Graph, importIDs) {
 		serviceFunction: "example.com/project/service::Run",
 	}
 	g := graph.New()
-	for _, node := range []graph.Node{
+	for _, node := range []testNode{
 		{ID: ids.app, Kind: graph.NodePackage, Name: "app"},
 		{ID: ids.plugin, Kind: graph.NodePackage, Name: "plugin"},
 		{ID: ids.repository, Kind: graph.NodePackage, Name: "repository"},
@@ -109,11 +109,11 @@ func importFixture(t *testing.T) (*graph.Graph, importIDs) {
 		{ID: ids.appFunction, Kind: graph.NodeFunction, Name: "Run", Parent: ids.app},
 		{ID: ids.serviceFunction, Kind: graph.NodeFunction, Name: "Run", Parent: ids.service},
 	} {
-		if err := g.AddNode(node); err != nil {
+		if err := addTestNode(g, node); err != nil {
 			t.Fatalf("AddNode(%q): %v", node.ID, err)
 		}
 	}
-	edges := []graph.Edge{
+	edges := []testEdge{
 		{From: ids.app, To: ids.service, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "app.go", Offset: 10}}},
 		{From: ids.worker, To: ids.service, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "worker.go", Offset: 10}}},
 		{From: ids.app, To: ids.repository, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "app.go", Offset: 20}}},
@@ -122,22 +122,22 @@ func importFixture(t *testing.T) (*graph.Graph, importIDs) {
 		{From: ids.appFunction, To: ids.serviceFunction, Kind: graph.EdgeCalls, Evidence: []graph.Location{{File: "app.go", Offset: 50}}},
 	}
 	for _, edge := range edges {
-		if err := g.AddEdge(edge); err != nil {
+		if err := addTestEdge(g, edge); err != nil {
 			t.Fatalf("AddEdge(%s, %q -> %q): %v", edge.Kind, edge.From, edge.To, err)
 		}
 	}
 	return g, ids
 }
 
-func importGraphSnapshot(g *graph.Graph) map[graph.SymbolID][]*graph.Edge {
-	snapshot := make(map[graph.SymbolID][]*graph.Edge)
+func importGraphSnapshot(g *graph.Graph) map[graph.SymbolRef][]*graph.Edge {
+	snapshot := make(map[graph.SymbolRef][]*graph.Edge)
 	for _, node := range g.Nodes() {
-		snapshot[node.ID] = g.Outgoing(node.ID)
+		snapshot[node.Ref] = g.Outgoing(node.ID)
 	}
 	return snapshot
 }
 
-func hasRelationship(relationships []query.Relationship, from, to graph.SymbolID, kind graph.EdgeKind) bool {
+func hasRelationship(relationships []query.Relationship, from, to graph.SymbolRef, kind graph.EdgeKind) bool {
 	for _, relationship := range relationships {
 		if relationship.From == from && relationship.To == to && relationship.Kind == kind {
 			return true

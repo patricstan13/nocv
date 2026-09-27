@@ -71,19 +71,25 @@ func Load(ctx context.Context, dir string, patterns ...string) (*graph.Graph, er
 }
 
 func addImports(g *graph.Graph, pkg *packages.Package) error {
-	from := graph.PackageID(pkg.PkgPath)
+	from, represented := g.Resolve(graph.PackageRef(pkg.PkgPath))
+	if !represented {
+		return nil
+	}
 	for _, source := range orderedFiles(pkg) {
 		for _, spec := range source.file.Imports {
 			imported := importedPackage(pkg, spec)
 			if imported == nil {
 				continue
 			}
-			to := graph.PackageID(imported.PkgPath)
+			to, represented := g.Resolve(graph.PackageRef(imported.PkgPath))
+			if !represented {
+				continue
+			}
 			if from == to {
 				continue
 			}
-			target, represented := g.Node(to)
-			if !represented || target.Kind != graph.NodePackage {
+			target, targetExists := g.Node(to)
+			if !targetExists || target.Kind != graph.NodePackage {
 				continue
 			}
 			if err := g.AddEdge(graph.Edge{
@@ -130,28 +136,30 @@ type sourceFile struct {
 }
 
 type symbolIndex struct {
-	objects    map[types.Object]graph.SymbolID
-	namedTypes map[graph.SymbolID]*types.Named
+	objects    map[types.Object]graph.NodeID
+	namedTypes map[graph.NodeID]*types.Named
 }
 
 func newSymbolIndex() *symbolIndex {
 	return &symbolIndex{
-		objects:    make(map[types.Object]graph.SymbolID),
-		namedTypes: make(map[graph.SymbolID]*types.Named),
+		objects:    make(map[types.Object]graph.NodeID),
+		namedTypes: make(map[graph.NodeID]*types.Named),
 	}
 }
 
 func addPackage(g *graph.Graph, pkg *packages.Package, symbols *symbolIndex) error {
 	files := orderedFiles(pkg)
-	pkgID := graph.PackageID(pkg.PkgPath)
-	if err := g.AddNode(graph.Node{
-		ID:            pkgID,
+	pkgRef := graph.PackageRef(pkg.PkgPath)
+	pkgID, err := g.AddNode(graph.Node{
+		Ref:           pkgRef,
 		Kind:          graph.NodePackage,
 		Name:          pkg.Name,
 		Documentation: packageDocumentation(files),
-	}); err != nil {
+	})
+	if err != nil {
 		return err
 	}
+	refs := newReferenceAllocator(files, pkgRef)
 
 	// Add named types before receiver methods so every method parent exists.
 	for _, source := range files {
@@ -165,7 +173,7 @@ func addPackage(g *graph.Graph, pkg *packages.Package, symbols *symbolIndex) err
 				if typeSpec.Assign.IsValid() { // aliases are not new structural declarations
 					continue
 				}
-				if err := addType(g, pkg, pkgID, typeSpec, typeDocumentation(gen, typeSpec), symbols); err != nil {
+				if err := addType(g, pkg, pkgID, pkgRef, typeSpec, typeDocumentation(gen, typeSpec), symbols, refs); err != nil {
 					return err
 				}
 			}
@@ -179,18 +187,20 @@ func addPackage(g *graph.Graph, pkg *packages.Package, symbols *symbolIndex) err
 				continue
 			}
 			parent := pkgID
+			parentRef := pkgRef
 			if fn.Recv != nil {
 				receiver := receiverName(fn.Recv)
-				candidate := graph.ChildID(pkgID, receiver)
-				parentNode, exists := g.Node(candidate)
+				candidate := graph.ChildRef(pkgRef, receiver)
+				parentNode, exists := g.NodeByRef(candidate)
 				if receiver == "" || !exists || parentNode.Kind != graph.NodeStruct {
 					// The current model has no parent kind for methods on named
 					// scalar, slice, map, or other non-struct types.
 					continue
 				}
-				parent = candidate
+				parent = parentNode.ID
+				parentRef = parentNode.Ref
 			}
-			functionID, err := addFunction(g, pkg.Fset, parent, fn.Name.Name, fn.Name.Pos(), documentation(fn.Doc))
+			functionID, err := addFunction(g, pkg.Fset, parent, refs.ref(parentRef, fn.Name.Name, fn.Name.Pos()), fn.Name.Name, fn.Name.Pos(), documentation(fn.Doc))
 			if err != nil {
 				return err
 			}
@@ -213,13 +223,101 @@ func orderedFiles(pkg *packages.Package) []sourceFile {
 	return files
 }
 
+// referenceAllocator adds a source-order discriminator only when declarations
+// with the same modeled parent and source name would otherwise collide.
+type referenceAllocator struct {
+	totals   map[string]int
+	ordinals map[token.Pos]int
+}
+
+func newReferenceAllocator(files []sourceFile, pkgRef graph.SymbolRef) *referenceAllocator {
+	allocator := &referenceAllocator{totals: make(map[string]int), ordinals: make(map[token.Pos]int)}
+	for _, source := range files {
+		for _, declaration := range source.file.Decls {
+			switch declaration := declaration.(type) {
+			case *ast.FuncDecl:
+				parent := pkgRef
+				if declaration.Recv != nil {
+					receiver := receiverName(declaration.Recv)
+					if receiver == "" {
+						continue
+					}
+					parent = graph.ChildRef(pkgRef, receiver)
+				}
+				allocator.record(parent, declaration.Name.Name, declaration.Name.Pos())
+
+			case *ast.GenDecl:
+				if declaration.Tok != token.TYPE {
+					continue
+				}
+				for _, specification := range declaration.Specs {
+					typeSpec := specification.(*ast.TypeSpec)
+					if typeSpec.Assign.IsValid() {
+						continue
+					}
+					switch typeSpec.Type.(type) {
+					case *ast.StructType, *ast.InterfaceType:
+						allocator.record(pkgRef, typeSpec.Name.Name, typeSpec.Name.Pos())
+					}
+				}
+			}
+		}
+	}
+	for _, source := range files {
+		for _, declaration := range source.file.Decls {
+			general, ok := declaration.(*ast.GenDecl)
+			if !ok || general.Tok != token.TYPE {
+				continue
+			}
+			for _, specification := range general.Specs {
+				typeSpec := specification.(*ast.TypeSpec)
+				iface, ok := typeSpec.Type.(*ast.InterfaceType)
+				if !ok || typeSpec.Assign.IsValid() {
+					continue
+				}
+				parent := allocator.ref(pkgRef, typeSpec.Name.Name, typeSpec.Name.Pos())
+				for _, field := range iface.Methods.List {
+					if _, ok := field.Type.(*ast.FuncType); !ok {
+						continue
+					}
+					for _, name := range field.Names {
+						allocator.record(parent, name.Name, name.Pos())
+					}
+				}
+			}
+		}
+	}
+	return allocator
+}
+
+func (a *referenceAllocator) record(parent graph.SymbolRef, name string, pos token.Pos) {
+	key := referenceKey(parent, name)
+	a.totals[key]++
+	a.ordinals[pos] = a.totals[key]
+}
+
+func (a *referenceAllocator) ref(parent graph.SymbolRef, name string, pos token.Pos) graph.SymbolRef {
+	key := referenceKey(parent, name)
+	component := name
+	if a.totals[key] > 1 {
+		component += "#" + strconv.Itoa(a.ordinals[pos])
+	}
+	return graph.ChildRef(parent, component)
+}
+
+func referenceKey(parent graph.SymbolRef, name string) string {
+	return string(parent) + "\x00" + name
+}
+
 func addType(
 	g *graph.Graph,
 	pkg *packages.Package,
-	pkgID graph.SymbolID,
+	pkgID graph.NodeID,
+	pkgRef graph.SymbolRef,
 	spec *ast.TypeSpec,
 	docText string,
 	symbols *symbolIndex,
+	refs *referenceAllocator,
 ) error {
 	var kind graph.NodeKind
 	switch spec.Type.(type) {
@@ -231,15 +329,16 @@ func addType(
 		return nil
 	}
 
-	typeID := graph.ChildID(pkgID, spec.Name.Name)
-	if err := g.AddNode(graph.Node{
-		ID:            typeID,
+	typeRef := refs.ref(pkgRef, spec.Name.Name, spec.Name.Pos())
+	typeID, err := g.AddNode(graph.Node{
+		Ref:           typeRef,
 		Kind:          kind,
 		Name:          spec.Name.Name,
 		Parent:        pkgID,
 		Location:      sourceLocation(pkg.Fset, spec.Name.Pos()),
 		Documentation: docText,
-	}); err != nil {
+	})
+	if err != nil {
 		return err
 	}
 	if typeName, ok := pkg.TypesInfo.Defs[spec.Name].(*types.TypeName); ok {
@@ -255,7 +354,7 @@ func addType(
 				continue // embedded interface/type terms are not structural nodes
 			}
 			for _, name := range field.Names {
-				functionID, err := addFunction(g, pkg.Fset, typeID, name.Name, name.Pos(), documentation(field.Doc))
+				functionID, err := addFunction(g, pkg.Fset, typeID, refs.ref(typeRef, name.Name, name.Pos()), name.Name, name.Pos(), documentation(field.Doc))
 				if err != nil {
 					return err
 				}
@@ -269,14 +368,14 @@ func addType(
 func addFunction(
 	g *graph.Graph,
 	fset *token.FileSet,
-	parent graph.SymbolID,
+	parent graph.NodeID,
+	ref graph.SymbolRef,
 	name string,
 	pos token.Pos,
 	docText string,
-) (graph.SymbolID, error) {
-	id := graph.ChildID(parent, name)
-	err := g.AddNode(graph.Node{
-		ID:            id,
+) (graph.NodeID, error) {
+	id, err := g.AddNode(graph.Node{
+		Ref:           ref,
 		Kind:          graph.NodeFunction,
 		Name:          name,
 		Parent:        parent,
@@ -317,7 +416,7 @@ func documentation(comments *ast.CommentGroup) string {
 	return strings.TrimSpace(comments.Text())
 }
 
-func registerSymbol(symbols map[types.Object]graph.SymbolID, object types.Object, id graph.SymbolID) {
+func registerSymbol(symbols map[types.Object]graph.NodeID, object types.Object, id graph.NodeID) {
 	if object != nil {
 		symbols[object] = id
 	}
@@ -348,7 +447,7 @@ func addLexicalCalls(
 	g *graph.Graph,
 	pkg *packages.Package,
 	symbols *symbolIndex,
-	callerID graph.SymbolID,
+	callerID graph.NodeID,
 	body *ast.BlockStmt,
 ) error {
 	var visitErr error
@@ -418,7 +517,7 @@ func addEmbeddedFields(
 	g *graph.Graph,
 	pkg *packages.Package,
 	symbols *symbolIndex,
-	sourceID graph.SymbolID,
+	sourceID graph.NodeID,
 	fields *ast.FieldList,
 ) error {
 	if fields == nil {
@@ -526,7 +625,7 @@ func addSignatureFieldRelationships(
 	g *graph.Graph,
 	pkg *packages.Package,
 	symbols *symbolIndex,
-	functionID graph.SymbolID,
+	functionID graph.NodeID,
 	kind graph.EdgeKind,
 	fields *ast.FieldList,
 ) error {
@@ -637,8 +736,8 @@ func implementationType(named *types.Named, iface *types.Interface) (types.Type,
 func addMethodImplementations(
 	g *graph.Graph,
 	symbols *symbolIndex,
-	structID graph.SymbolID,
-	interfaceID graph.SymbolID,
+	structID graph.NodeID,
+	interfaceID graph.NodeID,
 	concreteType types.Type,
 	interfaceType *types.Interface,
 ) error {
@@ -678,7 +777,7 @@ func hasTypeParameters(named *types.Named) bool {
 	return parameters != nil && parameters.Len() > 0
 }
 
-func isDirectChild(g *graph.Graph, childID, parentID graph.SymbolID) bool {
+func isDirectChild(g *graph.Graph, childID, parentID graph.NodeID) bool {
 	child, ok := g.Node(childID)
 	return ok && child.Parent == parentID
 }

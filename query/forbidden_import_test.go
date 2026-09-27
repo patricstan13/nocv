@@ -51,7 +51,7 @@ func TestCheckForbiddenPackageImportReturnsDirectEvidenceDefensively(t *testing.
 
 func TestCheckForbiddenPackageImportIsDirectOnlyAndIgnoresSemanticEdges(t *testing.T) {
 	g, ids := forbiddenImportFixture(t)
-	for _, endpoints := range [][2]graph.SymbolID{
+	for _, endpoints := range [][2]graph.SymbolRef{
 		{ids.a, ids.c}, // A reaches C in two import hops.
 		{ids.a, ids.d}, // A reaches D in three import hops.
 		{ids.d, ids.a}, // D has only a semantic Calls edge to A.
@@ -64,7 +64,7 @@ func TestCheckForbiddenPackageImportIsDirectOnlyAndIgnoresSemanticEdges(t *testi
 
 func TestCheckForbiddenPackageImportValidatesExactPackagesAndSelfEdge(t *testing.T) {
 	g, ids := forbiddenImportFixture(t)
-	for _, endpoints := range [][2]graph.SymbolID{
+	for _, endpoints := range [][2]graph.SymbolRef{
 		{ids.a, ids.a},
 		{"missing", ids.b},
 		{ids.a, "missing"},
@@ -79,7 +79,7 @@ func TestCheckForbiddenPackageImportValidatesExactPackagesAndSelfEdge(t *testing
 		t.Errorf("nil graph = %#v, true; want no violation", violation)
 	}
 
-	if err := g.AddEdge(graph.Edge{
+	if err := addTestEdge(g, testEdge{
 		From: ids.a, To: ids.a, Kind: graph.EdgeImports,
 		Evidence: []graph.Location{{File: "malformed.go", Offset: 1}},
 	}); err != nil {
@@ -96,8 +96,8 @@ func TestCheckForbiddenPackageImportUsesAnalyzerImportFacts(t *testing.T) {
 		t.Fatalf("Load(): %v", err)
 	}
 
-	app := graph.SymbolID("example.com/imports/app")
-	for _, target := range []graph.SymbolID{
+	app := graph.SymbolRef("example.com/imports/app")
+	for _, target := range []graph.SymbolRef{
 		"example.com/imports/plugin",     // blank import
 		"example.com/imports/repository", // aliased import
 		"example.com/imports/helpers",    // dot import
@@ -114,12 +114,12 @@ func TestCheckForbiddenPackageImportUsesAnalyzerImportFacts(t *testing.T) {
 }
 
 type forbiddenImportIDs struct {
-	a         graph.SymbolID
-	b         graph.SymbolID
-	c         graph.SymbolID
-	d         graph.SymbolID
-	aFunction graph.SymbolID
-	dFunction graph.SymbolID
+	a         graph.SymbolRef
+	b         graph.SymbolRef
+	c         graph.SymbolRef
+	d         graph.SymbolRef
+	aFunction graph.SymbolRef
+	dFunction graph.SymbolRef
 }
 
 func forbiddenImportFixture(t *testing.T) (*graph.Graph, forbiddenImportIDs) {
@@ -133,27 +133,27 @@ func forbiddenImportFixture(t *testing.T) (*graph.Graph, forbiddenImportIDs) {
 		dFunction: "d::Run",
 	}
 	g := graph.New()
-	for _, id := range []graph.SymbolID{ids.a, ids.b, ids.c, ids.d} {
-		if err := g.AddNode(graph.Node{ID: id, Kind: graph.NodePackage, Name: string(id)}); err != nil {
+	for _, id := range []graph.SymbolRef{ids.a, ids.b, ids.c, ids.d} {
+		if err := addTestNode(g, testNode{ID: id, Kind: graph.NodePackage, Name: string(id)}); err != nil {
 			t.Fatalf("AddNode(%q): %v", id, err)
 		}
 	}
-	for _, node := range []graph.Node{
+	for _, node := range []testNode{
 		{ID: ids.aFunction, Kind: graph.NodeFunction, Name: "Run", Parent: ids.a},
 		{ID: ids.dFunction, Kind: graph.NodeFunction, Name: "Run", Parent: ids.d},
 	} {
-		if err := g.AddNode(node); err != nil {
+		if err := addTestNode(g, node); err != nil {
 			t.Fatalf("AddNode(%q): %v", node.ID, err)
 		}
 	}
-	for _, edge := range []graph.Edge{
+	for _, edge := range []testEdge{
 		{From: ids.a, To: ids.b, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "a.go", Offset: 10}}},
 		{From: ids.a, To: ids.b, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "other.go", Offset: 20}}},
 		{From: ids.b, To: ids.c, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "b.go", Offset: 10}}},
 		{From: ids.c, To: ids.d, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "c.go", Offset: 10}}},
 		{From: ids.dFunction, To: ids.aFunction, Kind: graph.EdgeCalls, Evidence: []graph.Location{{File: "d.go", Offset: 10}}},
 	} {
-		if err := g.AddEdge(edge); err != nil {
+		if err := addTestEdge(g, edge); err != nil {
 			t.Fatalf("AddEdge(%s, %q -> %q): %v", edge.Kind, edge.From, edge.To, err)
 		}
 	}

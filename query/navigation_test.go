@@ -55,7 +55,7 @@ func TestDirectDependentsCoverEverySupportedRelationshipKind(t *testing.T) {
 	g, ids := navigationFixture(t)
 	tests := []struct {
 		name string
-		id   graph.SymbolID
+		id   graph.SymbolRef
 		want []query.Relationship
 	}{
 		{
@@ -139,7 +139,7 @@ func TestAnalyzerPipelineProvidesDirectNavigation(t *testing.T) {
 		t.Fatalf("Load(): %v", err)
 	}
 
-	transformID := graph.SymbolID("example.com/shop/orders::Service::Transform")
+	transformID := graph.SymbolRef("example.com/shop/orders::Service::Transform")
 	wantDependencies := []query.Relationship{
 		{From: transformID, To: "example.com/shop/orders::Order", Kind: graph.EdgeAccepts},
 		{From: transformID, To: "example.com/shop/orders::Repository", Kind: graph.EdgeAccepts},
@@ -156,7 +156,7 @@ func TestAnalyzerPipelineProvidesDirectNavigation(t *testing.T) {
 		}
 	}
 
-	repositoryID := graph.SymbolID("example.com/shop/orders::Repository")
+	repositoryID := graph.SymbolRef("example.com/shop/orders::Repository")
 	dependents := query.DirectDependents(g, repositoryID)
 	wantRelationships := map[relationshipKey]bool{
 		{from: "example.com/shop/orders::PostgresRepository", kind: graph.EdgeImplements}: true,
@@ -180,20 +180,20 @@ func TestAnalyzerPipelineProvidesDirectNavigation(t *testing.T) {
 }
 
 type navigationIDs struct {
-	pkg           graph.SymbolID
-	service       graph.SymbolID
-	base          graph.SymbolID
-	order         graph.SymbolID
-	repository    graph.SymbolID
-	create        graph.SymbolID
-	next          graph.SymbolID
-	final         graph.SymbolID
-	concreteSave  graph.SymbolID
-	interfaceSave graph.SymbolID
+	pkg           graph.SymbolRef
+	service       graph.SymbolRef
+	base          graph.SymbolRef
+	order         graph.SymbolRef
+	repository    graph.SymbolRef
+	create        graph.SymbolRef
+	next          graph.SymbolRef
+	final         graph.SymbolRef
+	concreteSave  graph.SymbolRef
+	interfaceSave graph.SymbolRef
 }
 
 type relationshipKey struct {
-	from graph.SymbolID
+	from graph.SymbolRef
 	kind graph.EdgeKind
 }
 
@@ -212,7 +212,7 @@ func navigationFixture(t *testing.T) (*graph.Graph, navigationIDs) {
 		interfaceSave: "example.com/project::Repository::Save",
 	}
 	g := graph.New()
-	for _, node := range []graph.Node{
+	for _, node := range []testNode{
 		{ID: ids.pkg, Kind: graph.NodePackage, Name: "project"},
 		{ID: ids.service, Kind: graph.NodeStruct, Name: "Service", Parent: ids.pkg},
 		{ID: ids.base, Kind: graph.NodeStruct, Name: "Base", Parent: ids.pkg},
@@ -224,12 +224,12 @@ func navigationFixture(t *testing.T) (*graph.Graph, navigationIDs) {
 		{ID: ids.concreteSave, Kind: graph.NodeFunction, Name: "Save", Parent: ids.service},
 		{ID: ids.interfaceSave, Kind: graph.NodeFunction, Name: "Save", Parent: ids.repository},
 	} {
-		if err := g.AddNode(node); err != nil {
+		if err := addTestNode(g, node); err != nil {
 			t.Fatalf("AddNode(%q): %v", node.ID, err)
 		}
 	}
 
-	edges := []graph.Edge{
+	edges := []testEdge{
 		{From: ids.create, To: ids.repository, Kind: graph.EdgeReturns, Evidence: []graph.Location{{File: "project.go", Offset: 10}}},
 		{From: ids.create, To: ids.repository, Kind: graph.EdgeAccepts, Evidence: []graph.Location{{File: "project.go", Offset: 20}}},
 		{From: ids.create, To: ids.order, Kind: graph.EdgeAccepts, Evidence: []graph.Location{{File: "project.go", Offset: 30}}},
@@ -241,7 +241,7 @@ func navigationFixture(t *testing.T) (*graph.Graph, navigationIDs) {
 		{From: ids.concreteSave, To: ids.interfaceSave, Kind: graph.EdgeImplements, Evidence: []graph.Location{{File: "project.go", Offset: 80}}},
 	}
 	for _, edge := range edges {
-		if err := g.AddEdge(edge); err != nil {
+		if err := addTestEdge(g, edge); err != nil {
 			t.Fatalf("AddEdge(%s, %q -> %q): %v", edge.Kind, edge.From, edge.To, err)
 		}
 	}

@@ -45,11 +45,11 @@ type FunctionInspection struct {
 
 // InspectNode returns a detached, kind-specific read model for one represented
 // graph node.
-func InspectNode(g *graph.Graph, id graph.SymbolID) (NodeInspection, bool) {
+func InspectNode(g *graph.Graph, id graph.SymbolRef) (NodeInspection, bool) {
 	if g == nil {
 		return NodeInspection{}, false
 	}
-	node, exists := g.Node(id)
+	node, exists := g.NodeByRef(id)
 	if !exists {
 		return NodeInspection{}, false
 	}
@@ -63,7 +63,7 @@ func InspectNode(g *graph.Graph, id graph.SymbolID) (NodeInspection, bool) {
 			Imports:      DirectImports(g, id),
 			Importers:    DirectImporters(g, id),
 		}
-		for _, childID := range g.Children(id) {
+		for _, childID := range g.Children(node.ID) {
 			child, childExists := g.Node(childID)
 			if !childExists {
 				continue
@@ -86,7 +86,7 @@ func InspectNode(g *graph.Graph, id graph.SymbolID) (NodeInspection, bool) {
 			DirectDependencies: DirectDependencies(g, id),
 			DirectDependents:   DirectDependents(g, id),
 		}
-		for _, childID := range g.Children(id) {
+		for _, childID := range g.Children(node.ID) {
 			child, childExists := g.Node(childID)
 			if childExists && child.Kind == graph.NodeFunction {
 				detail.Methods = append(detail.Methods, *child)
@@ -112,6 +112,6 @@ func sortNodes(nodes []graph.Node) {
 		if nodes[i].Name != nodes[j].Name {
 			return nodes[i].Name < nodes[j].Name
 		}
-		return nodes[i].ID < nodes[j].ID
+		return nodes[i].Ref < nodes[j].Ref
 	})
 }

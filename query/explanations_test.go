@@ -55,8 +55,8 @@ func TestWhyDependsOnRejectsSuppressedMissingAndUnsupportedEndpoints(t *testing.
 	g, ids := dependencyFixture(t)
 	for _, test := range []struct {
 		name string
-		from graph.SymbolID
-		to   graph.SymbolID
+		from graph.SymbolRef
+		to   graph.SymbolRef
 	}{
 		{name: "same package", from: ids.orders, to: ids.orders},
 		{name: "same struct", from: ids.service, to: ids.service},
@@ -75,21 +75,21 @@ func TestWhyDependsOnRejectsSuppressedMissingAndUnsupportedEndpoints(t *testing.
 
 func TestWhyDependsOnDoesNotExplainTransitiveOnlyRelationship(t *testing.T) {
 	g := graph.New()
-	packages := []graph.SymbolID{"example.com/a", "example.com/x", "example.com/b"}
+	packages := []graph.SymbolRef{"example.com/a", "example.com/x", "example.com/b"}
 	for _, packageID := range packages {
-		if err := g.AddNode(graph.Node{ID: packageID, Kind: graph.NodePackage, Name: string(packageID)}); err != nil {
+		if err := addTestNode(g, testNode{ID: packageID, Kind: graph.NodePackage, Name: string(packageID)}); err != nil {
 			t.Fatal(err)
 		}
-		functionID := graph.ChildID(packageID, "Run")
-		if err := g.AddNode(graph.Node{ID: functionID, Kind: graph.NodeFunction, Name: "Run", Parent: packageID}); err != nil {
+		functionID := graph.ChildRef(packageID, "Run")
+		if err := addTestNode(g, testNode{ID: functionID, Kind: graph.NodeFunction, Name: "Run", Parent: packageID}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for offset, endpoints := range [][2]graph.SymbolID{
-		{graph.ChildID(packages[0], "Run"), graph.ChildID(packages[1], "Run")},
-		{graph.ChildID(packages[1], "Run"), graph.ChildID(packages[2], "Run")},
+	for offset, endpoints := range [][2]graph.SymbolRef{
+		{graph.ChildRef(packages[0], "Run"), graph.ChildRef(packages[1], "Run")},
+		{graph.ChildRef(packages[1], "Run"), graph.ChildRef(packages[2], "Run")},
 	} {
-		if err := g.AddEdge(graph.Edge{
+		if err := addTestEdge(g, testEdge{
 			From:     endpoints[0],
 			To:       endpoints[1],
 			Kind:     graph.EdgeCalls,
@@ -121,7 +121,7 @@ func TestAnalyzerPipelineExplainsServiceRepositoryDependency(t *testing.T) {
 	if len(explanation.Evidence) != 2 {
 		t.Fatalf("Service -> Repository explanation = %#v", explanation)
 	}
-	wantCallers := map[graph.SymbolID]bool{
+	wantCallers := map[graph.SymbolRef]bool{
 		"example.com/shop/orders::Service::ClosureCalls": true,
 		"example.com/shop/orders::Service::Create":       true,
 	}

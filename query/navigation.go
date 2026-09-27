@@ -9,8 +9,8 @@ import (
 // Relationship is one stored graph fact presented as direct navigation.
 // Evidence is copied from the graph edge that established it.
 type Relationship struct {
-	From     graph.SymbolID
-	To       graph.SymbolID
+	From     graph.SymbolRef
+	To       graph.SymbolRef
 	Kind     graph.EdgeKind
 	Evidence []graph.Location
 }
@@ -25,15 +25,16 @@ var directDependencyKinds = []graph.EdgeKind{
 
 // DirectDependencies returns supported semantic relationships leaving id.
 // Structural containment and projected dependencies are not included.
-func DirectDependencies(g *graph.Graph, id graph.SymbolID) []Relationship {
+func DirectDependencies(g *graph.Graph, id graph.SymbolRef) []Relationship {
 	if g == nil {
 		return nil
 	}
-	if _, exists := g.Node(id); !exists {
+	nodeID, exists := g.Resolve(id)
+	if !exists {
 		return nil
 	}
 
-	relationships := copyRelationships(g.Outgoing(id, directDependencyKinds...))
+	relationships := copyRelationships(g, g.Outgoing(nodeID, directDependencyKinds...))
 	sort.Slice(relationships, func(i, j int) bool {
 		if relationships[i].Kind != relationships[j].Kind {
 			return relationships[i].Kind < relationships[j].Kind
@@ -45,15 +46,16 @@ func DirectDependencies(g *graph.Graph, id graph.SymbolID) []Relationship {
 
 // DirectDependents returns supported semantic relationships entering id.
 // Structural containment and projected dependencies are not included.
-func DirectDependents(g *graph.Graph, id graph.SymbolID) []Relationship {
+func DirectDependents(g *graph.Graph, id graph.SymbolRef) []Relationship {
 	if g == nil {
 		return nil
 	}
-	if _, exists := g.Node(id); !exists {
+	nodeID, exists := g.Resolve(id)
+	if !exists {
 		return nil
 	}
 
-	relationships := copyRelationships(g.Incoming(id, directDependencyKinds...))
+	relationships := copyRelationships(g, g.Incoming(nodeID, directDependencyKinds...))
 	sort.Slice(relationships, func(i, j int) bool {
 		if relationships[i].Kind != relationships[j].Kind {
 			return relationships[i].Kind < relationships[j].Kind
@@ -63,15 +65,20 @@ func DirectDependents(g *graph.Graph, id graph.SymbolID) []Relationship {
 	return relationships
 }
 
-func copyRelationships(edges []*graph.Edge) []Relationship {
+func copyRelationships(g *graph.Graph, edges []*graph.Edge) []Relationship {
 	if len(edges) == 0 {
 		return nil
 	}
 	relationships := make([]Relationship, 0, len(edges))
 	for _, edge := range edges {
+		from, fromExists := g.Node(edge.From)
+		to, toExists := g.Node(edge.To)
+		if !fromExists || !toExists {
+			continue
+		}
 		relationships = append(relationships, Relationship{
-			From:     edge.From,
-			To:       edge.To,
+			From:     from.Ref,
+			To:       to.Ref,
 			Kind:     edge.Kind,
 			Evidence: append([]graph.Location(nil), edge.Evidence...),
 		})

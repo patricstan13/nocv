@@ -16,8 +16,8 @@ type PackageDependencyInspection struct {
 }
 
 type relationshipIdentity struct {
-	from graph.SymbolID
-	to   graph.SymbolID
+	from graph.SymbolRef
+	to   graph.SymbolRef
 	kind graph.EdgeKind
 }
 
@@ -38,8 +38,12 @@ func InspectPackageDependency(g *graph.Graph, dependency PackageDependency) Pack
 
 	for _, typeID := range typesInPackage(g, dependency.From) {
 		for _, typeDependency := range DirectTypeDependencies(g, typeID) {
-			target, exists := g.Node(typeDependency.To)
-			if !exists || target.Parent != dependency.To {
+			target, exists := g.NodeByRef(typeDependency.To)
+			if !exists {
+				continue
+			}
+			parent, parentExists := g.Node(target.Parent)
+			if !parentExists || parent.Ref != dependency.To {
 				continue
 			}
 
@@ -80,12 +84,16 @@ func identityOf(relationship Relationship) relationshipIdentity {
 	return relationshipIdentity{from: relationship.From, to: relationship.To, kind: relationship.Kind}
 }
 
-func typesInPackage(g *graph.Graph, packageID graph.SymbolID) []graph.SymbolID {
-	var types []graph.SymbolID
-	for _, id := range g.Children(packageID) {
+func typesInPackage(g *graph.Graph, packageID graph.SymbolRef) []graph.SymbolRef {
+	var types []graph.SymbolRef
+	packageNode, exists := g.NodeByRef(packageID)
+	if !exists {
+		return nil
+	}
+	for _, id := range g.Children(packageNode.ID) {
 		node, exists := g.Node(id)
 		if exists && (node.Kind == graph.NodeStruct || node.Kind == graph.NodeInterface) {
-			types = append(types, id)
+			types = append(types, node.Ref)
 		}
 	}
 	sort.Slice(types, func(i, j int) bool { return types[i] < types[j] })

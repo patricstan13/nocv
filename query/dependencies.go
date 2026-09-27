@@ -10,16 +10,16 @@ import (
 // CallEvidence identifies a stored call relationship that contributed to a
 // projected dependency.
 type CallEvidence struct {
-	From      graph.SymbolID
-	To        graph.SymbolID
+	From      graph.SymbolRef
+	To        graph.SymbolRef
 	Locations []graph.Location
 }
 
 // Dependency is a derived relationship between two structural nodes.
 // It is a query result and is never stored as a graph edge.
 type Dependency struct {
-	From     graph.SymbolID
-	To       graph.SymbolID
+	From     graph.SymbolRef
+	To       graph.SymbolRef
 	Evidence []CallEvidence
 }
 
@@ -27,8 +27,8 @@ type Dependency struct {
 type DependencyExplanation = Dependency
 
 type dependencyKey struct {
-	from graph.SymbolID
-	to   graph.SymbolID
+	from graph.NodeID
+	to   graph.NodeID
 }
 
 // Dependencies projects stored Calls edges to the nearest ancestor whose kind
@@ -45,21 +45,25 @@ func Dependencies(g *graph.Graph, levels ...graph.NodeKind) []Dependency {
 			continue
 		}
 		for _, edge := range g.Outgoing(node.ID, graph.EdgeCalls) {
-			from, fromOK := g.AncestorOfKind(edge.From, levels...)
-			to, toOK := g.AncestorOfKind(edge.To, levels...)
-			if !fromOK || !toOK || from == to {
+			fromID, fromOK := g.AncestorOfKind(edge.From, levels...)
+			toID, toOK := g.AncestorOfKind(edge.To, levels...)
+			from, fromNodeOK := g.Node(fromID)
+			to, toNodeOK := g.Node(toID)
+			callFrom, callFromOK := g.Node(edge.From)
+			callTo, callToOK := g.Node(edge.To)
+			if !fromOK || !toOK || !fromNodeOK || !toNodeOK || !callFromOK || !callToOK || fromID == toID {
 				continue
 			}
 
-			key := dependencyKey{from: from, to: to}
+			key := dependencyKey{from: fromID, to: toID}
 			dependency := byEndpoints[key]
 			if dependency == nil {
-				dependency = &Dependency{From: from, To: to}
+				dependency = &Dependency{From: from.Ref, To: to.Ref}
 				byEndpoints[key] = dependency
 			}
 			dependency.Evidence = append(dependency.Evidence, CallEvidence{
-				From:      edge.From,
-				To:        edge.To,
+				From:      callFrom.Ref,
+				To:        callTo.Ref,
 				Locations: append([]graph.Location(nil), edge.Evidence...),
 			})
 		}
@@ -80,12 +84,12 @@ func Dependencies(g *graph.Graph, levels ...graph.NodeKind) []Dependency {
 
 // WhyDependsOn returns the stored call relationships that produce the direct
 // projected dependency from -> to. It does not search for transitive paths.
-func WhyDependsOn(g *graph.Graph, from, to graph.SymbolID) (DependencyExplanation, bool) {
+func WhyDependsOn(g *graph.Graph, from, to graph.SymbolRef) (DependencyExplanation, bool) {
 	if g == nil {
 		return DependencyExplanation{}, false
 	}
-	fromNode, fromExists := g.Node(from)
-	toNode, toExists := g.Node(to)
+	fromNode, fromExists := g.NodeByRef(from)
+	toNode, toExists := g.NodeByRef(to)
 	if !fromExists || !toExists {
 		return DependencyExplanation{}, false
 	}

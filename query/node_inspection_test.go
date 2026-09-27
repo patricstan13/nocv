@@ -17,13 +17,13 @@ func TestInspectNodePackageSeparatesChildrenSemanticsAndImports(t *testing.T) {
 	if !ok || inspection.Package == nil || inspection.Type != nil || inspection.Function != nil {
 		t.Fatalf("InspectNode(package) = %#v, %v", inspection, ok)
 	}
-	if inspection.Node.ID != ids.pkg || inspection.Node.Kind != graph.NodePackage {
+	if inspection.Node.Ref != ids.pkg || inspection.Node.Kind != graph.NodePackage {
 		t.Errorf("package envelope node = %#v", inspection.Node)
 	}
-	if got, want := nodeIDs(inspection.Package.Types), []graph.SymbolID{ids.childInterface, ids.parentInterface, ids.service}; !reflect.DeepEqual(got, want) {
+	if got, want := nodeIDs(inspection.Package.Types), []graph.SymbolRef{ids.childInterface, ids.parentInterface, ids.service}; !reflect.DeepEqual(got, want) {
 		t.Errorf("package types = %v, want %v", got, want)
 	}
-	if got, want := nodeIDs(inspection.Package.Functions), []graph.SymbolID{ids.run}; !reflect.DeepEqual(got, want) {
+	if got, want := nodeIDs(inspection.Package.Functions), []graph.SymbolRef{ids.run}; !reflect.DeepEqual(got, want) {
 		t.Errorf("package functions = %v, want %v", got, want)
 	}
 	if len(inspection.Package.Dependencies) != 1 || inspection.Package.Dependencies[0].From != ids.pkg || inspection.Package.Dependencies[0].To != ids.otherPackage {
@@ -60,7 +60,7 @@ func TestInspectNodeTypeAndFunctionUseProjectedAndExactSemantics(t *testing.T) {
 	if !ok || service.Type == nil || service.Package != nil || service.Function != nil {
 		t.Fatalf("InspectNode(Service) = %#v, %v", service, ok)
 	}
-	wantMethods := []graph.SymbolID{
+	wantMethods := []graph.SymbolRef{
 		ids.serviceCreate,
 		"example.com/types::Service::Delete",
 		"example.com/types::Service::Update",
@@ -89,7 +89,7 @@ func TestInspectNodeTypeAndFunctionUseProjectedAndExactSemantics(t *testing.T) {
 	}
 
 	create, ok := query.InspectNode(g, ids.serviceCreate)
-	if !ok || create.Function == nil || create.Node.Parent != ids.service {
+	if !ok || create.Function == nil || inspectionParentRef(g, create.Node) != ids.service {
 		t.Fatalf("InspectNode(Service.Create) = %#v, %v", create, ok)
 	}
 	wantOutgoingKinds := map[graph.EdgeKind]bool{
@@ -108,7 +108,7 @@ func TestInspectNodeTypeAndFunctionUseProjectedAndExactSemantics(t *testing.T) {
 	}
 
 	interfaceMethod, ok := query.InspectNode(g, "example.com/other::Contract::Execute")
-	if !ok || interfaceMethod.Function == nil || interfaceMethod.Node.Parent != ids.contract {
+	if !ok || interfaceMethod.Function == nil || inspectionParentRef(g, interfaceMethod.Node) != ids.contract {
 		t.Fatalf("InspectNode(Contract.Execute) = %#v, %v", interfaceMethod, ok)
 	}
 	if len(interfaceMethod.Function.Dependencies) != 1 || interfaceMethod.Function.Dependencies[0].Kind != graph.EdgeAccepts {
@@ -119,7 +119,7 @@ func TestInspectNodeTypeAndFunctionUseProjectedAndExactSemantics(t *testing.T) {
 	}
 
 	packageFunction, ok := query.InspectNode(g, ids.run)
-	if !ok || packageFunction.Function == nil || packageFunction.Node.Parent != ids.pkg || len(packageFunction.Function.Dependencies) != 1 {
+	if !ok || packageFunction.Function == nil || inspectionParentRef(g, packageFunction.Node) != ids.pkg || len(packageFunction.Function.Dependencies) != 1 {
 		t.Fatalf("InspectNode(Run) = %#v, %v", packageFunction, ok)
 	}
 }
@@ -129,7 +129,7 @@ func TestInspectNodeIntegratesDocumentationAndAnalyzerSemantics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load documentation fixture: %v", err)
 	}
-	const documentationPackage = graph.SymbolID("example.com/documentation/service")
+	const documentationPackage = graph.SymbolRef("example.com/documentation/service")
 
 	packageInspection, ok := query.InspectNode(documentationGraph, documentationPackage)
 	if !ok || packageInspection.Package == nil || packageInspection.Node.Documentation == "" {
@@ -269,12 +269,20 @@ func TestInspectNodeIsDetachedAndDoesNotChangeExistingQueries(t *testing.T) {
 	}
 }
 
-func nodeIDs(nodes []graph.Node) []graph.SymbolID {
-	ids := make([]graph.SymbolID, len(nodes))
+func nodeIDs(nodes []graph.Node) []graph.SymbolRef {
+	ids := make([]graph.SymbolRef, len(nodes))
 	for index, node := range nodes {
-		ids[index] = node.ID
+		ids[index] = node.Ref
 	}
 	return ids
+}
+
+func inspectionParentRef(g *graph.Graph, node graph.Node) graph.SymbolRef {
+	parent, _ := g.Node(node.Parent)
+	if parent == nil {
+		return ""
+	}
+	return parent.Ref
 }
 
 func assertDeepEqual(t *testing.T, name string, got, want any) {

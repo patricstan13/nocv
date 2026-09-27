@@ -51,14 +51,14 @@ func TestDependencyPathsPreserveAllBranchesKindsAndOrdering(t *testing.T) {
 
 func TestDependencyPathsTraverseEverySemanticKindAndMixedPaths(t *testing.T) {
 	g := graph.New()
-	pkgID := graph.PackageID("example.com/mixed")
-	a := graph.ChildID(pkgID, "A")
-	b := graph.ChildID(pkgID, "B")
-	c := graph.ChildID(pkgID, "C")
-	d := graph.ChildID(pkgID, "D")
-	implementation := graph.ChildID(pkgID, "Implementation")
-	returner := graph.ChildID(pkgID, "Returner")
-	for _, node := range []graph.Node{
+	pkgID := graph.PackageRef("example.com/mixed")
+	a := graph.ChildRef(pkgID, "A")
+	b := graph.ChildRef(pkgID, "B")
+	c := graph.ChildRef(pkgID, "C")
+	d := graph.ChildRef(pkgID, "D")
+	implementation := graph.ChildRef(pkgID, "Implementation")
+	returner := graph.ChildRef(pkgID, "Returner")
+	for _, node := range []testNode{
 		{ID: pkgID, Kind: graph.NodePackage, Name: "mixed"},
 		{ID: a, Kind: graph.NodeFunction, Name: "A", Parent: pkgID},
 		{ID: b, Kind: graph.NodeFunction, Name: "B", Parent: pkgID},
@@ -67,11 +67,11 @@ func TestDependencyPathsTraverseEverySemanticKindAndMixedPaths(t *testing.T) {
 		{ID: implementation, Kind: graph.NodeStruct, Name: "Implementation", Parent: pkgID},
 		{ID: returner, Kind: graph.NodeFunction, Name: "Returner", Parent: pkgID},
 	} {
-		if err := g.AddNode(node); err != nil {
+		if err := addTestNode(g, node); err != nil {
 			t.Fatal(err)
 		}
 	}
-	edges := []graph.Edge{
+	edges := []testEdge{
 		{From: a, To: b, Kind: graph.EdgeCalls},
 		{From: b, To: c, Kind: graph.EdgeAccepts},
 		{From: c, To: d, Kind: graph.EdgeEmbeds},
@@ -80,7 +80,7 @@ func TestDependencyPathsTraverseEverySemanticKindAndMixedPaths(t *testing.T) {
 	}
 	for index := range edges {
 		edges[index].Evidence = []graph.Location{{File: "mixed.go", Offset: index}}
-		if err := g.AddEdge(edges[index]); err != nil {
+		if err := addTestEdge(g, edges[index]); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -95,8 +95,8 @@ func TestDependencyPathsTraverseEverySemanticKindAndMixedPaths(t *testing.T) {
 	}
 
 	tests := []struct {
-		from graph.SymbolID
-		to   graph.SymbolID
+		from graph.SymbolRef
+		to   graph.SymbolRef
 		kind graph.EdgeKind
 	}{
 		{from: a, to: b, kind: graph.EdgeCalls},
@@ -115,24 +115,24 @@ func TestDependencyPathsTraverseEverySemanticKindAndMixedPaths(t *testing.T) {
 
 func TestDependencyPathsTerminateCyclesWithoutSuppressingBranches(t *testing.T) {
 	g := graph.New()
-	pkgID := graph.PackageID("example.com/cycle")
-	a := graph.ChildID(pkgID, "A")
-	b := graph.ChildID(pkgID, "B")
-	c := graph.ChildID(pkgID, "C")
-	d := graph.ChildID(pkgID, "D")
-	for _, node := range []graph.Node{
+	pkgID := graph.PackageRef("example.com/cycle")
+	a := graph.ChildRef(pkgID, "A")
+	b := graph.ChildRef(pkgID, "B")
+	c := graph.ChildRef(pkgID, "C")
+	d := graph.ChildRef(pkgID, "D")
+	for _, node := range []testNode{
 		{ID: pkgID, Kind: graph.NodePackage, Name: "cycle"},
 		{ID: a, Kind: graph.NodeFunction, Name: "A", Parent: pkgID},
 		{ID: b, Kind: graph.NodeFunction, Name: "B", Parent: pkgID},
 		{ID: c, Kind: graph.NodeFunction, Name: "C", Parent: pkgID},
 		{ID: d, Kind: graph.NodeFunction, Name: "D", Parent: pkgID},
 	} {
-		if err := g.AddNode(node); err != nil {
+		if err := addTestNode(g, node); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for index, endpoints := range [][2]graph.SymbolID{{a, b}, {b, c}, {c, a}, {a, d}, {d, c}} {
-		if err := g.AddEdge(graph.Edge{
+	for index, endpoints := range [][2]graph.SymbolRef{{a, b}, {b, c}, {c, a}, {a, d}, {d, c}} {
+		if err := addTestEdge(g, testEdge{
 			From: endpoints[0], To: endpoints[1], Kind: graph.EdgeCalls,
 			Evidence: []graph.Location{{File: "cycle.go", Offset: index}},
 		}); err != nil {
@@ -154,13 +154,13 @@ func TestDependencyPathsTerminateCyclesWithoutSuppressingBranches(t *testing.T) 
 
 func TestDependencyPathsRejectInvalidEndpointsAndProjection(t *testing.T) {
 	g := graph.New()
-	pkgA := graph.PackageID("example.com/a")
-	pkgB := graph.PackageID("example.com/b")
-	typeA := graph.ChildID(pkgA, "Service")
-	typeB := graph.ChildID(pkgB, "Repository")
-	caller := graph.ChildID(typeA, "Call")
-	callee := graph.ChildID(typeB, "Save")
-	for _, node := range []graph.Node{
+	pkgA := graph.PackageRef("example.com/a")
+	pkgB := graph.PackageRef("example.com/b")
+	typeA := graph.ChildRef(pkgA, "Service")
+	typeB := graph.ChildRef(pkgB, "Repository")
+	caller := graph.ChildRef(typeA, "Call")
+	callee := graph.ChildRef(typeB, "Save")
+	for _, node := range []testNode{
 		{ID: pkgA, Kind: graph.NodePackage, Name: "a"},
 		{ID: pkgB, Kind: graph.NodePackage, Name: "b"},
 		{ID: typeA, Kind: graph.NodeStruct, Name: "Service", Parent: pkgA},
@@ -168,11 +168,11 @@ func TestDependencyPathsRejectInvalidEndpointsAndProjection(t *testing.T) {
 		{ID: caller, Kind: graph.NodeFunction, Name: "Call", Parent: typeA},
 		{ID: callee, Kind: graph.NodeFunction, Name: "Save", Parent: typeB},
 	} {
-		if err := g.AddNode(node); err != nil {
+		if err := addTestNode(g, node); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := g.AddEdge(graph.Edge{
+	if err := addTestEdge(g, testEdge{
 		From: caller, To: callee, Kind: graph.EdgeCalls,
 		Evidence: []graph.Location{{File: "call.go"}},
 	}); err != nil {
@@ -204,10 +204,10 @@ func TestAnalyzerPipelineExplainsRunCreateToOrder(t *testing.T) {
 		t.Fatalf("Load(): %v", err)
 	}
 
-	runCreate := graph.SymbolID("example.com/shop/orders::RunCreate")
-	create := graph.SymbolID("example.com/shop/orders::Service::Create")
-	repositorySave := graph.SymbolID("example.com/shop/orders::Repository::Save")
-	order := graph.SymbolID("example.com/shop/orders::Order")
+	runCreate := graph.SymbolRef("example.com/shop/orders::RunCreate")
+	create := graph.SymbolRef("example.com/shop/orders::Service::Create")
+	repositorySave := graph.SymbolRef("example.com/shop/orders::Repository::Save")
+	order := graph.SymbolRef("example.com/shop/orders::Order")
 	want := []query.SemanticPath{
 		{Steps: []query.SemanticStep{
 			{From: runCreate, To: create, Kind: graph.EdgeCalls},
@@ -226,14 +226,14 @@ func TestAnalyzerPipelineExplainsRunCreateToOrder(t *testing.T) {
 
 func assertSimpleDependencyPath(
 	t *testing.T,
-	from, to graph.SymbolID,
+	from, to graph.SymbolRef,
 	path query.SemanticPath,
 ) {
 	t.Helper()
 	if len(path.Steps) == 0 || path.Steps[0].From != from || path.Steps[len(path.Steps)-1].To != to {
 		t.Fatalf("path does not connect %q to %q: %#v", from, to, path)
 	}
-	seen := map[graph.SymbolID]bool{from: true}
+	seen := map[graph.SymbolRef]bool{from: true}
 	for index, step := range path.Steps {
 		if index > 0 && path.Steps[index-1].To != step.From {
 			t.Fatalf("disconnected path: %#v", path)

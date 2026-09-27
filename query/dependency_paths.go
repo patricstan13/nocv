@@ -8,36 +8,43 @@ import (
 
 // DependencyPaths returns every distinct simple semantic dependency path from
 // one exact represented symbol to another. It does not project endpoints.
-func DependencyPaths(g *graph.Graph, from, to graph.SymbolID) []SemanticPath {
+func DependencyPaths(g *graph.Graph, from, to graph.SymbolRef) []SemanticPath {
 	if g == nil || from == to {
 		return nil
 	}
-	if _, exists := g.Node(from); !exists {
+	fromID, exists := g.Resolve(from)
+	if !exists {
 		return nil
 	}
-	if _, exists := g.Node(to); !exists {
+	toID, exists := g.Resolve(to)
+	if !exists {
 		return nil
 	}
 
 	var paths []SemanticPath
 	pathKeys := make(map[string]bool)
-	seen := map[graph.SymbolID]bool{from: true}
+	seen := map[graph.NodeID]bool{fromID: true}
 
-	var walk func(graph.SymbolID, []SemanticStep)
-	walk = func(current graph.SymbolID, steps []SemanticStep) {
-		for _, relationship := range DirectDependencies(g, current) {
-			next := relationship.To
+	var walk func(graph.NodeID, []SemanticStep)
+	walk = func(current graph.NodeID, steps []SemanticStep) {
+		for _, edge := range g.Outgoing(current, directDependencyKinds...) {
+			next := edge.To
 			if seen[next] {
+				continue
+			}
+			fromNode, fromExists := g.Node(edge.From)
+			toNode, toExists := g.Node(edge.To)
+			if !fromExists || !toExists {
 				continue
 			}
 
 			nextSteps := append([]SemanticStep(nil), steps...)
 			nextSteps = append(nextSteps, SemanticStep{
-				From: relationship.From,
-				To:   relationship.To,
-				Kind: relationship.Kind,
+				From: fromNode.Ref,
+				To:   toNode.Ref,
+				Kind: edge.Kind,
 			})
-			if next == to {
+			if next == toID {
 				key := semanticPathKey(nextSteps)
 				if !pathKeys[key] {
 					pathKeys[key] = true
@@ -51,7 +58,7 @@ func DependencyPaths(g *graph.Graph, from, to graph.SymbolID) []SemanticPath {
 			delete(seen, next)
 		}
 	}
-	walk(from, nil)
+	walk(fromID, nil)
 
 	sort.Slice(paths, func(i, j int) bool {
 		return semanticPathLess(paths[i], paths[j])

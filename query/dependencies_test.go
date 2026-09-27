@@ -90,23 +90,23 @@ func TestAnalyzerPipelineProjectsPackageDependency(t *testing.T) {
 }
 
 type fixtureIDs struct {
-	orders       graph.SymbolID
-	logging      graph.SymbolID
-	service      graph.SymbolID
-	repository   graph.SymbolID
-	create       graph.SymbolID
-	deleteMethod graph.SymbolID
-	update       graph.SymbolID
-	validate     graph.SymbolID
-	save         graph.SymbolID
-	deleteRepo   graph.SymbolID
-	process      graph.SymbolID
-	info         graph.SymbolID
+	orders       graph.SymbolRef
+	logging      graph.SymbolRef
+	service      graph.SymbolRef
+	repository   graph.SymbolRef
+	create       graph.SymbolRef
+	deleteMethod graph.SymbolRef
+	update       graph.SymbolRef
+	validate     graph.SymbolRef
+	save         graph.SymbolRef
+	deleteRepo   graph.SymbolRef
+	process      graph.SymbolRef
+	info         graph.SymbolRef
 }
 
 type callPair struct {
-	from graph.SymbolID
-	to   graph.SymbolID
+	from graph.SymbolRef
+	to   graph.SymbolRef
 }
 
 func dependencyFixture(t *testing.T) (*graph.Graph, fixtureIDs) {
@@ -127,7 +127,7 @@ func dependencyFixture(t *testing.T) (*graph.Graph, fixtureIDs) {
 	}
 
 	g := graph.New()
-	for _, node := range []graph.Node{
+	for _, node := range []testNode{
 		{ID: ids.orders, Kind: graph.NodePackage, Name: "orders"},
 		{ID: ids.logging, Kind: graph.NodePackage, Name: "logging"},
 		{ID: ids.service, Kind: graph.NodeStruct, Name: "Service", Parent: ids.orders},
@@ -141,7 +141,7 @@ func dependencyFixture(t *testing.T) (*graph.Graph, fixtureIDs) {
 		{ID: ids.process, Kind: graph.NodeFunction, Name: "Process", Parent: ids.orders},
 		{ID: ids.info, Kind: graph.NodeFunction, Name: "Info", Parent: ids.logging},
 	} {
-		if err := g.AddNode(node); err != nil {
+		if err := addTestNode(g, node); err != nil {
 			t.Fatalf("AddNode(%q): %v", node.ID, err)
 		}
 	}
@@ -155,7 +155,7 @@ func dependencyFixture(t *testing.T) (*graph.Graph, fixtureIDs) {
 		{from: ids.create, to: ids.info},
 		{from: ids.process, to: ids.save},
 	} {
-		err := g.AddEdge(graph.Edge{
+		err := addTestEdge(g, testEdge{
 			From: pair.from,
 			To:   pair.to,
 			Kind: graph.EdgeCalls,
@@ -171,11 +171,11 @@ func dependencyFixture(t *testing.T) (*graph.Graph, fixtureIDs) {
 	return g, ids
 }
 
-func outgoingSnapshot(g *graph.Graph) map[graph.SymbolID][]*graph.Edge {
-	snapshot := make(map[graph.SymbolID][]*graph.Edge)
+func outgoingSnapshot(g *graph.Graph) map[graph.SymbolRef][]*graph.Edge {
+	snapshot := make(map[graph.SymbolRef][]*graph.Edge)
 	for _, node := range g.Nodes() {
 		if edges := g.Outgoing(node.ID); len(edges) > 0 {
-			snapshot[node.ID] = edges
+			snapshot[node.Ref] = edges
 		}
 	}
 	return snapshot

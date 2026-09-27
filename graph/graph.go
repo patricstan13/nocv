@@ -2,14 +2,16 @@
 package graph
 
 import (
-	"errors"
 	"fmt"
 	"slices"
 	"sort"
 )
 
-// SymbolID is a deterministic identity derived from a declaration's hierarchy.
-type SymbolID string
+// NodeID is an opaque identity unique within one graph. Zero means no node.
+type NodeID uint64
+
+// SymbolRef is a deterministic, human-readable address for a declaration.
+type SymbolRef string
 
 // NodeKind identifies the structural kind of a node.
 type NodeKind uint8
@@ -46,10 +48,11 @@ type Location struct {
 // Node is one declaration in a project's structural hierarchy.
 // It deliberately contains no Go compiler or syntax-tree objects.
 type Node struct {
-	ID            SymbolID
+	ID            NodeID
+	Ref           SymbolRef
 	Kind          NodeKind
 	Name          string
-	Parent        SymbolID
+	Parent        NodeID
 	Location      Location
 	Documentation string
 }
@@ -89,83 +92,96 @@ func (k EdgeKind) String() string {
 // Edge is one language-independent relationship. Evidence records every
 // source location that established the relationship.
 type Edge struct {
-	From     SymbolID
-	To       SymbolID
+	From     NodeID
+	To       NodeID
 	Kind     EdgeKind
 	Evidence []Location
 }
 
-// PackageID constructs a package identity.
-func PackageID(importPath string) SymbolID {
-	return SymbolID(importPath)
+// PackageRef constructs a package reference.
+func PackageRef(importPath string) SymbolRef {
+	return SymbolRef(importPath)
 }
 
-// ChildID constructs the identity of a declaration nested under parent.
-// ID encoding is centralized here so it can change without affecting analyzers.
-func ChildID(parent SymbolID, name string) SymbolID {
-	return SymbolID(string(parent) + "::" + name)
+// ChildRef constructs the reference of a declaration nested under parent.
+func ChildRef(parent SymbolRef, name string) SymbolRef {
+	return SymbolRef(string(parent) + "::" + name)
 }
 
 // Graph stores structural nodes and their parent/child hierarchy.
 type Graph struct {
-	nodes    map[SymbolID]*Node
-	children map[SymbolID][]SymbolID
-	outgoing map[SymbolID][]*Edge
-	incoming map[SymbolID][]*Edge
+	nextID   NodeID
+	nodes    map[NodeID]*Node
+	byRef    map[SymbolRef]NodeID
+	children map[NodeID][]NodeID
+	outgoing map[NodeID][]*Edge
+	incoming map[NodeID][]*Edge
 	edges    map[edgeKey]*Edge
 }
 
 type edgeKey struct {
-	from SymbolID
-	to   SymbolID
+	from NodeID
+	to   NodeID
 	kind EdgeKind
 }
 
 // New creates an empty graph.
 func New() *Graph {
 	return &Graph{
-		nodes:    make(map[SymbolID]*Node),
-		children: make(map[SymbolID][]SymbolID),
-		outgoing: make(map[SymbolID][]*Edge),
-		incoming: make(map[SymbolID][]*Edge),
+		nextID:   1,
+		nodes:    make(map[NodeID]*Node),
+		byRef:    make(map[SymbolRef]NodeID),
+		children: make(map[NodeID][]NodeID),
+		outgoing: make(map[NodeID][]*Edge),
+		incoming: make(map[NodeID][]*Edge),
 		edges:    make(map[edgeKey]*Edge),
 	}
 }
 
-// AddNode adds node after validating its structural parent.
-func (g *Graph) AddNode(node Node) error {
-	if node.ID == "" {
-		return errors.New("node ID is empty")
+// AddNode validates and adds node, assigning a new graph-local NodeID.
+func (g *Graph) AddNode(node Node) (NodeID, error) {
+	if node.ID != 0 {
+		return 0, fmt.Errorf("node %q already has graph ID %d", node.Ref, node.ID)
+	}
+	if node.Ref == "" {
+		return 0, fmt.Errorf("node reference is empty")
 	}
 	if node.Name == "" {
-		return fmt.Errorf("node %q has an empty name", node.ID)
+		return 0, fmt.Errorf("node %q has an empty name", node.Ref)
 	}
-	if _, exists := g.nodes[node.ID]; exists {
-		return fmt.Errorf("node %q already exists", node.ID)
+	if _, exists := g.byRef[node.Ref]; exists {
+		return 0, fmt.Errorf("node reference %q already exists", node.Ref)
 	}
 	if node.Kind == NodePackage {
-		if node.Parent != "" {
-			return fmt.Errorf("package %q cannot have a parent", node.ID)
+		if node.Parent != 0 {
+			return 0, fmt.Errorf("package %q cannot have a parent", node.Ref)
 		}
 	} else {
-		if node.Parent == "" {
-			return fmt.Errorf("node %q has no parent", node.ID)
+		if node.Parent == 0 {
+			return 0, fmt.Errorf("node %q has no parent", node.Ref)
 		}
 		if _, exists := g.nodes[node.Parent]; !exists {
-			return fmt.Errorf("parent %q of node %q does not exist", node.Parent, node.ID)
+			return 0, fmt.Errorf("parent %d of node %q does not exist", node.Parent, node.Ref)
 		}
 	}
 
-	copy := node
-	g.nodes[node.ID] = &copy
-	if node.Parent != "" {
-		g.children[node.Parent] = append(g.children[node.Parent], node.ID)
+	id := g.nextID
+	if id == 0 {
+		return 0, fmt.Errorf("node ID space exhausted")
 	}
-	return nil
+	g.nextID++
+	copy := node
+	copy.ID = id
+	g.nodes[id] = &copy
+	g.byRef[node.Ref] = id
+	if node.Parent != 0 {
+		g.children[node.Parent] = append(g.children[node.Parent], id)
+	}
+	return id, nil
 }
 
 // Node returns a copy of the node with id.
-func (g *Graph) Node(id SymbolID) (*Node, bool) {
+func (g *Graph) Node(id NodeID) (*Node, bool) {
 	node, ok := g.nodes[id]
 	if !ok {
 		return nil, false
@@ -174,14 +190,29 @@ func (g *Graph) Node(id SymbolID) (*Node, bool) {
 	return &copy, true
 }
 
+// NodeByRef returns a copy of the node with ref.
+func (g *Graph) NodeByRef(ref SymbolRef) (*Node, bool) {
+	id, ok := g.byRef[ref]
+	if !ok {
+		return nil, false
+	}
+	return g.Node(id)
+}
+
+// Resolve returns the graph-local identity associated with ref.
+func (g *Graph) Resolve(ref SymbolRef) (NodeID, bool) {
+	id, ok := g.byRef[ref]
+	return id, ok
+}
+
 // Children returns the child IDs of parent in insertion order.
-func (g *Graph) Children(parent SymbolID) []SymbolID {
-	return append([]SymbolID(nil), g.children[parent]...)
+func (g *Graph) Children(parent NodeID) []NodeID {
+	return append([]NodeID(nil), g.children[parent]...)
 }
 
 // AncestorOfKind returns the nearest node at or above id with one of the
 // requested kinds. A node is considered its own ancestor for this operation.
-func (g *Graph) AncestorOfKind(id SymbolID, kinds ...NodeKind) (SymbolID, bool) {
+func (g *Graph) AncestorOfKind(id NodeID, kinds ...NodeKind) (NodeID, bool) {
 	requested := make(map[NodeKind]bool, len(kinds))
 	for _, kind := range kinds {
 		requested[kind] = true
@@ -191,25 +222,25 @@ func (g *Graph) AncestorOfKind(id SymbolID, kinds ...NodeKind) (SymbolID, bool) 
 		if requested[current.Kind] {
 			return current.ID, true
 		}
-		if current.Parent == "" {
+		if current.Parent == 0 {
 			break
 		}
 		current, ok = g.nodes[current.Parent]
 	}
-	return "", false
+	return 0, false
 }
 
-// Nodes returns copies of all nodes, sorted by ID.
+// Nodes returns copies of all nodes, sorted by SymbolRef.
 func (g *Graph) Nodes() []*Node {
-	ids := make([]string, 0, len(g.nodes))
-	for id := range g.nodes {
-		ids = append(ids, string(id))
+	refs := make([]string, 0, len(g.byRef))
+	for ref := range g.byRef {
+		refs = append(refs, string(ref))
 	}
-	sort.Strings(ids)
+	sort.Strings(refs)
 
-	nodes := make([]*Node, 0, len(ids))
-	for _, id := range ids {
-		node, _ := g.Node(SymbolID(id))
+	nodes := make([]*Node, 0, len(refs))
+	for _, ref := range refs {
+		node, _ := g.NodeByRef(SymbolRef(ref))
 		nodes = append(nodes, node)
 	}
 	return nodes
@@ -220,17 +251,17 @@ func (g *Graph) Nodes() []*Node {
 func (g *Graph) AddEdge(edge Edge) error {
 	from, fromExists := g.nodes[edge.From]
 	if !fromExists {
-		return fmt.Errorf("edge source %q does not exist", edge.From)
+		return fmt.Errorf("edge source %d does not exist", edge.From)
 	}
 	to, toExists := g.nodes[edge.To]
 	if !toExists {
-		return fmt.Errorf("edge target %q does not exist", edge.To)
+		return fmt.Errorf("edge target %d does not exist", edge.To)
 	}
 	switch edge.Kind {
 	case EdgeCalls:
 		if from.Kind != NodeFunction || to.Kind != NodeFunction {
 			return fmt.Errorf(
-				"calls edge %q -> %q must connect functions",
+				"calls edge %d -> %d must connect functions",
 				edge.From,
 				edge.To,
 			)
@@ -247,7 +278,7 @@ func (g *Graph) AddEdge(edge Edge) error {
 
 		if !validTypeImplementation && !validMethodImplementation {
 			return fmt.Errorf(
-				"implements edge %q -> %q must connect struct -> interface or function -> function",
+				"implements edge %d -> %d must connect struct -> interface or function -> function",
 				edge.From,
 				edge.To,
 			)
@@ -258,7 +289,7 @@ func (g *Graph) AddEdge(edge Edge) error {
 		validInterfaceEmbedding := from.Kind == NodeInterface && to.Kind == NodeInterface
 		if !validStructEmbedding && !validInterfaceEmbedding {
 			return fmt.Errorf(
-				"embeds edge %q -> %q must connect struct -> struct or interface -> interface",
+				"embeds edge %d -> %d must connect struct -> struct or interface -> interface",
 				edge.From,
 				edge.To,
 			)
@@ -268,7 +299,7 @@ func (g *Graph) AddEdge(edge Edge) error {
 		validTarget := to.Kind == NodeStruct || to.Kind == NodeInterface
 		if from.Kind != NodeFunction || !validTarget {
 			return fmt.Errorf(
-				"%s edge %q -> %q must connect function -> struct or function -> interface",
+				"%s edge %d -> %d must connect function -> struct or function -> interface",
 				edge.Kind,
 				edge.From,
 				edge.To,
@@ -278,7 +309,7 @@ func (g *Graph) AddEdge(edge Edge) error {
 	case EdgeImports:
 		if from.Kind != NodePackage || to.Kind != NodePackage {
 			return fmt.Errorf(
-				"imports edge %q -> %q must connect packages",
+				"imports edge %d -> %d must connect packages",
 				edge.From,
 				edge.To,
 			)
@@ -290,7 +321,7 @@ func (g *Graph) AddEdge(edge Edge) error {
 
 	if len(edge.Evidence) == 0 {
 		return fmt.Errorf(
-			"%s edge %q -> %q has no evidence",
+			"%s edge %d -> %d has no evidence",
 			edge.Kind,
 			edge.From,
 			edge.To,
@@ -314,13 +345,13 @@ func (g *Graph) AddEdge(edge Edge) error {
 
 // Outgoing returns edges originating at id. If kinds are supplied, only
 // matching edge kinds are returned.
-func (g *Graph) Outgoing(id SymbolID, kinds ...EdgeKind) []*Edge {
+func (g *Graph) Outgoing(id NodeID, kinds ...EdgeKind) []*Edge {
 	return copyEdges(g.outgoing[id], kinds)
 }
 
 // Incoming returns edges targeting id. If kinds are supplied, only matching
 // edge kinds are returned.
-func (g *Graph) Incoming(id SymbolID, kinds ...EdgeKind) []*Edge {
+func (g *Graph) Incoming(id NodeID, kinds ...EdgeKind) []*Edge {
 	return copyEdges(g.incoming[id], kinds)
 }
 

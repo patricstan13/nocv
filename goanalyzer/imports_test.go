@@ -15,14 +15,14 @@ func TestLoadDiscoversRepresentedPackageImports(t *testing.T) {
 		t.Fatalf("Load(): %v", err)
 	}
 
-	app := graph.SymbolID("example.com/imports/app")
-	want := map[graph.SymbolID]int{
+	app := graph.SymbolRef("example.com/imports/app")
+	want := map[graph.SymbolRef]int{
 		"example.com/imports/helpers":    1,
 		"example.com/imports/plugin":     1,
 		"example.com/imports/repository": 1,
 		"example.com/imports/service":    2,
 	}
-	edges := g.Outgoing(app, graph.EdgeImports)
+	edges := outgoingByRef(g, app, graph.EdgeImports)
 	if len(edges) != len(want) {
 		t.Fatalf("app imports = %#v, want %d represented imports", edges, len(want))
 	}
@@ -42,7 +42,7 @@ func TestLoadDiscoversRepresentedPackageImports(t *testing.T) {
 		}
 	}
 
-	service := g.Outgoing(app, graph.EdgeImports)
+	service := outgoingByRef(g, app, graph.EdgeImports)
 	for _, edge := range service {
 		if edge.To != "example.com/imports/service" {
 			continue
@@ -53,20 +53,20 @@ func TestLoadDiscoversRepresentedPackageImports(t *testing.T) {
 		}
 	}
 
-	if _, exists := g.Node("fmt"); exists {
+	if _, exists := nodeByRef(g, "fmt"); exists {
 		t.Fatal("Load() created a synthetic node for external package fmt")
 	}
-	if edges := g.Outgoing(app, graph.EdgeImports); containsImportTarget(edges, "fmt") {
+	if edges := outgoingByRef(g, app, graph.EdgeImports); containsImportTarget(edges, "fmt") {
 		t.Fatalf("external fmt import was stored: %#v", edges)
 	}
 
-	importers := g.Incoming("example.com/imports/service", graph.EdgeImports)
+	importers := incomingByRef(g, "example.com/imports/service", graph.EdgeImports)
 	if len(importers) != 2 || importers[0].From != app || importers[1].From != "example.com/imports/worker" {
 		t.Fatalf("service importers = %#v, want app and worker", importers)
 	}
 }
 
-func containsImportTarget(edges []*graph.Edge, target graph.SymbolID) bool {
+func containsImportTarget(edges []*symbolEdge, target graph.SymbolRef) bool {
 	for _, edge := range edges {
 		if edge.To == target {
 			return true

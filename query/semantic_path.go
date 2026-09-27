@@ -14,8 +14,8 @@ type SemanticPath struct {
 
 // SemanticStep is one semantic relationship in ordinary dependency direction.
 type SemanticStep struct {
-	From graph.SymbolID
-	To   graph.SymbolID
+	From graph.SymbolRef
+	To   graph.SymbolRef
 	Kind graph.EdgeKind
 }
 
@@ -52,7 +52,7 @@ func semanticPathKey(steps []SemanticStep) string {
 	return key.String()
 }
 
-func writeSemanticPathID(builder *strings.Builder, id graph.SymbolID) {
+func writeSemanticPathID(builder *strings.Builder, id graph.SymbolRef) {
 	value := string(id)
 	builder.WriteString(strconv.Itoa(len(value)))
 	builder.WriteByte(':')

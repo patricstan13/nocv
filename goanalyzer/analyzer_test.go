@@ -15,10 +15,10 @@ func TestLoadDiscoversStructuralHierarchy(t *testing.T) {
 		t.Fatalf("Load(): %v", err)
 	}
 
-	want := map[graph.SymbolID]struct {
+	want := map[graph.SymbolRef]struct {
 		kind   graph.NodeKind
 		name   string
-		parent graph.SymbolID
+		parent graph.SymbolRef
 	}{
 		"example.com/shop/inventory":                        {graph.NodePackage, "inventory", ""},
 		"example.com/shop/inventory::Item":                  {graph.NodeStruct, "Item", "example.com/shop/inventory"},
@@ -93,14 +93,15 @@ func TestLoadDiscoversStructuralHierarchy(t *testing.T) {
 		t.Fatalf("node count = %d, want %d; nodes: %#v", got, len(want), g.Nodes())
 	}
 	for id, expected := range want {
-		node, ok := g.Node(id)
+		node, ok := nodeByRef(g, id)
 		if !ok {
 			t.Errorf("missing node %q", id)
 			continue
 		}
-		if node.Kind != expected.kind || node.Name != expected.name || node.Parent != expected.parent {
+		actualParent := parentRef(g, node)
+		if node.Kind != expected.kind || node.Name != expected.name || actualParent != expected.parent {
 			t.Errorf("node %q = (%s, %q, parent %q), want (%s, %q, parent %q)",
-				id, node.Kind, node.Name, node.Parent, expected.kind, expected.name, expected.parent)
+				id, node.Kind, node.Name, actualParent, expected.kind, expected.name, expected.parent)
 		}
 		if node.Kind == graph.NodePackage {
 			if node.Location != (graph.Location{}) {
@@ -111,7 +112,7 @@ func TestLoadDiscoversStructuralHierarchy(t *testing.T) {
 		}
 	}
 
-	assertChildren(t, g, "example.com/shop/orders", []graph.SymbolID{
+	assertChildren(t, g, "example.com/shop/orders", []graph.SymbolRef{
 		"example.com/shop/orders::Order",
 		"example.com/shop/orders::Repository",
 		"example.com/shop/orders::Processor",
@@ -154,36 +155,36 @@ func TestLoadDiscoversStructuralHierarchy(t *testing.T) {
 		"example.com/shop/orders::AliasOrder",
 		"example.com/shop/orders::GenericBox",
 	})
-	assertChildren(t, g, "example.com/shop/orders::Repository", []graph.SymbolID{
+	assertChildren(t, g, "example.com/shop/orders::Repository", []graph.SymbolRef{
 		"example.com/shop/orders::Repository::Save",
 	})
-	assertChildren(t, g, "example.com/shop/orders::Service", []graph.SymbolID{
+	assertChildren(t, g, "example.com/shop/orders::Service", []graph.SymbolRef{
 		"example.com/shop/orders::Service::Health",
 		"example.com/shop/orders::Service::Validate",
 		"example.com/shop/orders::Service::Create",
 		"example.com/shop/orders::Service::Transform",
 		"example.com/shop/orders::Service::ClosureCalls",
 	})
-	assertChildren(t, g, "example.com/shop/orders::Processor", []graph.SymbolID{
+	assertChildren(t, g, "example.com/shop/orders::Processor", []graph.SymbolRef{
 		"example.com/shop/orders::Processor::Process",
 	})
 
-	assertChildren(t, g, "example.com/shop/orders::Box", []graph.SymbolID{
+	assertChildren(t, g, "example.com/shop/orders::Box", []graph.SymbolRef{
 		"example.com/shop/orders::Box::Get",
 	})
-	assertChildren(t, g, "example.com/shop/orders::PostgresRepository", []graph.SymbolID{
+	assertChildren(t, g, "example.com/shop/orders::PostgresRepository", []graph.SymbolRef{
 		"example.com/shop/orders::PostgresRepository::Save",
 	})
-	assertChildren(t, g, "example.com/shop/orders::MemoryRepository", []graph.SymbolID{
+	assertChildren(t, g, "example.com/shop/orders::MemoryRepository", []graph.SymbolRef{
 		"example.com/shop/orders::MemoryRepository::Save",
 	})
-	assertChildren(t, g, "example.com/shop/orders::BaseRepository", []graph.SymbolID{
+	assertChildren(t, g, "example.com/shop/orders::BaseRepository", []graph.SymbolRef{
 		"example.com/shop/orders::BaseRepository::Save",
 	})
-	assertChildren(t, g, "example.com/shop/orders::Reader", []graph.SymbolID{
+	assertChildren(t, g, "example.com/shop/orders::Reader", []graph.SymbolRef{
 		"example.com/shop/orders::Reader::Read",
 	})
-	assertChildren(t, g, "example.com/shop/orders::Writer", []graph.SymbolID{
+	assertChildren(t, g, "example.com/shop/orders::Writer", []graph.SymbolRef{
 		"example.com/shop/orders::Writer::Write",
 	})
 }
@@ -220,8 +221,8 @@ func TestLoadDiscoversCalls(t *testing.T) {
 		1,
 	)
 
-	incoming := g.Incoming("example.com/shop/orders::Repository::Save", graph.EdgeCalls)
-	wantRepositoryCallers := map[graph.SymbolID]bool{
+	incoming := incomingByRef(g, "example.com/shop/orders::Repository::Save", graph.EdgeCalls)
+	wantRepositoryCallers := map[graph.SymbolRef]bool{
 		"example.com/shop/orders::Service::ClosureCalls": true,
 		"example.com/shop/orders::Service::Create":       true,
 	}
@@ -239,8 +240,8 @@ func TestLoadDiscoversCalls(t *testing.T) {
 		"example.com/shop/orders::Validate",
 		1,
 	)
-	outerNode, _ := g.Node("example.com/shop/orders::Outer")
-	outerCall := g.Outgoing("example.com/shop/orders::Outer", graph.EdgeCalls)[0]
+	outerNode, _ := nodeByRef(g, "example.com/shop/orders::Outer")
+	outerCall := outgoingByRef(g, "example.com/shop/orders::Outer", graph.EdgeCalls)[0]
 	if outerCall.Evidence[0] == outerNode.Location || outerCall.Evidence[0].Offset <= outerNode.Location.Offset {
 		t.Errorf("Outer call evidence = %#v, want the nested Validate() call site after declaration %#v", outerCall.Evidence, outerNode.Location)
 	}
@@ -259,25 +260,25 @@ func TestLoadDiscoversCalls(t *testing.T) {
 		"example.com/shop/orders::Repository::Save",
 		1,
 	)
-	if edges := g.Outgoing("example.com/shop/orders::Service::ClosureCalls", graph.EdgeCalls); len(edges) != 2 {
+	if edges := outgoingByRef(g, "example.com/shop/orders::Service::ClosureCalls", graph.EdgeCalls); len(edges) != 2 {
 		t.Fatalf("ClosureCalls edges = %#v, want only resolved project method and interface calls", edges)
 	}
 
-	for _, id := range []graph.SymbolID{
+	for _, id := range []graph.SymbolRef{
 		"example.com/shop/orders::ExternalOnly",
 		"example.com/shop/orders::ConvertOnly",
 	} {
-		if edges := g.Outgoing(id, graph.EdgeCalls); len(edges) != 0 {
+		if edges := outgoingByRef(g, id, graph.EdgeCalls); len(edges) != 0 {
 			t.Errorf("Outgoing(%q) = %#v, want no calls for builtins, external functions, or conversions", id, edges)
 		}
 	}
-	for _, id := range []graph.SymbolID{"fmt", "fmt::Println", "builtin::len", "builtin::append", "builtin::string"} {
-		if node, exists := g.Node(id); exists {
+	for _, id := range []graph.SymbolRef{"fmt", "fmt::Println", "builtin::len", "builtin::append", "builtin::string"} {
+		if node, exists := nodeByRef(g, id); exists {
 			t.Errorf("external or builtin node %q unexpectedly exists: %#v", id, node)
 		}
 	}
 	for _, node := range g.Nodes() {
-		if strings.Contains(string(node.ID), "::<closure") || strings.Contains(string(node.ID), "::<func@") {
+		if strings.Contains(string(node.Ref), "::<closure") || strings.Contains(string(node.Ref), "::<func@") {
 			t.Errorf("synthetic anonymous-function node unexpectedly exists: %#v", node)
 		}
 	}
@@ -289,15 +290,15 @@ func TestLoadDiscoversInterfaceImplementations(t *testing.T) {
 		t.Fatalf("Load(): %v", err)
 	}
 
-	repositoryID := graph.SymbolID("example.com/shop/orders::Repository")
-	repositorySaveID := graph.SymbolID("example.com/shop/orders::Repository::Save")
-	wantImplementations := map[graph.SymbolID]bool{
+	repositoryID := graph.SymbolRef("example.com/shop/orders::Repository")
+	repositorySaveID := graph.SymbolRef("example.com/shop/orders::Repository::Save")
+	wantImplementations := map[graph.SymbolRef]bool{
 		"example.com/shop/orders::BaseRepository":     true,
 		"example.com/shop/orders::MemoryRepository":   true,
 		"example.com/shop/orders::PostgresRepository": true,
 		"example.com/shop/orders::PromotedRepository": true,
 	}
-	typeEdges := g.Incoming(repositoryID, graph.EdgeImplements)
+	typeEdges := incomingByRef(g, repositoryID, graph.EdgeImplements)
 	if len(typeEdges) != len(wantImplementations) {
 		t.Fatalf("Repository implementations = %#v, want %d", typeEdges, len(wantImplementations))
 	}
@@ -308,12 +309,12 @@ func TestLoadDiscoversInterfaceImplementations(t *testing.T) {
 		assertValidEvidence(t, edge)
 	}
 
-	wantMethods := map[graph.SymbolID]bool{
+	wantMethods := map[graph.SymbolRef]bool{
 		"example.com/shop/orders::BaseRepository::Save":     true,
 		"example.com/shop/orders::MemoryRepository::Save":   true,
 		"example.com/shop/orders::PostgresRepository::Save": true,
 	}
-	methodEdges := g.Incoming(repositorySaveID, graph.EdgeImplements)
+	methodEdges := incomingByRef(g, repositorySaveID, graph.EdgeImplements)
 	if len(methodEdges) != len(wantMethods) {
 		t.Fatalf("Repository.Save implementations = %#v, want %d", methodEdges, len(wantMethods))
 	}
@@ -324,24 +325,24 @@ func TestLoadDiscoversInterfaceImplementations(t *testing.T) {
 		assertValidEvidence(t, edge)
 	}
 
-	for _, id := range []graph.SymbolID{
+	for _, id := range []graph.SymbolRef{
 		"example.com/shop/orders::BrokenRepository",
 		"example.com/shop/orders::ExternalStringer",
 	} {
-		if edges := g.Outgoing(id, graph.EdgeImplements); len(edges) != 0 {
+		if edges := outgoingByRef(g, id, graph.EdgeImplements); len(edges) != 0 {
 			t.Errorf("Outgoing(%q, implements) = %#v, want none", id, edges)
 		}
 	}
-	if edges := g.Incoming("example.com/shop/orders::Empty", graph.EdgeImplements); len(edges) != 0 {
+	if edges := incomingByRef(g, "example.com/shop/orders::Empty", graph.EdgeImplements); len(edges) != 0 {
 		t.Errorf("empty-interface implementations = %#v, want none", edges)
 	}
-	if _, exists := g.Node("fmt::Stringer"); exists {
+	if _, exists := nodeByRef(g, "fmt::Stringer"); exists {
 		t.Error("external fmt.Stringer unexpectedly has a graph node")
 	}
-	if _, exists := g.Node("example.com/shop/orders::PromotedRepository::Save"); exists {
+	if _, exists := nodeByRef(g, "example.com/shop/orders::PromotedRepository::Save"); exists {
 		t.Error("promoted Save unexpectedly has a synthetic method node")
 	}
-	if edges := g.Outgoing("example.com/shop/orders::PromotedRepository", graph.EdgeImplements); len(edges) != 1 || edges[0].To != repositoryID {
+	if edges := outgoingByRef(g, "example.com/shop/orders::PromotedRepository", graph.EdgeImplements); len(edges) != 1 || edges[0].To != repositoryID {
 		t.Fatalf("promoted-method type implementation = %#v, want Repository", edges)
 	}
 }
@@ -352,7 +353,7 @@ func TestLoadDiscoversEmbeddings(t *testing.T) {
 		t.Fatalf("Load(): %v", err)
 	}
 
-	wantOutgoing := map[graph.SymbolID][]graph.SymbolID{
+	wantOutgoing := map[graph.SymbolRef][]graph.SymbolRef{
 		"example.com/shop/orders::PromotedRepository":   {"example.com/shop/orders::BaseRepository"},
 		"example.com/shop/orders::EmbeddedChild":        {"example.com/shop/orders::EmbeddedBase"},
 		"example.com/shop/orders::PointerEmbeddedChild": {"example.com/shop/orders::EmbeddedBase"},
@@ -363,7 +364,7 @@ func TestLoadDiscoversEmbeddings(t *testing.T) {
 		},
 	}
 	for from, wantTargets := range wantOutgoing {
-		edges := g.Outgoing(from, graph.EdgeEmbeds)
+		edges := outgoingByRef(g, from, graph.EdgeEmbeds)
 		if len(edges) != len(wantTargets) {
 			t.Fatalf("embeddings from %q = %#v, want %v", from, edges, wantTargets)
 		}
@@ -375,11 +376,11 @@ func TestLoadDiscoversEmbeddings(t *testing.T) {
 		}
 	}
 
-	incoming := g.Incoming("example.com/shop/orders::EmbeddedBase", graph.EdgeEmbeds)
+	incoming := incomingByRef(g, "example.com/shop/orders::EmbeddedBase", graph.EdgeEmbeds)
 	if len(incoming) != 2 {
 		t.Fatalf("incoming EmbeddedBase embeddings = %#v, want two", incoming)
 	}
-	wantSources := map[graph.SymbolID]bool{
+	wantSources := map[graph.SymbolRef]bool{
 		"example.com/shop/orders::EmbeddedChild":        true,
 		"example.com/shop/orders::PointerEmbeddedChild": true,
 	}
@@ -389,7 +390,7 @@ func TestLoadDiscoversEmbeddings(t *testing.T) {
 		}
 	}
 
-	for _, id := range []graph.SymbolID{
+	for _, id := range []graph.SymbolRef{
 		"example.com/shop/orders::NamedFieldChild",
 		"example.com/shop/orders::Reader",
 		"example.com/shop/orders::Writer",
@@ -397,16 +398,16 @@ func TestLoadDiscoversEmbeddings(t *testing.T) {
 		"example.com/shop/orders::HTTPWrapper",
 		"example.com/shop/orders::ExternalReader",
 	} {
-		if edges := g.Outgoing(id, graph.EdgeEmbeds); len(edges) != 0 {
+		if edges := outgoingByRef(g, id, graph.EdgeEmbeds); len(edges) != 0 {
 			t.Errorf("Outgoing(%q, embeds) = %#v, want none", id, edges)
 		}
 	}
-	for _, id := range []graph.SymbolID{
+	for _, id := range []graph.SymbolRef{
 		"net/http::Client",
 		"io::Reader",
 		"example.com/shop/orders::Box[int]",
 	} {
-		if node, exists := g.Node(id); exists {
+		if node, exists := nodeByRef(g, id); exists {
 			t.Errorf("synthetic or external node %q unexpectedly exists: %#v", id, node)
 		}
 	}
@@ -417,7 +418,7 @@ func TestLoadDiscoversEmbeddings(t *testing.T) {
 		"example.com/shop/orders::Repository::Save",
 		1,
 	)
-	if edges := g.Outgoing("example.com/shop/orders::PromotedRepository", graph.EdgeImplements); len(edges) != 1 {
+	if edges := outgoingByRef(g, "example.com/shop/orders::PromotedRepository", graph.EdgeImplements); len(edges) != 1 {
 		t.Fatalf("PromotedRepository implementation edges = %#v, want one", edges)
 	}
 }
@@ -428,9 +429,9 @@ func TestLoadDiscoversSignatureRelationships(t *testing.T) {
 		t.Fatalf("Load(): %v", err)
 	}
 
-	orderID := graph.SymbolID("example.com/shop/orders::Order")
-	repositoryID := graph.SymbolID("example.com/shop/orders::Repository")
-	boxID := graph.SymbolID("example.com/shop/orders::Box")
+	orderID := graph.SymbolRef("example.com/shop/orders::Order")
+	repositoryID := graph.SymbolRef("example.com/shop/orders::Repository")
+	boxID := graph.SymbolRef("example.com/shop/orders::Box")
 
 	// Package functions cover multiple parameters/results and pointer normalization.
 	assertRelationship(t, g, "example.com/shop/orders::HandleOrder", orderID, graph.EdgeAccepts, 1)
@@ -451,7 +452,7 @@ func TestLoadDiscoversSignatureRelationships(t *testing.T) {
 	assertRelationship(t, g, "example.com/shop/orders::Processor::Process", orderID, graph.EdgeAccepts, 1)
 	assertRelationship(t, g, "example.com/shop/orders::Processor::Process", repositoryID, graph.EdgeAccepts, 1)
 	assertRelationship(t, g, "example.com/shop/orders::Processor::Process", repositoryID, graph.EdgeReturns, 1)
-	if edges := g.Outgoing("example.com/shop/orders::Service::Health", graph.EdgeAccepts); len(edges) != 0 {
+	if edges := outgoingByRef(g, "example.com/shop/orders::Service::Health", graph.EdgeAccepts); len(edges) != 0 {
 		t.Fatalf("receiver unexpectedly produced accepts edges: %#v", edges)
 	}
 
@@ -463,35 +464,35 @@ func TestLoadDiscoversSignatureRelationships(t *testing.T) {
 
 	// Builtins, external declarations, containers, variadics, and unrepresented
 	// named scalar types are deliberately outside direct signature semantics.
-	for _, id := range []graph.SymbolID{
+	for _, id := range []graph.SymbolRef{
 		"example.com/shop/orders::ConvertOnly",
 		"example.com/shop/orders::ExternalSignature",
 		"example.com/shop/orders::ContainerSignature",
 		"example.com/shop/orders::VariadicOrders",
 		"example.com/shop/orders::FindUser",
 	} {
-		if edges := g.Outgoing(id, graph.EdgeAccepts, graph.EdgeReturns); len(edges) != 0 {
+		if edges := outgoingByRef(g, id, graph.EdgeAccepts, graph.EdgeReturns); len(edges) != 0 {
 			t.Errorf("signature relationships from %q = %#v, want none", id, edges)
 		}
 	}
-	for _, id := range []graph.SymbolID{
+	for _, id := range []graph.SymbolRef{
 		"context::Context",
 		"net/http::Request",
 		"example.com/shop/orders::UserID",
 		"example.com/shop/orders::Purchase",
 		"example.com/shop/orders::Box[int]",
 	} {
-		if node, exists := g.Node(id); exists {
+		if node, exists := nodeByRef(g, id); exists {
 			t.Errorf("external or synthetic signature node %q unexpectedly exists: %#v", id, node)
 		}
 	}
 
 	// Existing relationship passes remain intact.
 	assertCall(t, g, "example.com/shop/orders::Process", "example.com/shop/orders::Validate", 2)
-	if edges := g.Outgoing("example.com/shop/orders::PromotedRepository", graph.EdgeImplements); len(edges) != 1 {
+	if edges := outgoingByRef(g, "example.com/shop/orders::PromotedRepository", graph.EdgeImplements); len(edges) != 1 {
 		t.Fatalf("PromotedRepository implementation edges = %#v, want one", edges)
 	}
-	if edges := g.Outgoing("example.com/shop/orders::EmbeddedChild", graph.EdgeEmbeds); len(edges) != 1 {
+	if edges := outgoingByRef(g, "example.com/shop/orders::EmbeddedChild", graph.EdgeEmbeds); len(edges) != 1 {
 		t.Fatalf("EmbeddedChild embedding edges = %#v, want one", edges)
 	}
 }
@@ -513,14 +514,23 @@ func TestLoadProducesDeterministicIDs(t *testing.T) {
 	}
 	for i := range firstNodes {
 		if firstNodes[i].ID != secondNodes[i].ID {
-			t.Fatalf("ID %d differs: %q and %q", i, firstNodes[i].ID, secondNodes[i].ID)
+			t.Fatalf("ID %d differs: %d and %d", i, firstNodes[i].ID, secondNodes[i].ID)
 		}
 	}
 }
 
-func assertChildren(t *testing.T, g *graph.Graph, parent graph.SymbolID, want []graph.SymbolID) {
+func assertChildren(t *testing.T, g *graph.Graph, parent graph.SymbolRef, want []graph.SymbolRef) {
 	t.Helper()
-	got := g.Children(parent)
+	parentID, exists := g.Resolve(parent)
+	if !exists {
+		t.Fatalf("missing parent %q", parent)
+	}
+	childIDs := g.Children(parentID)
+	got := make([]graph.SymbolRef, 0, len(childIDs))
+	for _, childID := range childIDs {
+		child, _ := g.Node(childID)
+		got = append(got, child.Ref)
+	}
 	if len(got) != len(want) {
 		t.Fatalf("Children(%q) = %v, want %v", parent, got, want)
 	}
@@ -531,9 +541,9 @@ func assertChildren(t *testing.T, g *graph.Graph, parent graph.SymbolID, want []
 	}
 }
 
-func assertCall(t *testing.T, g *graph.Graph, from, to graph.SymbolID, evidenceCount int) {
+func assertCall(t *testing.T, g *graph.Graph, from, to graph.SymbolRef, evidenceCount int) {
 	t.Helper()
-	for _, edge := range g.Outgoing(from, graph.EdgeCalls) {
+	for _, edge := range outgoingByRef(g, from, graph.EdgeCalls) {
 		if edge.To != to {
 			continue
 		}
@@ -547,18 +557,18 @@ func assertCall(t *testing.T, g *graph.Graph, from, to graph.SymbolID, evidenceC
 		}
 		return
 	}
-	t.Fatalf("missing call %q -> %q; outgoing: %#v", from, to, g.Outgoing(from, graph.EdgeCalls))
+	t.Fatalf("missing call %q -> %q; outgoing: %#v", from, to, outgoingByRef(g, from, graph.EdgeCalls))
 }
 
 func assertRelationship(
 	t *testing.T,
 	g *graph.Graph,
-	from, to graph.SymbolID,
+	from, to graph.SymbolRef,
 	kind graph.EdgeKind,
 	evidenceCount int,
 ) {
 	t.Helper()
-	for _, edge := range g.Outgoing(from, kind) {
+	for _, edge := range outgoingByRef(g, from, kind) {
 		if edge.To != to {
 			continue
 		}
@@ -572,12 +582,57 @@ func assertRelationship(
 		}
 		return
 	}
-	t.Fatalf("missing %s relationship %q -> %q; outgoing: %#v", kind, from, to, g.Outgoing(from, kind))
+	t.Fatalf("missing %s relationship %q -> %q; outgoing: %#v", kind, from, to, outgoingByRef(g, from, kind))
 }
 
-func assertValidEvidence(t *testing.T, edge *graph.Edge) {
+func assertValidEvidence(t *testing.T, edge *symbolEdge) {
 	t.Helper()
 	if len(edge.Evidence) != 1 || edge.Evidence[0].File == "" || edge.Evidence[0].Offset < 0 {
 		t.Errorf("edge %q -> %q has invalid evidence %#v", edge.From, edge.To, edge.Evidence)
 	}
+}
+
+type symbolEdge struct {
+	From     graph.SymbolRef
+	To       graph.SymbolRef
+	Kind     graph.EdgeKind
+	Evidence []graph.Location
+}
+
+func nodeByRef(g *graph.Graph, ref graph.SymbolRef) (*graph.Node, bool) {
+	return g.NodeByRef(ref)
+}
+
+func outgoingByRef(g *graph.Graph, ref graph.SymbolRef, kinds ...graph.EdgeKind) []*symbolEdge {
+	id, exists := g.Resolve(ref)
+	if !exists {
+		return nil
+	}
+	return presentEdges(g, g.Outgoing(id, kinds...))
+}
+
+func incomingByRef(g *graph.Graph, ref graph.SymbolRef, kinds ...graph.EdgeKind) []*symbolEdge {
+	id, exists := g.Resolve(ref)
+	if !exists {
+		return nil
+	}
+	return presentEdges(g, g.Incoming(id, kinds...))
+}
+
+func presentEdges(g *graph.Graph, edges []*graph.Edge) []*symbolEdge {
+	result := make([]*symbolEdge, 0, len(edges))
+	for _, edge := range edges {
+		from, _ := g.Node(edge.From)
+		to, _ := g.Node(edge.To)
+		result = append(result, &symbolEdge{From: from.Ref, To: to.Ref, Kind: edge.Kind, Evidence: edge.Evidence})
+	}
+	return result
+}
+
+func parentRef(g *graph.Graph, node *graph.Node) graph.SymbolRef {
+	if node == nil || node.Parent == 0 {
+		return ""
+	}
+	parent, _ := g.Node(node.Parent)
+	return parent.Ref
 }
