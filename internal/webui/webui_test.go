@@ -41,7 +41,7 @@ func TestClientFreezesPhysicsAndPreservesSemanticEdgeDirection(t *testing.T) {
 		`to: edge.from`,
 		`semanticFrom: edge.from`,
 		`semanticTo: edge.to`,
-		`openPackageDependency(selected.semanticFrom, selected.semanticTo, selected, false)`,
+		`openPackageDependency(selected.semanticFrom, selected.semanticTo, selected, false, null)`,
 	} {
 		if !strings.Contains(client, required) {
 			t.Errorf("client source lacks %q", required)
@@ -53,8 +53,8 @@ func TestClientUsesCompactProgressiveInspector(t *testing.T) {
 	client := readAsset(t, "static/app.js")
 	for _, required := range []string{
 		`inspector.scrollTop = 0`,
-		`section("Dependencies", detail.dependencies, packageDependencyItem)`,
-		`section("Dependents", detail.dependents, packageDependentItem)`,
+		`packageDependencyItem(value, result.node.id)`,
+		`packageDependentItem(value, result.node.id)`,
 		`section("Imports", detail.imports, dependencyTargetItem)`,
 		`contentsSummary(detail)`,
 		`collapsibleRelationships(facts, 2, "Show evidence")`,
@@ -75,18 +75,18 @@ func TestClientUsesCompactProgressiveInspector(t *testing.T) {
 func TestClientNavigatesPackageRelationshipsBySemanticIdentity(t *testing.T) {
 	client := readAsset(t, "static/app.js")
 	for _, required := range []string{
-		`function packageRelationshipItem(value, ref)`,
+		`function packageRelationshipItem(value, ref, originPackageRef)`,
 		`button.title = ref`,
 		`button.setAttribute("aria-label", label + " (" + ref + ")")`,
-		`button.addEventListener("click", () => navigateToPackageDependency(value))`,
-		`return packageRelationshipItem(value, value.to)`,
-		`return packageRelationshipItem(value, value.from)`,
+		`button.addEventListener("click", () => navigateToPackageDependency(value, originPackageRef))`,
+		`return packageRelationshipItem(value, value.to, originPackageRef)`,
+		`return packageRelationshipItem(value, value.from, originPackageRef)`,
 		`function findPackageEdge(relationship)`,
 		`edge.semanticFrom === relationship.from && edge.semanticTo === relationship.to`,
 		`packageNetwork.setSelection({ edges: [edge.id] }`,
 		`nodes: [edge.from, edge.to]`,
 		`maxZoomLevel: 0.85`,
-		`openPackageDependency(relationship.from, relationship.to, edge, true)`,
+		`openPackageDependency(relationship.from, relationship.to, edge, true, originPackageRef)`,
 		`showDependency(from, to)`,
 	} {
 		if !strings.Contains(client, required) {
@@ -96,6 +96,35 @@ func TestClientNavigatesPackageRelationshipsBySemanticIdentity(t *testing.T) {
 	for _, forbidden := range []string{`/api/relationship`, `/api/focus`, `/api/package-edge`} {
 		if strings.Contains(client, forbidden) {
 			t.Errorf("client relationship navigation source contains forbidden API %q", forbidden)
+		}
+	}
+}
+
+func TestClientProvidesOneLevelDependencyBackNavigation(t *testing.T) {
+	client := readAsset(t, "static/app.js")
+	for _, required := range []string{
+		`let packageDependencyOriginRef = null`,
+		`packageDependencyOriginRef = originPackageRef || null`,
+		`if (packageDependencyOriginRef && packageLabels.has(packageDependencyOriginRef))`,
+		`element("button", "← Back to " + label, "back-button dependency-back-button")`,
+		`back.setAttribute("aria-label", "Back to package " + packageDependencyOriginRef)`,
+		`back.addEventListener("click", returnToPackageOrigin)`,
+		`function returnToPackageOrigin()`,
+		`if (!originPackageRef || !packageLabels.has(originPackageRef)) return`,
+		`selectPackage(originPackageRef, true)`,
+		`function showPackage(id)`,
+		`packageDependencyOriginRef = null`,
+		`selectPackage(params.nodes[0], false)`,
+		`openPackageDependency(selected.semanticFrom, selected.semanticTo, selected, false, null)`,
+		`renderPackageDependencyInspection(currentPackageDependency.from, currentPackageDependency.to, currentPackageDependency.result)`,
+	} {
+		if !strings.Contains(client, required) {
+			t.Errorf("client dependency Back source lacks %q", required)
+		}
+	}
+	for _, forbidden := range []string{`navigationHistory`, `history.pushState`, `history.back`, `popstate`} {
+		if strings.Contains(client, forbidden) {
+			t.Errorf("client dependency Back source contains forbidden history mechanism %q", forbidden)
 		}
 	}
 }
@@ -116,10 +145,11 @@ func TestClientSearchesRanksAndFocusesExistingPackages(t *testing.T) {
 		`event.key === "ArrowUp"`,
 		`event.key === "Enter"`,
 		`event.key === "Escape"`,
-		`network.selectNodes([node.id], true)`,
-		`network.focus(node.id`,
-		`showPackage(node.id)`,
-		`packageSearchControl = setupPackageSearch(packageNodes, packageNetwork)`,
+		`selectPackage(node.id, true)`,
+		`packageNetwork.selectNodes([ref], true)`,
+		`packageNetwork.focus(ref`,
+		`showPackage(ref)`,
+		`packageSearchControl = setupPackageSearch(packageNodes)`,
 	} {
 		if !strings.Contains(client, required) {
 			t.Errorf("client search source lacks %q", required)

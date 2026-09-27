@@ -17,6 +17,7 @@
   let typeFreezeFallback;
   let currentPackageDependency;
   let packageLabels = new Map();
+  let packageDependencyOriginRef = null;
 
   function element(tag, text, className) {
     const item = document.createElement(tag);
@@ -80,24 +81,24 @@
     return packageLabels.get(ref) || components[components.length - 1];
   }
 
-  function packageRelationshipItem(value, ref) {
+  function packageRelationshipItem(value, ref, originPackageRef) {
     const item = element("li", undefined, "package-relationship");
     const label = packageLabel(ref);
     const button = element("button", label, "package-relationship-button");
     button.type = "button";
     button.title = ref;
     button.setAttribute("aria-label", label + " (" + ref + ")");
-    button.addEventListener("click", () => navigateToPackageDependency(value));
+    button.addEventListener("click", () => navigateToPackageDependency(value, originPackageRef));
     item.appendChild(button);
     return item;
   }
 
-  function packageDependencyItem(value) {
-    return packageRelationshipItem(value, value.to);
+  function packageDependencyItem(value, originPackageRef) {
+    return packageRelationshipItem(value, value.to, originPackageRef);
   }
 
-  function packageDependentItem(value) {
-    return packageRelationshipItem(value, value.from);
+  function packageDependentItem(value, originPackageRef) {
+    return packageRelationshipItem(value, value.from, originPackageRef);
   }
 
   function contentsSummary(detail) {
@@ -163,7 +164,7 @@
     };
   }
 
-  function setupPackageSearch(packageNodes, network) {
+  function setupPackageSearch(packageNodes) {
     let visibleResults = [];
     let activeIndex = -1;
 
@@ -185,12 +186,7 @@
     }
 
     function selectSearchResult(node) {
-      network.selectNodes([node.id], true);
-      network.focus(node.id, {
-        scale: 0.75,
-        animation: { duration: 450, easingFunction: "easeInOutQuad" },
-      });
-      showPackage(node.id);
+      selectPackage(node.id, true);
       closeSearchResults();
     }
 
@@ -255,6 +251,7 @@
   }
 
   async function showPackage(id) {
+    packageDependencyOriginRef = null;
     try {
       const result = await getJSON("/api/node?id=" + encodeURIComponent(id));
       const detail = result.package;
@@ -265,8 +262,8 @@
         element("h3", "Documentation"),
         element("p", result.node.documentation || "No package documentation.", result.node.documentation ? "documentation" : "muted"),
       ];
-      parts.push(...section("Dependencies", detail.dependencies, packageDependencyItem));
-      parts.push(...section("Dependents", detail.dependents, packageDependentItem));
+      parts.push(...section("Dependencies", detail.dependencies, (value) => packageDependencyItem(value, result.node.id)));
+      parts.push(...section("Dependents", detail.dependents, (value) => packageDependentItem(value, result.node.id)));
       parts.push(...section("Imports", detail.imports, dependencyTargetItem));
       parts.push(...section("Imported by", detail.importers, dependencySourceItem));
       parts.push(...contentsSummary(detail));
@@ -290,10 +287,20 @@
   }
 
   function renderPackageDependencyInspection(from, to, result) {
-    const parts = [
+    const parts = [];
+    if (packageDependencyOriginRef && packageLabels.has(packageDependencyOriginRef)) {
+      const label = packageLabel(packageDependencyOriginRef);
+      const back = element("button", "← Back to " + label, "back-button dependency-back-button");
+      back.type = "button";
+      back.title = packageDependencyOriginRef;
+      back.setAttribute("aria-label", "Back to package " + packageDependencyOriginRef);
+      back.addEventListener("click", returnToPackageOrigin);
+      parts.push(back);
+    }
+    parts.push(
       element("p", "Semantic dependency", "eyebrow"),
       element("h2", from + " depends on " + to),
-    ];
+    );
     parts.push(...section("Type relationships", result.typeDependencies, (dependency) => {
       const item = element("li", undefined, "relationship");
       const facts = dependency.evidence || [];
@@ -332,7 +339,19 @@
     return packageEdges.get().find((edge) => edge.semanticFrom === relationship.from && edge.semanticTo === relationship.to);
   }
 
-  function openPackageDependency(from, to, edge, focusEndpoints) {
+  function selectPackage(ref, focusNode) {
+    packageNetwork.selectNodes([ref], true);
+    if (focusNode) {
+      packageNetwork.focus(ref, {
+        scale: 0.75,
+        animation: { duration: 450, easingFunction: "easeInOutQuad" },
+      });
+    }
+    showPackage(ref);
+  }
+
+  function openPackageDependency(from, to, edge, focusEndpoints, originPackageRef) {
+    packageDependencyOriginRef = originPackageRef || null;
     if (edge) {
       packageNetwork.setSelection({ edges: [edge.id] }, { unselectAll: true, highlightEdges: false });
       if (focusEndpoints) {
@@ -346,9 +365,15 @@
     showDependency(from, to);
   }
 
-  function navigateToPackageDependency(relationship) {
+  function navigateToPackageDependency(relationship, originPackageRef) {
     const edge = findPackageEdge(relationship);
-    openPackageDependency(relationship.from, relationship.to, edge, true);
+    openPackageDependency(relationship.from, relationship.to, edge, true, originPackageRef);
+  }
+
+  function returnToPackageOrigin() {
+    const originPackageRef = packageDependencyOriginRef;
+    if (!originPackageRef || !packageLabels.has(originPackageRef)) return;
+    selectPackage(originPackageRef, true);
   }
 
   function showTypeDrilldown(result) {
@@ -543,14 +568,14 @@
     packageNetwork.once("stabilizationIterationsDone", freezePhysics);
     packageNetwork.once("stabilized", freezePhysics);
     freezeFallback = window.setTimeout(freezePhysics, 8000);
-    packageSearchControl = setupPackageSearch(packageNodes, packageNetwork);
+    packageSearchControl = setupPackageSearch(packageNodes);
 
     packageNetwork.on("click", (params) => {
       if (params.nodes.length > 0) {
-        showPackage(params.nodes[0]);
+        selectPackage(params.nodes[0], false);
       } else if (params.edges.length > 0) {
         const selected = packageEdges.get(params.edges[0]);
-        openPackageDependency(selected.semanticFrom, selected.semanticTo, selected, false);
+        openPackageDependency(selected.semanticFrom, selected.semanticTo, selected, false, null);
       }
     });
   }).catch(showError);

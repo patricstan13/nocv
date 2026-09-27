@@ -68,6 +68,7 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) 380px; height: calc(
 .type-context strong { max-width: min(520px, 60vw); font-size: 12px; }
 .back-button, .type-view-button { padding: 5px 9px; color: #155e75; background: #ecfeff; border: 1px solid #a5f3fc; border-radius: 6px; cursor: pointer; font: inherit; font-size: 11px; font-weight: 700; white-space: nowrap; }
 .back-button:hover, .type-view-button:hover { background: #cffafe; }
+.dependency-back-button { margin-bottom: 18px; }
 
 #inspector {
   overflow: auto;
