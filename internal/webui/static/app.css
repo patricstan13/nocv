@@ -59,7 +59,15 @@ h3 { margin: 22px 0 8px; color: #344054; font-size: 12px; letter-spacing: .08em;
 .legend span { display: inline-block; width: 20px; height: 2px; margin: 0 8px 3px 0; background: #7dd3fc; }
 
 main { display: grid; grid-template-columns: minmax(0, 1fr) 380px; height: calc(100vh - 76px); min-height: 0; }
-#network { width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; background: #f8fafc; }
+#graph-pane { position: relative; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; background: #f8fafc; }
+.network-canvas { position: absolute; inset: 0; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; }
+.type-context { position: absolute; z-index: 10; top: 14px; left: 14px; display: flex; align-items: center; gap: 12px; max-width: calc(100% - 28px); padding: 8px 10px; color: #344054; background: rgb(255 255 255 / 94%); border: 1px solid #d7dee8; border-radius: 8px; box-shadow: 0 8px 20px rgb(15 23 42 / 10%); }
+.type-context[hidden] { display: none; }
+.type-context span, .type-context strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.type-context span { color: #697586; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.type-context strong { max-width: min(520px, 60vw); font-size: 12px; }
+.back-button, .type-view-button { padding: 5px 9px; color: #155e75; background: #ecfeff; border: 1px solid #a5f3fc; border-radius: 6px; cursor: pointer; font: inherit; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.back-button:hover, .type-view-button:hover { background: #cffafe; }
 
 #inspector {
   overflow: auto;
@@ -79,6 +87,7 @@ ul { margin: 0; padding: 0; list-style: none; }
 li { padding: 7px 0; color: #344054; border-bottom: 1px solid #edf0f4; font-size: 13px; overflow-wrap: anywhere; }
 li:last-child { border-bottom: 0; }
 .relationship { padding: 11px 0; }
+.type-relationship-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .relationship strong { color: #155e75; }
 .relationship code, .symbol { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 .evidence { display: block; margin-top: 5px; color: #697586; font-size: 11px; }
@@ -98,5 +107,7 @@ li:last-child { border-bottom: 0; }
   main { grid-template-columns: 1fr; grid-template-rows: 55% 45%; height: calc(100vh - 64px); min-height: 0; }
   #inspector { border-top: 1px solid #d7dee8; border-left: 0; padding: 18px; }
   .empty-state { margin-top: 12vh; }
-  #network { min-height: 0; }
+  #graph-pane, .network-canvas { min-height: 0; }
+  .type-context { top: 8px; left: 8px; max-width: calc(100% - 16px); }
+  .type-context strong { max-width: 48vw; }
 }

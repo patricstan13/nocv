@@ -33,10 +33,10 @@ func TestClientRendersServerDataAsText(t *testing.T) {
 func TestClientFreezesPhysicsAndPreservesSemanticEdgeDirection(t *testing.T) {
 	client := readAsset(t, "static/app.js")
 	for _, required := range []string{
-		`network.once("stabilizationIterationsDone", freezePhysics)`,
-		`network.once("stabilized", freezePhysics)`,
+		`packageNetwork.once("stabilizationIterationsDone", freezePhysics)`,
+		`packageNetwork.once("stabilized", freezePhysics)`,
 		`window.setTimeout(freezePhysics, 8000)`,
-		`network.setOptions({ physics: false })`,
+		`packageNetwork.setOptions({ physics: false })`,
 		`from: edge.to`,
 		`to: edge.from`,
 		`semanticFrom: edge.from`,
@@ -90,7 +90,7 @@ func TestClientSearchesRanksAndFocusesExistingPackages(t *testing.T) {
 		`network.selectNodes([node.id], true)`,
 		`network.focus(node.id`,
 		`showPackage(node.id)`,
-		`setupPackageSearch(packageNodes, network)`,
+		`packageSearchControl = setupPackageSearch(packageNodes, packageNetwork)`,
 	} {
 		if !strings.Contains(client, required) {
 			t.Errorf("client search source lacks %q", required)
@@ -116,7 +116,8 @@ func TestEmbeddedAssetsPreserveCanvasSizingAndHaveNoMissingSourceMap(t *testing.
 	stylesheet := readAsset(t, "static/app.css")
 	for _, required := range []string{
 		`main { display: grid; grid-template-columns: minmax(0, 1fr) 380px; height: calc(100vh - 76px); min-height: 0; }`,
-		`#network { width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden;`,
+		`#graph-pane { position: relative; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden;`,
+		`.network-canvas { position: absolute; inset: 0; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; }`,
 	} {
 		if !strings.Contains(stylesheet, required) {
 			t.Errorf("stylesheet lacks canvas sizing rule %q", required)
@@ -125,6 +126,46 @@ func TestEmbeddedAssetsPreserveCanvasSizingAndHaveNoMissingSourceMap(t *testing.
 	bundle := readAsset(t, "static/vis-network.min.js")
 	if strings.Contains(bundle, "sourceMappingURL") {
 		t.Fatal("vendored vis-network bundle still references an unavailable source map")
+	}
+}
+
+func TestClientProvidesContextualTypeDrilldown(t *testing.T) {
+	client := readAsset(t, "static/app.js")
+	for _, required := range []string{
+		`function showTypeDrilldown(result)`,
+		`const dependencies = result.typeDependencies || []`,
+		`const byRef = new Map()`,
+		`id: dependency.from`,
+		`id: dependency.to`,
+		`from: dependency.to`,
+		`to: dependency.from`,
+		`semanticFrom: dependency.from`,
+		`semanticTo: dependency.to`,
+		`evidence: dependency.evidence || []`,
+		`const activeTypeNetwork = new vis.Network(typeNetworkElement`,
+		`typeNetwork = activeTypeNetwork`,
+		`activeTypeNetwork.once("stabilizationIterationsDone", freezeTypePhysics)`,
+		`activeTypeNetwork.setOptions({ physics: false })`,
+		`showTypeDependency(typeEdges.get(params.edges[0]))`,
+		`getJSON("/api/node?id=" + encodeURIComponent(id))`,
+		`collapsibleRelationships(exact, 2, "Show exact relationships")`,
+		`backToPackages.addEventListener("click", showPackageGraph)`,
+		`packageSearchControl.setEnabled(false)`,
+		`packageSearchControl.setEnabled(true)`,
+		`packageNetwork.redraw()`,
+		`renderPackageDependencyInspection(currentPackageDependency.from, currentPackageDependency.to, currentPackageDependency.result)`,
+	} {
+		if !strings.Contains(client, required) {
+			t.Errorf("client type drilldown source lacks %q", required)
+		}
+	}
+	for _, forbidden := range []string{`/api/types`, `history.pushState`, `history.replaceState`} {
+		if strings.Contains(client, forbidden) {
+			t.Errorf("client type drilldown source contains forbidden global navigation %q", forbidden)
+		}
+	}
+	if strings.Count(client, `new vis.Network(networkElement`) != 1 {
+		t.Error("package network should be constructed exactly once")
 	}
 }
 
@@ -262,7 +303,11 @@ func TestDependencyAPISeparatesTypeAndExactOnlyEvidence(t *testing.T) {
 	var typeResult dependencyInspection
 	decode(t, typeBacked, &typeResult)
 	if len(typeResult.TypeDependencies) != 1 || len(typeResult.TypeDependencies[0].Evidence) != 2 || len(typeResult.ExactOnly) != 0 {
-		t.Errorf("type-backed inspection = %#v", typeResult)
+		t.Fatalf("type-backed inspection = %#v", typeResult)
+	}
+	typeDependency := typeResult.TypeDependencies[0]
+	if typeDependency.From != "example.com/service::Service" || typeDependency.To != "example.com/repository::Repository" {
+		t.Errorf("type dependency endpoints = %s -> %s, want full symbol refs", typeDependency.From, typeDependency.To)
 	}
 
 	exact := request(t, handler, http.MethodGet, "/api/package-dependency?from=example.com%2Fapp&to=example.com%2Fservice")

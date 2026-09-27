@@ -20,7 +20,17 @@
     <p class="legend"><span></span> dependency → dependent</p>
   </header>
   <main>
-    <section id="network" aria-label="Package dependency graph"></section>
+    <div id="graph-pane">
+      <div id="type-context" class="type-context" hidden>
+        <button id="back-to-packages" class="back-button" type="button">← Packages</button>
+        <div>
+          <span>Types explaining</span>
+          <strong id="type-context-title"></strong>
+        </div>
+      </div>
+      <section id="network" class="network-canvas" aria-label="Package dependency graph"></section>
+      <section id="type-network" class="network-canvas" aria-label="Type dependency graph" hidden></section>
+    </div>
     <aside id="inspector" aria-live="polite">
       <div class="empty-state">
         <p class="eyebrow">Inspector</p>

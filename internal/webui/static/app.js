@@ -3,9 +3,19 @@
 
   const inspector = document.getElementById("inspector");
   const networkElement = document.getElementById("network");
+  const typeNetworkElement = document.getElementById("type-network");
+  const typeContext = document.getElementById("type-context");
+  const typeContextTitle = document.getElementById("type-context-title");
+  const backToPackages = document.getElementById("back-to-packages");
   const searchInput = document.getElementById("package-search-input");
   const searchResults = document.getElementById("package-search-results");
   const SEARCH_RESULT_LIMIT = 10;
+  let packageNetwork;
+  let packageEdges;
+  let packageSearchControl;
+  let typeNetwork;
+  let typeFreezeFallback;
+  let currentPackageDependency;
 
   function element(tag, text, className) {
     const item = document.createElement(tag);
@@ -209,6 +219,13 @@
         selectSearchResult(visibleResults[activeIndex]);
       }
     });
+
+    return {
+      setEnabled(enabled) {
+        searchInput.disabled = !enabled;
+        if (!enabled) closeSearchResults();
+      },
+    };
   }
 
   async function showPackage(id) {
@@ -233,33 +250,190 @@
     }
   }
 
+  function typeLabel(ref) {
+    const components = ref.split("::");
+    return components[components.length - 1];
+  }
+
+  function typeTargetItem(value) {
+    return element("li", typeLabel(value.to), "symbol");
+  }
+
+  function typeSourceItem(value) {
+    return element("li", typeLabel(value.from), "symbol");
+  }
+
+  function renderPackageDependencyInspection(from, to, result) {
+    const parts = [
+      element("p", "Semantic dependency", "eyebrow"),
+      element("h2", from + " depends on " + to),
+    ];
+    parts.push(...section("Type relationships", result.typeDependencies, (dependency) => {
+      const item = element("li", undefined, "relationship");
+      const facts = dependency.evidence || [];
+      const heading = element("div", undefined, "type-relationship-heading");
+      heading.appendChild(element("div", dependency.from + " → " + dependency.to + " (" + facts.length + " facts)", "symbol"));
+      const view = element("button", "View type graph", "type-view-button");
+      view.type = "button";
+      view.addEventListener("click", () => showTypeDrilldown(result));
+      heading.appendChild(view);
+      item.appendChild(heading);
+      item.appendChild(collapsibleRelationships(facts, 2, "Show evidence"));
+      return item;
+    }));
+    const exact = result.exactOnly || [];
+    parts.push(element("h3", "Exact-only relationships (" + exact.length + ")"));
+    if (exact.length === 0) {
+      parts.push(element("p", "None", "muted"));
+    } else {
+      parts.push(collapsibleRelationships(exact, 5, "Show relationships"));
+    }
+    replaceInspector(parts);
+  }
+
   async function showDependency(from, to) {
     try {
       const url = "/api/package-dependency?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to);
       const result = await getJSON(url);
+      currentPackageDependency = { from, to, result };
+      renderPackageDependencyInspection(from, to, result);
+    } catch (error) {
+      showError(error);
+    }
+  }
+
+  function showTypeDrilldown(result) {
+    const dependencies = result.typeDependencies || [];
+    if (dependencies.length === 0 || !currentPackageDependency) return;
+
+    const byRef = new Map();
+    dependencies.forEach((dependency) => {
+      byRef.set(dependency.from, { id: dependency.from, label: typeLabel(dependency.from), title: dependency.from, shape: "box", margin: 12 });
+      byRef.set(dependency.to, { id: dependency.to, label: typeLabel(dependency.to), title: dependency.to, shape: "box", margin: 12 });
+    });
+    const typeNodes = new vis.DataSet(Array.from(byRef.values()));
+    const typeEdges = new vis.DataSet(dependencies.map((dependency, index) => ({
+      id: "type-dependency-" + index,
+      from: dependency.to,
+      to: dependency.from,
+      semanticFrom: dependency.from,
+      semanticTo: dependency.to,
+      evidence: dependency.evidence || [],
+      arrows: { to: { enabled: true, scaleFactor: 0.7 } },
+    })));
+
+    networkElement.hidden = true;
+    typeNetworkElement.hidden = false;
+    typeContext.hidden = false;
+    typeContextTitle.textContent = currentPackageDependency.from + " depends on " + currentPackageDependency.to;
+    packageSearchControl.setEnabled(false);
+    window.clearTimeout(typeFreezeFallback);
+    if (typeNetwork) typeNetwork.destroy();
+    const activeTypeNetwork = new vis.Network(typeNetworkElement, { nodes: typeNodes, edges: typeEdges }, {
+      layout: { randomSeed: 240519, improvedLayout: true },
+      physics: {
+        enabled: true,
+        stabilization: { enabled: true, iterations: 400, fit: true },
+        barnesHut: { gravitationalConstant: -3200, springLength: 170, springConstant: 0.035 },
+      },
+      interaction: { dragNodes: true, dragView: true, hover: true, hoverConnectedEdges: true, multiselect: false, selectConnectedEdges: true, zoomView: true },
+      nodes: {
+        borderWidth: 1,
+        color: { background: "#ffffff", border: "#64748b", highlight: { background: "#cffafe", border: "#0891b2" } },
+        font: { color: "#172033", face: "system-ui", size: 14 },
+      },
+      edges: {
+        color: { color: "#38bdf8", highlight: "#0369a1", hover: "#0284c7" },
+        width: 1.5,
+        selectionWidth: 2,
+        smooth: { enabled: true, type: "dynamic" },
+      },
+    });
+    typeNetwork = activeTypeNetwork;
+
+    let typePhysicsFrozen = false;
+    const freezeTypePhysics = () => {
+      if (typePhysicsFrozen || typeNetwork !== activeTypeNetwork) return;
+      typePhysicsFrozen = true;
+      window.clearTimeout(typeFreezeFallback);
+      activeTypeNetwork.stopSimulation();
+      activeTypeNetwork.setOptions({ physics: false });
+    };
+    activeTypeNetwork.once("stabilizationIterationsDone", freezeTypePhysics);
+    activeTypeNetwork.once("stabilized", freezeTypePhysics);
+    typeFreezeFallback = window.setTimeout(freezeTypePhysics, 5000);
+    activeTypeNetwork.on("click", (params) => {
+      if (params.nodes.length > 0) {
+        showType(params.nodes[0]);
+      } else if (params.edges.length > 0) {
+        showTypeDependency(typeEdges.get(params.edges[0]));
+      }
+    });
+
+    replaceInspector([
+      element("p", "Type relationships", "eyebrow"),
+      element("h2", currentPackageDependency.from + " depends on " + currentPackageDependency.to),
+      element("p", dependencies.length + " type relationships explain this package dependency.", "documentation"),
+      element("p", "Select a type or type dependency to inspect it.", "muted"),
+    ]);
+  }
+
+  async function showType(id) {
+    try {
+      const result = await getJSON("/api/node?id=" + encodeURIComponent(id));
+      const detail = result.type;
+      const exact = (detail.directDependencies || []).concat(detail.directDependents || []);
       const parts = [
-        element("p", "Semantic dependency", "eyebrow"),
-        element("h2", from + " depends on " + to),
+        element("p", "Type", "eyebrow"),
+        element("h2", result.node.name),
+        element("p", result.node.id, "symbol"),
+        element("span", result.node.kind, "kind"),
+        element("h3", "Documentation"),
+        element("p", result.node.documentation || "No type documentation.", result.node.documentation ? "documentation" : "muted"),
+        element("h3", "Methods"),
+        element("p", String((detail.methods || []).length)),
       ];
-      parts.push(...section("Type relationships", result.typeDependencies, (dependency) => {
-        const item = element("li", undefined, "relationship");
-        const facts = dependency.evidence || [];
-        item.appendChild(element("div", dependency.from + " → " + dependency.to + " (" + facts.length + " facts)", "symbol"));
-        item.appendChild(collapsibleRelationships(facts, 2, "Show evidence"));
-        return item;
-      }));
-      const exact = result.exactOnly || [];
-      parts.push(element("h3", "Exact-only relationships (" + exact.length + ")"));
+      parts.push(...section("Dependencies", detail.dependencies, typeTargetItem));
+      parts.push(...section("Dependents", detail.dependents, typeSourceItem));
+      parts.push(element("h3", "Exact relationships (" + exact.length + ")"));
       if (exact.length === 0) {
         parts.push(element("p", "None", "muted"));
       } else {
-        parts.push(collapsibleRelationships(exact, 5, "Show relationships"));
+        parts.push(collapsibleRelationships(exact, 2, "Show exact relationships"));
       }
       replaceInspector(parts);
     } catch (error) {
       showError(error);
     }
   }
+
+  function showTypeDependency(dependency) {
+    const facts = dependency.evidence || [];
+    replaceInspector([
+      element("p", "Type dependency", "eyebrow"),
+      element("h2", dependency.semanticFrom + " depends on " + dependency.semanticTo),
+      element("p", facts.length + " exact facts", "documentation"),
+      collapsibleRelationships(facts, 2, "Show evidence"),
+    ]);
+  }
+
+  function showPackageGraph() {
+    window.clearTimeout(typeFreezeFallback);
+    if (typeNetwork) {
+      typeNetwork.destroy();
+      typeNetwork = null;
+    }
+    typeNetworkElement.hidden = true;
+    typeContext.hidden = true;
+    networkElement.hidden = false;
+    packageSearchControl.setEnabled(true);
+    packageNetwork.redraw();
+    if (currentPackageDependency) {
+      renderPackageDependencyInspection(currentPackageDependency.from, currentPackageDependency.to, currentPackageDependency.result);
+    }
+  }
+
+  backToPackages.addEventListener("click", showPackageGraph);
 
   function showError(error) {
     replaceInspector([
@@ -278,7 +452,7 @@
       shape: "box",
       margin: 12,
     })));
-    const edges = new vis.DataSet(data.edges.map((edge) => ({
+    packageEdges = new vis.DataSet(data.edges.map((edge) => ({
       id: edge.id,
       from: edge.to,
       to: edge.from,
@@ -286,7 +460,7 @@
       semanticTo: edge.to,
       arrows: { to: { enabled: true, scaleFactor: 0.7 } },
     })));
-    const network = new vis.Network(networkElement, { nodes, edges }, {
+    packageNetwork = new vis.Network(networkElement, { nodes, edges: packageEdges }, {
       layout: { randomSeed: 240519, improvedLayout: true },
       physics: {
         enabled: true,
@@ -313,19 +487,19 @@
       if (physicsFrozen) return;
       physicsFrozen = true;
       window.clearTimeout(freezeFallback);
-      network.stopSimulation();
-      network.setOptions({ physics: false });
+      packageNetwork.stopSimulation();
+      packageNetwork.setOptions({ physics: false });
     };
-    network.once("stabilizationIterationsDone", freezePhysics);
-    network.once("stabilized", freezePhysics);
+    packageNetwork.once("stabilizationIterationsDone", freezePhysics);
+    packageNetwork.once("stabilized", freezePhysics);
     freezeFallback = window.setTimeout(freezePhysics, 8000);
-    setupPackageSearch(packageNodes, network);
+    packageSearchControl = setupPackageSearch(packageNodes, packageNetwork);
 
-    network.on("click", (params) => {
+    packageNetwork.on("click", (params) => {
       if (params.nodes.length > 0) {
         showPackage(params.nodes[0]);
       } else if (params.edges.length > 0) {
-        const selected = edges.get(params.edges[0]);
+        const selected = packageEdges.get(params.edges[0]);
         showDependency(selected.semanticFrom, selected.semanticTo);
       }
     });
