@@ -43,6 +43,8 @@ type nodeInfo struct {
 	Name          string          `json:"name"`
 	Kind          string          `json:"kind"`
 	Parent        graph.SymbolRef `json:"parent,omitempty"`
+	ParentName    string          `json:"parentName,omitempty"`
+	ParentKind    string          `json:"parentKind,omitempty"`
 	Location      *location       `json:"location,omitempty"`
 	Documentation string          `json:"documentation,omitempty"`
 }
@@ -262,6 +264,8 @@ func presentNode(g *graph.Graph, source graph.Node) nodeInfo {
 	}
 	if parent, exists := g.Node(source.Parent); exists {
 		result.Parent = parent.Ref
+		result.ParentName = parent.Name
+		result.ParentKind = parent.Kind.String()
 	}
 	if source.Location.File != "" || source.Location.Offset != 0 {
 		result.Location = &location{File: source.Location.File, Offset: source.Location.Offset}

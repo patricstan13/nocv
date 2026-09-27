@@ -58,8 +58,9 @@ underlying model still records this as `format` depending on `ast`. The graph
 uses physics for its initial layout and then freezes for stable manual
 exploration. Package search locates and focuses an existing package node
 without filtering or changing the graph. Select a package to inspect
-its documentation, declarations, semantic neighbors, and separately modeled
-imports. Its Dependencies and Dependents jump directly to the corresponding
+its documentation, compact contents, and semantic neighbors. Separately
+modeled Go imports remain available under advanced package details. Its
+Dependencies and Dependents jump directly to the corresponding
 package relationship in the graph; a dependency opened this way provides a
 Back action to its originating package. Select an edge to inspect the
 type-level and exact-only facts that establish that direct dependency. A
@@ -68,6 +69,11 @@ selected package dependency. Package-level facts with no type owner remain
 available as exact-only evidence and are intentionally absent from the type
 graph. The current interface intentionally has no reload, persistence, global
 type graph, type search, or function graph.
+
+Type and function inspectors expose related symbols directly. Methods, call
+targets, accepted and returned types, callers, owners, and implementation
+relationships can be followed without leaving the inspector. Evidence
+locations remain available as collapsed supporting detail.
 
 The graph model is language-independent. Go syntax trees are used only inside
 `goanalyzer` and are converted into graph nodes and semantic edges before being

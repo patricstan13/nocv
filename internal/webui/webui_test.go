@@ -55,8 +55,11 @@ func TestClientUsesCompactProgressiveInspector(t *testing.T) {
 		`inspector.scrollTop = 0`,
 		`packageDependencyItem(value, result.node.id)`,
 		`packageDependentItem(value, result.node.id)`,
-		`section("Imports", detail.imports, dependencyTargetItem)`,
 		`contentsSummary(detail)`,
+		`nonEmptySection("Go imports (" + (detail.imports || []).length + ")", detail.imports, dependencyTargetItem)`,
+		`nonEmptySection("Imported by (" + (detail.importers || []).length + ")", detail.importers, dependencySourceItem)`,
+		`const details = element("details", undefined, className || "advanced-disclosure")`,
+		`parts.push(disclosure("Advanced", advanced))`,
 		`collapsibleRelationships(facts, 2, "Show evidence")`,
 		`collapsibleRelationships(exact, 5, "Show relationships")`,
 		`from + " depends on " + to`,
@@ -65,10 +68,76 @@ func TestClientUsesCompactProgressiveInspector(t *testing.T) {
 			t.Errorf("client source lacks %q", required)
 		}
 	}
-	for _, exhaustive := range []string{`section("Types"`, `section("Functions"`, `section("Imports", detail.imports, relationshipItem)`} {
+	for _, exhaustive := range []string{`section("Types"`, `section("Functions"`, `parts.push(...section("Imports"`, `parts.push(...section("Imported by"`} {
 		if strings.Contains(client, exhaustive) {
 			t.Errorf("client still renders exhaustive package detail with %q", exhaustive)
 		}
+	}
+}
+
+func TestClientRendersNavigableSymbolInspectors(t *testing.T) {
+	client := readAsset(t, "static/app.js")
+	for _, required := range []string{
+		`function symbolDisplayName(summary)`,
+		`return summary.parentName + "." + summary.name`,
+		`function renderSymbolButton(summary)`,
+		`button.title = summary.ref`,
+		`button.addEventListener("click", () => inspectSymbol(summary.ref))`,
+		`nonEmptySection("Methods", detail.methods, symbolItem)`,
+		`button.addEventListener("click", () => inspectSymbol(ref))`,
+		`const method = result.node.parentKind === "struct" || result.node.parentKind === "interface"`,
+		`const heading = method ? result.node.parentName + "." + result.node.name : result.node.name`,
+		`parts.push(element("h3", "Owner"))`,
+		`ref: result.node.parent`,
+		`name: result.node.parentName`,
+	} {
+		if !strings.Contains(client, required) {
+			t.Errorf("symbol inspector source lacks %q", required)
+		}
+	}
+}
+
+func TestClientRendersCategorizedFunctionRelationshipsWithEvidenceDisclosure(t *testing.T) {
+	client := readAsset(t, "static/app.js")
+	for _, required := range []string{
+		`nonEmptySection("Calls", detail.calls, (value) => symbolRelationshipItem(value, false))`,
+		`nonEmptySection("Called by", detail.calledBy, (value) => symbolRelationshipItem(value, true))`,
+		`nonEmptySection("Accepts", detail.accepts, (value) => symbolRelationshipItem(value, false))`,
+		`nonEmptySection("Returns", detail.returns, (value) => symbolRelationshipItem(value, false))`,
+		`nonEmptySection("Implements", detail.implements, (value) => symbolRelationshipItem(value, false))`,
+		`nonEmptySection("Implemented by", detail.implementedBy, (value) => symbolRelationshipItem(value, true))`,
+		`const summary = incoming ? relationship.from : relationship.to`,
+		`function evidenceDisclosure(evidence)`,
+		`return disclosure("Evidence (" + evidence.length + ")", [list], "evidence-disclosure")`,
+		`element("p", "No semantic relationships.", "muted semantic-empty")`,
+	} {
+		if !strings.Contains(client, required) {
+			t.Errorf("categorized function inspector source lacks %q", required)
+		}
+	}
+}
+
+func TestClientProtectsInspectorFromStaleRequests(t *testing.T) {
+	client := readAsset(t, "static/app.js")
+	for _, required := range []string{
+		`let inspectorRequestGeneration = 0`,
+		`function beginInspectorRequest(label)`,
+		`const generation = ++inspectorRequestGeneration`,
+		`element("h2", "Loading " + (label || "selection") + "…")`,
+		`async function inspectSymbol(ref)`,
+		`const generation = beginInspectorRequest(typeLabel(ref))`,
+		`if (generation !== inspectorRequestGeneration) return`,
+		`renderNodeInspection(result)`,
+		`function showPackage(id)`,
+		`inspectSymbol(id)`,
+		`inspectSymbol(params.nodes[0])`,
+	} {
+		if !strings.Contains(client, required) {
+			t.Errorf("stale-request protection source lacks %q", required)
+		}
+	}
+	if strings.Count(client, `if (generation !== inspectorRequestGeneration) return`) < 4 {
+		t.Error("node and dependency success/error paths must all reject stale responses")
 	}
 }
 
@@ -206,8 +275,9 @@ func TestClientProvidesContextualTypeDrilldown(t *testing.T) {
 		`activeTypeNetwork.once("stabilizationIterationsDone", freezeTypePhysics)`,
 		`activeTypeNetwork.setOptions({ physics: false })`,
 		`showTypeDependency(typeEdges.get(params.edges[0]))`,
-		`getJSON("/api/node?id=" + encodeURIComponent(id))`,
-		`collapsibleRelationships(exact, 2, "Show exact relationships")`,
+		`inspectSymbol(params.nodes[0])`,
+		`getJSON("/api/node?id=" + encodeURIComponent(ref))`,
+		`disclosure("Advanced · Exact relationships", exactParts)`,
 		`backToPackages.addEventListener("click", showPackageGraph)`,
 		`packageSearchControl.setEnabled(false)`,
 		`packageSearchControl.setEnabled(true)`,
@@ -407,6 +477,9 @@ func TestNodeAPISerializesSymbolCentricTypeAndFunctionInspection(t *testing.T) {
 	}
 	var functionResult nodeInspection
 	decode(t, functionResponse, &functionResult)
+	if functionResult.Node.Parent != "example.com/service::Service" || functionResult.Node.ParentName != "Service" || functionResult.Node.ParentKind != "struct" {
+		t.Errorf("function parent presentation = %#v", functionResult.Node)
+	}
 	detail := functionResult.Function
 	if detail == nil || len(detail.Calls) != 1 || len(detail.CalledBy) != 1 || len(detail.Accepts) != 1 {
 		t.Fatalf("function inspection = %#v", detail)

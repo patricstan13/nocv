@@ -18,6 +18,7 @@
   let currentPackageDependency;
   let packageLabels = new Map();
   let packageDependencyOriginRef = null;
+  let inspectorRequestGeneration = 0;
 
   function element(tag, text, className) {
     const item = document.createElement(tag);
@@ -43,6 +44,19 @@
     inspector.scrollTop = 0;
   }
 
+  function beginInspectorRequest(label) {
+    const generation = ++inspectorRequestGeneration;
+    replaceInspector([
+      element("p", "Inspector", "eyebrow"),
+      element("h2", "Loading " + (label || "selection") + "…"),
+    ]);
+    return generation;
+  }
+
+  function invalidateInspectorRequests() {
+    inspectorRequestGeneration += 1;
+  }
+
   function section(title, values, render) {
     const parts = [element("h3", title)];
     if (!values || values.length === 0) {
@@ -53,6 +67,20 @@
     values.forEach((value) => list.appendChild(render(value)));
     parts.push(list);
     return parts;
+  }
+
+  function nonEmptySection(title, values, render) {
+    if (!values || values.length === 0) return [];
+    return section(title, values, render);
+  }
+
+  function disclosure(label, parts, className) {
+    const details = element("details", undefined, className || "advanced-disclosure");
+    details.appendChild(element("summary", label));
+    const body = element("div", undefined, "disclosure-body");
+    body.append(...parts);
+    details.appendChild(body);
+    return details;
   }
 
   function relationshipItem(value) {
@@ -67,6 +95,56 @@
     if (evidence.length > 0) {
       item.appendChild(element("span", evidence.map(formatLocation).join(" · "), "evidence"));
     }
+    return item;
+  }
+
+  function evidenceDisclosure(evidence) {
+    if (!evidence || evidence.length === 0) return null;
+    const list = element("ul", undefined, "evidence-list");
+    evidence.forEach((location) => list.appendChild(element("li", formatLocation(location))));
+    return disclosure("Evidence (" + evidence.length + ")", [list], "evidence-disclosure");
+  }
+
+  function symbolDisplayName(summary) {
+    if (summary.kind === "function" && summary.parentRef && summary.parentName && !packageLabels.has(summary.parentRef)) {
+      return summary.parentName + "." + summary.name;
+    }
+    return summary.name;
+  }
+
+  function renderSymbolButton(summary) {
+    const button = element("button", symbolDisplayName(summary), "symbol-button");
+    button.type = "button";
+    button.title = summary.ref;
+    button.setAttribute("aria-label", symbolDisplayName(summary) + " (" + summary.ref + ")");
+    button.addEventListener("click", () => inspectSymbol(summary.ref));
+    return button;
+  }
+
+  function symbolItem(summary) {
+    const item = element("li", undefined, "symbol-row");
+    item.appendChild(renderSymbolButton(summary));
+    return item;
+  }
+
+  function refSymbolItem(ref) {
+    const item = element("li", undefined, "symbol-row");
+    const button = element("button", typeLabel(ref), "symbol-button");
+    button.type = "button";
+    button.title = ref;
+    button.setAttribute("aria-label", typeLabel(ref) + " (" + ref + ")");
+    button.addEventListener("click", () => inspectSymbol(ref));
+    item.appendChild(button);
+    return item;
+  }
+
+  function symbolRelationshipItem(relationship, incoming, showKind) {
+    const item = element("li", undefined, "symbol-row relationship-symbol-row");
+    const summary = incoming ? relationship.from : relationship.to;
+    item.appendChild(renderSymbolButton(summary));
+    if (showKind) item.appendChild(element("span", relationship.kind, "relationship-kind"));
+    const evidence = evidenceDisclosure(relationship.evidence || []);
+    if (evidence) item.appendChild(evidence);
     return item;
   }
 
@@ -252,27 +330,29 @@
     };
   }
 
-  async function showPackage(id) {
+  function renderPackageInspection(result) {
+    const detail = result.package;
+    const parts = [
+      element("p", "Package", "eyebrow"),
+      element("h2", result.node.id),
+      element("span", result.node.kind, "kind"),
+      element("h3", "Documentation"),
+      element("p", result.node.documentation || "No package documentation.", result.node.documentation ? "documentation" : "muted"),
+    ];
+    parts.push(...section("Dependencies", detail.dependencies, (value) => packageDependencyItem(value, result.node.id)));
+    parts.push(...section("Dependents", detail.dependents, (value) => packageDependentItem(value, result.node.id)));
+    parts.push(...contentsSummary(detail));
+
+    const advanced = [];
+    advanced.push(...nonEmptySection("Go imports (" + (detail.imports || []).length + ")", detail.imports, dependencyTargetItem));
+    advanced.push(...nonEmptySection("Imported by (" + (detail.importers || []).length + ")", detail.importers, dependencySourceItem));
+    if (advanced.length > 0) parts.push(disclosure("Advanced", advanced));
+    replaceInspector(parts);
+  }
+
+  function showPackage(id) {
     packageDependencyOriginRef = null;
-    try {
-      const result = await getJSON("/api/node?id=" + encodeURIComponent(id));
-      const detail = result.package;
-      const parts = [
-        element("p", "Package", "eyebrow"),
-        element("h2", result.node.id),
-        element("span", result.node.kind, "kind"),
-        element("h3", "Documentation"),
-        element("p", result.node.documentation || "No package documentation.", result.node.documentation ? "documentation" : "muted"),
-      ];
-      parts.push(...section("Dependencies", detail.dependencies, (value) => packageDependencyItem(value, result.node.id)));
-      parts.push(...section("Dependents", detail.dependents, (value) => packageDependentItem(value, result.node.id)));
-      parts.push(...section("Imports", detail.imports, dependencyTargetItem));
-      parts.push(...section("Imported by", detail.importers, dependencySourceItem));
-      parts.push(...contentsSummary(detail));
-      replaceInspector(parts);
-    } catch (error) {
-      showError(error);
-    }
+    inspectSymbol(id);
   }
 
   function typeLabel(ref) {
@@ -281,11 +361,11 @@
   }
 
   function typeTargetItem(value) {
-    return element("li", typeLabel(value.to), "symbol");
+    return refSymbolItem(value.to);
   }
 
   function typeSourceItem(value) {
-    return element("li", typeLabel(value.from), "symbol");
+    return refSymbolItem(value.from);
   }
 
   function renderPackageDependencyInspection(from, to, result) {
@@ -327,12 +407,15 @@
   }
 
   async function showDependency(from, to) {
+    const generation = beginInspectorRequest(packageLabel(from) + " dependency");
     try {
       const url = "/api/package-dependency?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to);
       const result = await getJSON(url);
+      if (generation !== inspectorRequestGeneration) return;
       currentPackageDependency = { from, to, result };
       renderPackageDependencyInspection(from, to, result);
     } catch (error) {
+      if (generation !== inspectorRequestGeneration) return;
       showError(error);
     }
   }
@@ -381,6 +464,7 @@
   function showTypeDrilldown(result) {
     const dependencies = result.typeDependencies || [];
     if (dependencies.length === 0 || !currentPackageDependency) return;
+    invalidateInspectorRequests();
 
     const byRef = new Map();
     dependencies.forEach((dependency) => {
@@ -440,7 +524,7 @@
     typeFreezeFallback = window.setTimeout(freezeTypePhysics, 5000);
     activeTypeNetwork.on("click", (params) => {
       if (params.nodes.length > 0) {
-        showType(params.nodes[0]);
+        inspectSymbol(params.nodes[0]);
       } else if (params.edges.length > 0) {
         showTypeDependency(typeEdges.get(params.edges[0]));
       }
@@ -454,36 +538,92 @@
     ]);
   }
 
-  async function showType(id) {
+  function renderTypeInspection(result) {
+    const detail = result.type;
+    const parts = [
+      element("p", result.node.kind, "eyebrow"),
+      element("h2", result.node.name),
+      element("p", result.node.id, "symbol identity-line"),
+      element("h3", "Documentation"),
+      element("p", result.node.documentation || "No type documentation.", result.node.documentation ? "documentation" : "muted"),
+    ];
+    parts.push(...nonEmptySection("Methods", detail.methods, symbolItem));
+    parts.push(...nonEmptySection("Dependencies", detail.dependencies, typeTargetItem));
+    parts.push(...nonEmptySection("Dependents", detail.dependents, typeSourceItem));
+
+    const exactParts = [];
+    exactParts.push(...nonEmptySection("Direct dependencies", detail.directDependencies, (value) => symbolRelationshipItem(value, false, true)));
+    exactParts.push(...nonEmptySection("Direct dependents", detail.directDependents, (value) => symbolRelationshipItem(value, true, true)));
+    if (exactParts.length > 0) parts.push(disclosure("Advanced · Exact relationships", exactParts));
+    replaceInspector(parts);
+  }
+
+  function renderFunctionInspection(result) {
+    const detail = result.function;
+    const method = result.node.parentKind === "struct" || result.node.parentKind === "interface";
+    const heading = method ? result.node.parentName + "." + result.node.name : result.node.name;
+    const parts = [
+      element("p", method ? "Method" : "Function", "eyebrow"),
+      element("h2", heading),
+      element("p", result.node.id, "symbol identity-line"),
+    ];
+    if (method) {
+      const owner = {
+        ref: result.node.parent,
+        kind: result.node.parentKind,
+        name: result.node.parentName,
+        parentRef: "",
+        parentName: "",
+      };
+      parts.push(element("h3", "Owner"));
+      const ownerList = element("ul");
+      ownerList.appendChild(symbolItem(owner));
+      parts.push(ownerList);
+    }
+    parts.push(
+      element("h3", "Documentation"),
+      element("p", result.node.documentation || "No function documentation.", result.node.documentation ? "documentation" : "muted"),
+    );
+
+    const relationshipParts = [];
+    relationshipParts.push(...nonEmptySection("Calls", detail.calls, (value) => symbolRelationshipItem(value, false)));
+    relationshipParts.push(...nonEmptySection("Called by", detail.calledBy, (value) => symbolRelationshipItem(value, true)));
+    relationshipParts.push(...nonEmptySection("Accepts", detail.accepts, (value) => symbolRelationshipItem(value, false)));
+    relationshipParts.push(...nonEmptySection("Returns", detail.returns, (value) => symbolRelationshipItem(value, false)));
+    relationshipParts.push(...nonEmptySection("Implements", detail.implements, (value) => symbolRelationshipItem(value, false)));
+    relationshipParts.push(...nonEmptySection("Implemented by", detail.implementedBy, (value) => symbolRelationshipItem(value, true)));
+    if (relationshipParts.length === 0) {
+      parts.push(element("p", "No semantic relationships.", "muted semantic-empty"));
+    } else {
+      parts.push(...relationshipParts);
+    }
+    replaceInspector(parts);
+  }
+
+  function renderNodeInspection(result) {
+    if (result.package) {
+      renderPackageInspection(result);
+    } else if (result.type) {
+      renderTypeInspection(result);
+    } else if (result.function) {
+      renderFunctionInspection(result);
+    }
+  }
+
+  async function inspectSymbol(ref) {
+    const generation = beginInspectorRequest(typeLabel(ref));
     try {
-      const result = await getJSON("/api/node?id=" + encodeURIComponent(id));
-      const detail = result.type;
-      const exact = (detail.directDependencies || []).concat(detail.directDependents || []);
-      const parts = [
-        element("p", "Type", "eyebrow"),
-        element("h2", result.node.name),
-        element("p", result.node.id, "symbol"),
-        element("span", result.node.kind, "kind"),
-        element("h3", "Documentation"),
-        element("p", result.node.documentation || "No type documentation.", result.node.documentation ? "documentation" : "muted"),
-        element("h3", "Methods"),
-        element("p", String((detail.methods || []).length)),
-      ];
-      parts.push(...section("Dependencies", detail.dependencies, typeTargetItem));
-      parts.push(...section("Dependents", detail.dependents, typeSourceItem));
-      parts.push(element("h3", "Exact relationships (" + exact.length + ")"));
-      if (exact.length === 0) {
-        parts.push(element("p", "None", "muted"));
-      } else {
-        parts.push(collapsibleRelationships(exact, 2, "Show exact relationships"));
-      }
-      replaceInspector(parts);
+      const result = await getJSON("/api/node?id=" + encodeURIComponent(ref));
+      if (generation !== inspectorRequestGeneration) return;
+      renderNodeInspection(result);
     } catch (error) {
+      if (generation !== inspectorRequestGeneration) return;
       showError(error);
     }
   }
 
   function showTypeDependency(dependency) {
+    invalidateInspectorRequests();
     const facts = dependency.evidence || [];
     replaceInspector([
       element("p", "Type dependency", "eyebrow"),
@@ -494,6 +634,7 @@
   }
 
   function showPackageGraph() {
+    invalidateInspectorRequests();
     window.clearTimeout(typeFreezeFallback);
     if (typeNetwork) {
       typeNetwork.destroy();

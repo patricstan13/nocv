@@ -83,6 +83,7 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) 380px; height: calc(
 .kind { display: inline-block; margin: -4px 0 16px; padding: 4px 8px; border-radius: 999px; color: #155e75; background: #cffafe; font-size: 12px; font-weight: 700; }
 .documentation { color: #344054; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; }
 .muted { color: #7a8699; font-style: italic; }
+.identity-line { overflow: hidden; color: #697586; text-overflow: ellipsis; white-space: nowrap; }
 
 ul { margin: 0; padding: 0; list-style: none; }
 li { padding: 7px 0; color: #344054; border-bottom: 1px solid #edf0f4; font-size: 13px; overflow-wrap: anywhere; }
@@ -91,6 +92,11 @@ li:last-child { border-bottom: 0; }
 .package-relationship { padding: 0; }
 .package-relationship-button { display: block; width: 100%; padding: 8px 0; color: #155e75; background: transparent; border: 0; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; text-align: left; }
 .package-relationship-button:hover, .package-relationship-button:focus-visible { color: #0e7490; background: #ecfeff; outline: none; }
+.symbol-row { padding: 0; }
+.symbol-button { display: block; width: 100%; padding: 8px 0; overflow: hidden; color: #155e75; background: transparent; border: 0; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.symbol-button:hover, .symbol-button:focus-visible { color: #0e7490; background: #ecfeff; outline: none; }
+.relationship-symbol-row { padding: 2px 0 8px; }
+.relationship-kind { display: block; margin: -4px 0 3px; color: #697586; font-size: 10px; text-transform: uppercase; }
 .type-relationship-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .relationship strong { color: #155e75; }
 .relationship code, .symbol { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
@@ -98,6 +104,14 @@ li:last-child { border-bottom: 0; }
 .evidence-group ul { margin-top: 5px; }
 .evidence-toggle { margin-top: 8px; padding: 5px 9px; color: #155e75; background: #ecfeff; border: 1px solid #a5f3fc; border-radius: 6px; cursor: pointer; font: inherit; font-size: 11px; font-weight: 700; }
 .evidence-toggle:hover { background: #cffafe; }
+.advanced-disclosure, .evidence-disclosure { margin-top: 18px; border-top: 1px solid #edf0f4; }
+.advanced-disclosure > summary, .evidence-disclosure > summary { padding: 10px 0; color: #155e75; cursor: pointer; font-size: 12px; font-weight: 700; }
+.advanced-disclosure > summary:hover, .advanced-disclosure > summary:focus-visible, .evidence-disclosure > summary:hover, .evidence-disclosure > summary:focus-visible { color: #0e7490; outline: none; }
+.disclosure-body { padding: 0 0 4px 10px; }
+.evidence-disclosure { margin-top: 0; border-top: 0; }
+.evidence-disclosure > summary { padding: 3px 0; color: #697586; font-size: 11px; font-weight: 600; }
+.evidence-list li { padding: 4px 0; color: #697586; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
+.semantic-empty { margin-top: 20px; }
 .contents-summary { display: flex; gap: 16px; }
 .contents-summary li { border: 0; color: #5e6b7f; }
 .error { padding: 14px; color: #9f1239; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 8px; }
