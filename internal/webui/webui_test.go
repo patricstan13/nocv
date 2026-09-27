@@ -30,6 +30,76 @@ func TestClientRendersServerDataAsText(t *testing.T) {
 	}
 }
 
+func TestClientFreezesPhysicsAndPreservesSemanticEdgeDirection(t *testing.T) {
+	client := readAsset(t, "static/app.js")
+	for _, required := range []string{
+		`network.once("stabilizationIterationsDone", freezePhysics)`,
+		`network.once("stabilized", freezePhysics)`,
+		`window.setTimeout(freezePhysics, 8000)`,
+		`network.setOptions({ physics: false })`,
+		`from: edge.to`,
+		`to: edge.from`,
+		`semanticFrom: edge.from`,
+		`semanticTo: edge.to`,
+		`showDependency(selected.semanticFrom, selected.semanticTo)`,
+	} {
+		if !strings.Contains(client, required) {
+			t.Errorf("client source lacks %q", required)
+		}
+	}
+}
+
+func TestClientUsesCompactProgressiveInspector(t *testing.T) {
+	client := readAsset(t, "static/app.js")
+	for _, required := range []string{
+		`inspector.scrollTop = 0`,
+		`section("Dependencies", detail.dependencies, dependencyTargetItem)`,
+		`section("Imports", detail.imports, dependencyTargetItem)`,
+		`contentsSummary(detail)`,
+		`collapsibleRelationships(facts, 2, "Show evidence")`,
+		`collapsibleRelationships(exact, 5, "Show relationships")`,
+		`from + " depends on " + to`,
+	} {
+		if !strings.Contains(client, required) {
+			t.Errorf("client source lacks %q", required)
+		}
+	}
+	for _, exhaustive := range []string{`section("Types"`, `section("Functions"`, `section("Imports", detail.imports, relationshipItem)`} {
+		if strings.Contains(client, exhaustive) {
+			t.Errorf("client still renders exhaustive package detail with %q", exhaustive)
+		}
+	}
+}
+
+func TestEmbeddedAssetsPreserveCanvasSizingAndHaveNoMissingSourceMap(t *testing.T) {
+	index := readAsset(t, "static/index.html")
+	if !strings.Contains(index, "dependency → dependent") {
+		t.Fatal("package explorer legend does not explain visual edge direction")
+	}
+	stylesheet := readAsset(t, "static/app.css")
+	for _, required := range []string{
+		`main { display: grid; grid-template-columns: minmax(0, 1fr) 380px; height: calc(100vh - 76px); min-height: 0; }`,
+		`#network { width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden;`,
+	} {
+		if !strings.Contains(stylesheet, required) {
+			t.Errorf("stylesheet lacks canvas sizing rule %q", required)
+		}
+	}
+	bundle := readAsset(t, "static/vis-network.min.js")
+	if strings.Contains(bundle, "sourceMappingURL") {
+		t.Fatal("vendored vis-network bundle still references an unavailable source map")
+	}
+}
+
+func readAsset(t *testing.T, name string) string {
+	t.Helper()
+	contents, err := fs.ReadFile(assets, name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(contents)
+}
+
 func TestHandlerServesEmbeddedInterfaceAndAssets(t *testing.T) {
 	handler := Handler(webFixture(t))
 

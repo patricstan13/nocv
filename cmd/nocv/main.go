@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"nocv/goanalyzer"
 	"nocv/graph"
@@ -23,7 +24,15 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
+	var analysisStart time.Time
+	if invocation.name == "serve" {
+		fmt.Fprintln(stdout, "Analyzing project...")
+		analysisStart = time.Now()
+	}
 	g, err := load(invocation.pattern)
+	if invocation.name == "serve" {
+		fmt.Fprintf(stdout, "Analysis total: %s\n", time.Since(analysisStart).Round(time.Millisecond))
+	}
 	if err != nil {
 		fmt.Fprintln(stderr, "nocv:", err)
 		return 1
