@@ -129,12 +129,16 @@ checker in the callable declaration file's context, so builtins, local named
 types, imported qualified types, aliases, and composite types retain compiler
 semantics. Primitive and named non-struct types participate without becoming
 graph nodes. The result reports compatible, incompatible, and genuinely
-unknown call sites separately.
+unknown call sites separately. It also reports existing concrete-type/interface
+contracts that the hypothetical parameter signature would cause to be lost. A
+lost implementation is a structural contract consequence; it does not by
+itself assert that the program will fail to compile.
 
 This first change-impact capability covers parameter types, counts, and
 variadic status only. It does not analyze result changes, receiver changes,
-interface-contract consequences, embedding or promoted-method effects,
-transitive architectural impact, or source edits.
+embedding or promoted-method structural effects, transitive architectural
+impact, or source edits. Contract analysis is limited to existing
+implementations and does not report newly gained contracts.
 
 Imports are stored direct package-level Go dependencies when both packages are
 represented in the loaded graph. They are distinct from NOCV semantic

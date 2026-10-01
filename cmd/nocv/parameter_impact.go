@@ -28,30 +28,53 @@ func printParameterChangeImpact(out io.Writer, analysis *goanalyzer.Analysis, va
 	fmt.Fprintln(out, "\nCALL-SITE IMPACT")
 	if len(impact.CallSites) == 0 {
 		fmt.Fprintln(out, "  (none)")
-		return nil
-	}
-	for _, compatibility := range []query.Compatibility{
-		query.CompatibilityIncompatible,
-		query.CompatibilityUnknown,
-		query.CompatibilityCompatible,
-	} {
-		printed := false
-		for _, site := range impact.CallSites {
-			if site.Compatibility != compatibility {
-				continue
-			}
-			if !printed {
-				fmt.Fprintf(out, "\n%s\n", strings.ToUpper(compatibility.String()))
-				printed = true
-			}
-			fmt.Fprintf(out, "  %s\n", site.Caller.Ref)
-			fmt.Fprintf(out, "    %s @ %d\n", site.Location.File, site.Location.Offset)
-			for _, problem := range site.Problems {
-				printSignatureProblem(out, problem)
+	} else {
+		for _, compatibility := range []query.Compatibility{
+			query.CompatibilityIncompatible,
+			query.CompatibilityUnknown,
+			query.CompatibilityCompatible,
+		} {
+			printed := false
+			for _, site := range impact.CallSites {
+				if site.Compatibility != compatibility {
+					continue
+				}
+				if !printed {
+					fmt.Fprintf(out, "\n%s\n", strings.ToUpper(compatibility.String()))
+					printed = true
+				}
+				fmt.Fprintf(out, "  %s\n", site.Caller.Ref)
+				fmt.Fprintf(out, "    %s @ %d\n", site.Location.File, site.Location.Offset)
+				for _, problem := range site.Problems {
+					printSignatureProblem(out, problem)
+				}
 			}
 		}
 	}
+
+	fmt.Fprintln(out, "\nCONTRACT IMPACT")
+	if len(impact.Contracts) == 0 {
+		fmt.Fprintln(out, "  (none)")
+		return nil
+	}
+	fmt.Fprintln(out, "\nLOST IMPLEMENTATION")
+	for _, contract := range impact.Contracts {
+		fmt.Fprintf(out, "  %s no longer implements %s\n", contract.Concrete.Name, contract.Interface.Name)
+		if contract.ConcreteMethod.Ref != "" {
+			fmt.Fprintf(out, "    %s\n", methodDisplay(contract.ConcreteMethod))
+		}
+		if contract.InterfaceMethod.Ref != "" {
+			fmt.Fprintf(out, "    %s\n", methodDisplay(contract.InterfaceMethod))
+		}
+	}
 	return nil
+}
+
+func methodDisplay(symbol query.SymbolSummary) string {
+	if symbol.ParentName != "" {
+		return symbol.ParentName + "." + symbol.Name
+	}
+	return symbol.Name
 }
 
 func parseProposedSignature(values []string) (graph.SymbolRef, query.ProposedSignature, error) {

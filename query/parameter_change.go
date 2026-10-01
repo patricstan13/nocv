@@ -3,7 +3,7 @@ package query
 import "nocv/graph"
 
 // CallableSignature describes only a callable's parameters. Results and the
-// receiver are deliberately outside the first call-site impact model.
+// receiver are deliberately outside the parameter-change impact model.
 type CallableSignature struct {
 	Parameters []Parameter
 	Variadic   bool
@@ -37,12 +37,41 @@ type GoTypeRef struct {
 	Symbol  graph.SymbolRef
 }
 
-// ParameterChangeImpact reports every known direct source call to Callable.
+// ParameterChangeImpact reports direct call-site compatibility and existing
+// implementation contracts lost by one hypothetical parameter signature.
 type ParameterChangeImpact struct {
 	Callable  graph.SymbolRef
 	Before    CallableSignature
 	After     CallableSignature
 	CallSites []CallSiteImpact
+	Contracts []ContractImpact
+}
+
+// ContractImpact describes one existing concrete-type/interface contract that
+// the hypothetical parameter signature would invalidate.
+type ContractImpact struct {
+	Kind            ContractImpactKind
+	Concrete        SymbolSummary
+	Interface       SymbolSummary
+	ConcreteMethod  SymbolSummary
+	InterfaceMethod SymbolSummary
+}
+
+// ContractImpactKind identifies a deterministic contract consequence.
+type ContractImpactKind uint8
+
+const (
+	ContractImpactUnknown ContractImpactKind = iota
+	ContractImplementationLost
+)
+
+func (k ContractImpactKind) String() string {
+	switch k {
+	case ContractImplementationLost:
+		return "lost implementation"
+	default:
+		return "unknown contract impact"
+	}
 }
 
 // CallSiteImpact describes compatibility for one concrete call expression.

@@ -154,6 +154,81 @@ func TestAnalyzeParameterChangeMethodsInterfacesClosuresAndNoCallers(t *testing.
 	}
 }
 
+func TestAnalyzeParameterChangeConcreteMethodContractImpact(t *testing.T) {
+	analysis := loadImpactAnalysis(t)
+	result := analyze(t, analysis, impactPackage+"::Service::Save", signature("string"))
+
+	wantInterfaces := []graph.SymbolRef{
+		impactPackage + "::ExtendedStore",
+		impactPackage + "::Saver",
+		impactPackage + "::Store",
+	}
+	if got := contractInterfaces(result.Contracts); !slices.Equal(got, wantInterfaces) {
+		t.Fatalf("lost interfaces = %v, want %v", got, wantInterfaces)
+	}
+	for _, impact := range result.Contracts {
+		if impact.Kind != query.ContractImplementationLost {
+			t.Errorf("contract kind = %v", impact.Kind)
+		}
+		if impact.Concrete.Ref != impactPackage+"::Service" ||
+			impact.ConcreteMethod.Ref != impactPackage+"::Service::Save" {
+			t.Errorf("concrete contract evidence = %+v", impact)
+		}
+		if impact.InterfaceMethod.Name != "Save" {
+			t.Errorf("interface method = %+v, want Save", impact.InterfaceMethod)
+		}
+	}
+	actualInterfaces := contractInterfaces(result.Contracts)
+	if slices.Contains(actualInterfaces, graph.SymbolRef(impactPackage+"::Healthy")) ||
+		slices.Contains(actualInterfaces, graph.SymbolRef(impactPackage+"::StringSaver")) {
+		t.Fatalf("unrelated contract reported: %+v", result.Contracts)
+	}
+
+	unchanged := analyze(t, analysis, impactPackage+"::Service::Save", signature("ID"))
+	if len(unchanged.Contracts) != 0 {
+		t.Fatalf("semantically unchanged contract impacts = %+v", unchanged.Contracts)
+	}
+}
+
+func TestAnalyzeParameterChangeInterfaceMethodContractImpact(t *testing.T) {
+	analysis := loadImpactAnalysis(t)
+	result := analyze(t, analysis, impactPackage+"::Store::Save", signature("string"))
+
+	got := make([]string, 0, len(result.Contracts))
+	for _, impact := range result.Contracts {
+		got = append(got, string(impact.Concrete.Ref)+" -> "+string(impact.Interface.Ref))
+		if impact.InterfaceMethod.Ref != impactPackage+"::Store::Save" {
+			t.Errorf("interface method = %+v", impact.InterfaceMethod)
+		}
+	}
+	want := []string{
+		impactPackage + "::PointerStore -> " + impactPackage + "::Store",
+		impactPackage + "::Service -> " + impactPackage + "::ExtendedStore",
+		impactPackage + "::Service -> " + impactPackage + "::Store",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("lost contracts = %v, want %v", got, want)
+	}
+	unchanged := analyze(t, analysis, impactPackage+"::Store::Save", signature("ID"))
+	if len(unchanged.Contracts) != 0 {
+		t.Fatalf("unchanged interface contract impacts = %+v", unchanged.Contracts)
+	}
+}
+
+func TestAnalyzeParameterChangePointerReceiverAndNoContractCandidates(t *testing.T) {
+	analysis := loadImpactAnalysis(t)
+	pointer := analyze(t, analysis, impactPackage+"::PointerStore::Save", signature("string"))
+	want := []graph.SymbolRef{impactPackage + "::Saver", impactPackage + "::Store"}
+	if got := contractInterfaces(pointer.Contracts); !slices.Equal(got, want) {
+		t.Fatalf("pointer receiver lost interfaces = %v, want %v", got, want)
+	}
+
+	ordinary := analyze(t, analysis, impactPackage+"::UseID", signature("string"))
+	if len(ordinary.Contracts) != 0 {
+		t.Fatalf("package function contract impacts = %+v, want empty", ordinary.Contracts)
+	}
+}
+
 func TestAnalyzeParameterChangeValidationErrors(t *testing.T) {
 	analysis := loadImpactAnalysis(t)
 	tests := []struct {
@@ -224,4 +299,12 @@ func assertCompatibilityCounts(t *testing.T, result query.ParameterChangeImpact,
 		t.Fatalf("compatibility counts = (%d, %d, %d), want (%d, %d, %d): %+v",
 			gotCompatible, gotIncompatible, gotUnknown, compatible, incompatible, unknown, result.CallSites)
 	}
+}
+
+func contractInterfaces(impacts []query.ContractImpact) []graph.SymbolRef {
+	result := make([]graph.SymbolRef, 0, len(impacts))
+	for _, impact := range impacts {
+		result = append(result, impact.Interface.Ref)
+	}
+	return result
 }

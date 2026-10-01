@@ -19,6 +19,7 @@ type resolvedCallable struct {
 	function  *types.Func
 	signature *types.Signature
 	pkg       *packages.Package
+	node      *graph.Node
 }
 
 type resolvedSignature struct {
@@ -62,6 +63,7 @@ func (a *Analysis) AnalyzeParameterChange(callable graph.SymbolRef, proposed que
 	for _, site := range a.collectCallSites(resolved.function) {
 		result.CallSites = append(result.CallSites, a.checkCallSite(site, after))
 	}
+	result.Contracts = a.contractImpacts(resolved, after)
 	sort.Slice(result.CallSites, func(i, j int) bool {
 		left, right := result.CallSites[i], result.CallSites[j]
 		if left.Caller.Ref != right.Caller.Ref {
@@ -101,7 +103,7 @@ func (a *Analysis) resolveCallable(ref graph.SymbolRef) (resolvedCallable, error
 		}
 		for _, pkg := range a.packages {
 			if function.Pkg() == pkg.Types {
-				return resolvedCallable{function: function, signature: signature, pkg: pkg}, nil
+				return resolvedCallable{function: function, signature: signature, pkg: pkg, node: node}, nil
 			}
 		}
 	}

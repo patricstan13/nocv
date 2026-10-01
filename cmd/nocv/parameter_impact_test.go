@@ -52,6 +52,8 @@ func TestImpactParamsCommandRendersConcreteCallSites(t *testing.T) {
 		"UseID(example.com/parameterimpact.ID)",
 		"UseID(string)",
 		"CALL-SITE IMPACT",
+		"CONTRACT IMPACT",
+		"(none)",
 		"INCOMPATIBLE",
 		"COMPATIBLE",
 		"example.com/parameterimpact::CallsID",
@@ -61,6 +63,66 @@ func TestImpactParamsCommandRendersConcreteCallSites(t *testing.T) {
 		if !strings.Contains(output.String(), want) {
 			t.Errorf("output lacks %q:\n%s", want, output.String())
 		}
+	}
+}
+
+func TestImpactParamsCommandRendersConcreteAndInterfaceContractImpact(t *testing.T) {
+	dir, err := filepath.Abs("../../goanalyzer/testdata/parameterimpact")
+	if err != nil {
+		t.Fatal(err)
+	}
+	analysis, err := goanalyzer.LoadAnalysis(context.Background(), dir, "./...")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name     string
+		callable string
+		want     []string
+	}{
+		{
+			name:     "concrete method",
+			callable: "example.com/parameterimpact::Service::Save",
+			want: []string{
+				"Service no longer implements ExtendedStore",
+				"Service no longer implements Saver",
+				"Service no longer implements Store",
+				"Service.Save",
+				"Store.Save",
+			},
+		},
+		{
+			name:     "interface method",
+			callable: "example.com/parameterimpact::Store::Save",
+			want: []string{
+				"PointerStore no longer implements Store",
+				"Service no longer implements ExtendedStore",
+				"Service no longer implements Store",
+				"PointerStore.Save",
+				"Store.Save",
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			invocation := invocation{
+				name:    "impact-params",
+				pattern: dir + "/...",
+				values:  []string{test.callable, "--param", "string"},
+			}
+			var output bytes.Buffer
+			if err := executeCommandWithAnalysis(&output, analysis.Graph(), analysis, invocation); err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(output.String(), "CONTRACT IMPACT\n\nLOST IMPLEMENTATION") {
+				t.Fatalf("output lacks contract section:\n%s", output.String())
+			}
+			for _, want := range test.want {
+				if !strings.Contains(output.String(), want) {
+					t.Errorf("output lacks %q:\n%s", want, output.String())
+				}
+			}
+		})
 	}
 }
 

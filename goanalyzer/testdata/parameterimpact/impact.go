@@ -17,9 +17,36 @@ type Service struct{}
 
 func (Service) Save(id ID) {}
 
+func (Service) Health() {}
+
 type Store interface {
 	Save(id ID)
 }
+
+type Saver interface {
+	Save(id ID)
+}
+
+type Healthy interface {
+	Health()
+}
+
+type ExtendedStore interface {
+	Store
+	Health()
+}
+
+type StringSaver interface {
+	Save(value string)
+}
+
+type PointerStore struct{}
+
+func (*PointerStore) Save(id ID) {}
+
+type StringStore struct{}
+
+func (StringStore) Save(value string) {}
 
 func UseID(id ID) {}
 
