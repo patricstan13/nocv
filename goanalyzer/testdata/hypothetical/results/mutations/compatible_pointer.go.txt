@@ -1,0 +1,31 @@
+package repo
+
+import "example.com/hypothetical/model"
+
+func Find() (model.User, error) {
+	return model.User{Name: "found"}, nil
+}
+
+func Compatible() (*model.User, error) {
+	return &model.User{Name: "compatible"}, nil
+}
+
+func Single() model.User {
+	return model.User{Name: "single"}
+}
+
+func Pointer() *model.User {
+	return &model.User{Name: "pointer"}
+}
+
+func Pair() (model.User, error) {
+	return model.User{Name: "pair"}, nil
+}
+
+func Second() (model.User, error) {
+	return model.User{Name: "second"}, nil
+}
+
+func Reordered() (model.User, error) {
+	return model.User{Name: "reordered"}, nil
+}
