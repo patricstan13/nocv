@@ -62,7 +62,10 @@ its documentation, compact contents, and semantic neighbors. Separately
 modeled Go imports remain available under advanced package details. Its
 Dependencies and Dependents jump directly to the corresponding
 package relationship in the graph; a dependency opened this way provides a
-Back action to its originating package. Select an edge to inspect the
+Back action to its originating package, and both dependency endpoint packages
+can be opened directly. Selecting a package also exposes its modeled types and
+package-level functions; those symbols lead into type, method, function, and
+semantic-relationship inspection. Select an edge to inspect the
 type-level and exact-only facts that establish that direct dependency. A
 contextual type drilldown shows only the type relationships explaining that
 selected package dependency. Package-level facts with no type owner remain

@@ -127,6 +127,16 @@
     return item;
   }
 
+  function packageContentItem(node) {
+    return symbolItem({
+      ref: node.id,
+      kind: node.kind,
+      name: node.name,
+      parentRef: node.parent,
+      parentName: node.parentName,
+    });
+  }
+
   function refSymbolItem(ref) {
     const item = element("li", undefined, "symbol-row");
     const button = element("button", typeLabel(ref), "symbol-button");
@@ -181,11 +191,16 @@
     return packageRelationshipItem(value, value.from, originPackageRef);
   }
 
-  function contentsSummary(detail) {
-    const list = element("ul", undefined, "contents-summary");
-    list.appendChild(element("li", (detail.types || []).length + " types"));
-    list.appendChild(element("li", (detail.functions || []).length + " functions"));
-    return [element("h3", "Contents"), list];
+  function packageEndpointItem(ref) {
+    const item = element("li", undefined, "package-relationship");
+    const label = packageLabel(ref);
+    const button = element("button", label, "package-relationship-button");
+    button.type = "button";
+    button.title = ref;
+    button.setAttribute("aria-label", label + " (" + ref + ")");
+    button.addEventListener("click", () => selectPackage(ref, true));
+    item.appendChild(button);
+    return item;
   }
 
   function collapsibleRelationships(values, threshold, showLabel) {
@@ -341,7 +356,8 @@
     ];
     parts.push(...section("Dependencies", detail.dependencies, (value) => packageDependencyItem(value, result.node.id)));
     parts.push(...section("Dependents", detail.dependents, (value) => packageDependentItem(value, result.node.id)));
-    parts.push(...contentsSummary(detail));
+    parts.push(...nonEmptySection("Types", detail.types, packageContentItem));
+    parts.push(...nonEmptySection("Functions", detail.functions, packageContentItem));
 
     const advanced = [];
     advanced.push(...nonEmptySection("Go imports (" + (detail.imports || []).length + ")", detail.imports, dependencyTargetItem));
@@ -368,7 +384,7 @@
     return refSymbolItem(value.from);
   }
 
-  function renderPackageDependencyInspection(from, to, result) {
+  function renderPackageDependencyInspection(result) {
     const parts = [];
     if (packageDependencyOriginRef && packageLabels.has(packageDependencyOriginRef)) {
       const label = packageLabel(packageDependencyOriginRef);
@@ -379,10 +395,14 @@
       back.addEventListener("click", returnToPackageOrigin);
       parts.push(back);
     }
+    const semanticFrom = result.dependency.from;
+    const semanticTo = result.dependency.to;
     parts.push(
       element("p", "Semantic dependency", "eyebrow"),
-      element("h2", from + " depends on " + to),
+      element("h2", semanticFrom + " depends on " + semanticTo),
     );
+    parts.push(...section("From", [semanticFrom], packageEndpointItem));
+    parts.push(...section("To", [semanticTo], packageEndpointItem));
     parts.push(...section("Type relationships", result.typeDependencies, (dependency) => {
       const item = element("li", undefined, "relationship");
       const facts = dependency.evidence || [];
@@ -413,7 +433,7 @@
       const result = await getJSON(url);
       if (generation !== inspectorRequestGeneration) return;
       currentPackageDependency = { from, to, result };
-      renderPackageDependencyInspection(from, to, result);
+      renderPackageDependencyInspection(result);
     } catch (error) {
       if (generation !== inspectorRequestGeneration) return;
       showError(error);
@@ -646,7 +666,7 @@
     packageSearchControl.setEnabled(true);
     packageNetwork.redraw();
     if (currentPackageDependency) {
-      renderPackageDependencyInspection(currentPackageDependency.from, currentPackageDependency.to, currentPackageDependency.result);
+      renderPackageDependencyInspection(currentPackageDependency.result);
     }
   }
 

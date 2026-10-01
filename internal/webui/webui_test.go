@@ -55,22 +55,60 @@ func TestClientUsesCompactProgressiveInspector(t *testing.T) {
 		`inspector.scrollTop = 0`,
 		`packageDependencyItem(value, result.node.id)`,
 		`packageDependentItem(value, result.node.id)`,
-		`contentsSummary(detail)`,
+		`nonEmptySection("Types", detail.types, packageContentItem)`,
+		`nonEmptySection("Functions", detail.functions, packageContentItem)`,
 		`nonEmptySection("Go imports (" + (detail.imports || []).length + ")", detail.imports, dependencyTargetItem)`,
 		`nonEmptySection("Imported by (" + (detail.importers || []).length + ")", detail.importers, dependencySourceItem)`,
 		`const details = element("details", undefined, className || "advanced-disclosure")`,
 		`parts.push(disclosure("Advanced", advanced))`,
 		`collapsibleRelationships(facts, 2, "Show evidence")`,
 		`collapsibleRelationships(exact, 5, "Show relationships")`,
-		`from + " depends on " + to`,
+		`semanticFrom + " depends on " + semanticTo`,
 	} {
 		if !strings.Contains(client, required) {
 			t.Errorf("client source lacks %q", required)
 		}
 	}
-	for _, exhaustive := range []string{`section("Types"`, `section("Functions"`, `parts.push(...section("Imports"`, `parts.push(...section("Imported by"`} {
+	for _, exhaustive := range []string{`contentsSummary(detail)`, `+ " types"`, `+ " functions"`, `parts.push(...section("Imports"`, `parts.push(...section("Imported by"`} {
 		if strings.Contains(client, exhaustive) {
 			t.Errorf("client still renders exhaustive package detail with %q", exhaustive)
+		}
+	}
+}
+
+func TestClientRendersPackageContentsAsNavigableSymbols(t *testing.T) {
+	client := readAsset(t, "static/app.js")
+	for _, required := range []string{
+		`function packageContentItem(node)`,
+		`return symbolItem({`,
+		`ref: node.id`,
+		`kind: node.kind`,
+		`name: node.name`,
+		`nonEmptySection("Types", detail.types, packageContentItem)`,
+		`nonEmptySection("Functions", detail.functions, packageContentItem)`,
+		`button.addEventListener("click", () => inspectSymbol(summary.ref))`,
+	} {
+		if !strings.Contains(client, required) {
+			t.Errorf("package content navigation source lacks %q", required)
+		}
+	}
+}
+
+func TestClientNavigatesSemanticDependencyEndpointsToPackages(t *testing.T) {
+	client := readAsset(t, "static/app.js")
+	for _, required := range []string{
+		`const semanticFrom = result.dependency.from`,
+		`const semanticTo = result.dependency.to`,
+		`section("From", [semanticFrom], packageEndpointItem)`,
+		`section("To", [semanticTo], packageEndpointItem)`,
+		`function packageEndpointItem(ref)`,
+		`button.addEventListener("click", () => selectPackage(ref, true))`,
+		`function selectPackage(ref, focusNode)`,
+		`showPackage(ref)`,
+		`packageDependencyOriginRef = null`,
+	} {
+		if !strings.Contains(client, required) {
+			t.Errorf("dependency endpoint navigation source lacks %q", required)
 		}
 	}
 }
@@ -185,7 +223,7 @@ func TestClientProvidesOneLevelDependencyBackNavigation(t *testing.T) {
 		`packageDependencyOriginRef = null`,
 		`selectPackage(params.nodes[0], false)`,
 		`openPackageDependency(selected.semanticFrom, selected.semanticTo, selected, false, null)`,
-		`renderPackageDependencyInspection(currentPackageDependency.from, currentPackageDependency.to, currentPackageDependency.result)`,
+		`renderPackageDependencyInspection(currentPackageDependency.result)`,
 	} {
 		if !strings.Contains(client, required) {
 			t.Errorf("client dependency Back source lacks %q", required)
@@ -282,7 +320,7 @@ func TestClientProvidesContextualTypeDrilldown(t *testing.T) {
 		`packageSearchControl.setEnabled(false)`,
 		`packageSearchControl.setEnabled(true)`,
 		`packageNetwork.redraw()`,
-		`renderPackageDependencyInspection(currentPackageDependency.from, currentPackageDependency.to, currentPackageDependency.result)`,
+		`renderPackageDependencyInspection(currentPackageDependency.result)`,
 	} {
 		if !strings.Contains(client, required) {
 			t.Errorf("client type drilldown source lacks %q", required)
