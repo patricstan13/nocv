@@ -53,6 +53,7 @@ func TestImpactParamsCommandRendersConcreteCallSites(t *testing.T) {
 		"UseID(string)",
 		"CALL-SITE IMPACT",
 		"CONTRACT IMPACT",
+		"STRUCTURAL IMPACT",
 		"(none)",
 		"INCOMPATIBLE",
 		"COMPATIBLE",
@@ -62,6 +63,42 @@ func TestImpactParamsCommandRendersConcreteCallSites(t *testing.T) {
 	} {
 		if !strings.Contains(output.String(), want) {
 			t.Errorf("output lacks %q:\n%s", want, output.String())
+		}
+	}
+}
+
+func TestImpactParamsCommandRendersPromotedMethodStructuralImpact(t *testing.T) {
+	dir, err := filepath.Abs("../../goanalyzer/testdata/parameterimpact")
+	if err != nil {
+		t.Fatal(err)
+	}
+	analysis, err := goanalyzer.LoadAnalysis(context.Background(), dir, "./...")
+	if err != nil {
+		t.Fatal(err)
+	}
+	invocation := invocation{
+		name:    "impact-params",
+		pattern: dir + "/...",
+		values:  []string{"example.com/parameterimpact::PromotionBase::Change", "--param", "string"},
+	}
+
+	var output bytes.Buffer
+	if err := executeCommandWithAnalysis(&output, analysis.Graph(), analysis, invocation); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"STRUCTURAL IMPACT",
+		"PROMOTED METHOD CHANGED",
+		"PromotionOuter exposes Change from PromotionBase.Change",
+		"PromotionWrapper exposes Change from PromotionBase.Change",
+	} {
+		if !strings.Contains(output.String(), want) {
+			t.Errorf("output lacks %q:\n%s", want, output.String())
+		}
+	}
+	for _, unwanted := range []string{"PromotionShadow exposes", "PromotionAmbiguous exposes"} {
+		if strings.Contains(output.String(), unwanted) {
+			t.Errorf("output unexpectedly contains %q:\n%s", unwanted, output.String())
 		}
 	}
 }

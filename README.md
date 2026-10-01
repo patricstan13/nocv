@@ -132,7 +132,11 @@ graph nodes. The result reports compatible, incompatible, and genuinely
 unknown call sites separately. It also reports existing concrete-type/interface
 contracts that the hypothetical parameter signature would cause to be lost. A
 lost implementation is a structural contract consequence; it does not by
-itself assert that the program will fail to compile.
+itself assert that the program will fail to compile. Parameter-change analysis
+also reports concrete types whose effective method surface changes because the
+selected method is promoted through concrete embedding. This structural fact
+does not itself imply a call-site incompatibility, lost interface contract, or
+compile failure.
 
 This first change-impact capability covers parameter types, counts, and
 variadic status only. It does not analyze result changes, receiver changes,

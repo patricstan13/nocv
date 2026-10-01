@@ -37,14 +37,41 @@ type GoTypeRef struct {
 	Symbol  graph.SymbolRef
 }
 
-// ParameterChangeImpact reports direct call-site compatibility and existing
-// implementation contracts lost by one hypothetical parameter signature.
+// ParameterChangeImpact reports direct call-site compatibility, existing
+// implementation contracts lost, and promoted method surfaces changed by one
+// hypothetical parameter signature.
 type ParameterChangeImpact struct {
-	Callable  graph.SymbolRef
-	Before    CallableSignature
-	After     CallableSignature
-	CallSites []CallSiteImpact
-	Contracts []ContractImpact
+	Callable   graph.SymbolRef
+	Before     CallableSignature
+	After      CallableSignature
+	CallSites  []CallSiteImpact
+	Contracts  []ContractImpact
+	Structural []StructuralImpact
+}
+
+// StructuralImpact describes a modeled type whose effective method surface is
+// changed because the selected concrete method is promoted through embedding.
+type StructuralImpact struct {
+	Kind         StructuralImpactKind
+	Type         SymbolSummary
+	OriginMethod SymbolSummary
+}
+
+// StructuralImpactKind identifies a deterministic structural consequence.
+type StructuralImpactKind uint8
+
+const (
+	StructuralImpactUnknown StructuralImpactKind = iota
+	StructuralPromotedMethodChanged
+)
+
+func (k StructuralImpactKind) String() string {
+	switch k {
+	case StructuralPromotedMethodChanged:
+		return "promoted method changed"
+	default:
+		return "unknown structural impact"
+	}
 }
 
 // ContractImpact describes one existing concrete-type/interface contract that

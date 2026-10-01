@@ -64,6 +64,7 @@ func (a *Analysis) AnalyzeParameterChange(callable graph.SymbolRef, proposed que
 		result.CallSites = append(result.CallSites, a.checkCallSite(site, after))
 	}
 	result.Contracts = a.contractImpacts(resolved, after)
+	result.Structural = a.structuralImpacts(resolved, after)
 	sort.Slice(result.CallSites, func(i, j int) bool {
 		left, right := result.CallSites[i], result.CallSites[j]
 		if left.Caller.Ref != right.Caller.Ref {
@@ -132,6 +133,35 @@ func (a *Analysis) extractSignature(signature *types.Signature) resolvedSignatur
 		})
 	}
 	return result
+}
+
+func signatureWithParameters(
+	original *types.Signature,
+	receiver *types.Var,
+	proposed resolvedSignature,
+) *types.Signature {
+	parameters := make([]*types.Var, 0, len(proposed.types))
+	for index, typ := range proposed.types {
+		if proposed.model.Variadic && index == len(proposed.types)-1 {
+			typ = types.NewSlice(typ)
+		}
+		name := ""
+		var pkg *types.Package
+		if index < original.Params().Len() {
+			parameter := original.Params().At(index)
+			name = parameter.Name()
+			pkg = parameter.Pkg()
+		}
+		parameters = append(parameters, types.NewVar(token.NoPos, pkg, name, typ))
+	}
+	return types.NewSignatureType(
+		receiver,
+		nil,
+		nil,
+		types.NewTuple(parameters...),
+		original.Results(),
+		proposed.model.Variadic,
+	)
 }
 
 func (a *Analysis) resolveProposedSignature(callable resolvedCallable, proposed query.ProposedSignature, before query.CallableSignature) (resolvedSignature, error) {

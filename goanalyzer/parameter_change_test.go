@@ -229,6 +229,70 @@ func TestAnalyzeParameterChangePointerReceiverAndNoContractCandidates(t *testing
 	}
 }
 
+func TestAnalyzeParameterChangeDirectRecursiveAndShadowedPromotion(t *testing.T) {
+	analysis := loadImpactAnalysis(t)
+	result := analyze(t, analysis, impactPackage+"::PromotionBase::Change", signature("string"))
+
+	want := []graph.SymbolRef{
+		impactPackage + "::PromotionOuter",
+		impactPackage + "::PromotionWrapper",
+	}
+	if got := structuralTypes(result.Structural); !slices.Equal(got, want) {
+		t.Fatalf("structurally impacted types = %v, want %v", got, want)
+	}
+	if _, exists := analysis.Graph().NodeByRef(impactPackage + "::PromotionWrapper::Change"); exists {
+		t.Fatal("promoted method was incorrectly materialized as a graph node")
+	}
+	for _, impact := range result.Structural {
+		if impact.Kind != query.StructuralPromotedMethodChanged {
+			t.Errorf("structural kind = %v", impact.Kind)
+		}
+		if impact.OriginMethod.Ref != impactPackage+"::PromotionBase::Change" {
+			t.Errorf("origin method = %+v", impact.OriginMethod)
+		}
+	}
+	for _, excluded := range []graph.SymbolRef{
+		impactPackage + "::PromotionShadow",
+		impactPackage + "::PromotionAmbiguous",
+	} {
+		if slices.Contains(structuralTypes(result.Structural), excluded) {
+			t.Errorf("shadowed or ambiguous type %s was reported", excluded)
+		}
+	}
+
+	unchanged := analyze(t, analysis, impactPackage+"::PromotionBase::Change", signature("ID"))
+	if len(unchanged.Structural) != 0 {
+		t.Fatalf("unchanged signature structural impacts = %+v", unchanged.Structural)
+	}
+}
+
+func TestAnalyzeParameterChangePointerAndVariadicPromotion(t *testing.T) {
+	analysis := loadImpactAnalysis(t)
+	pointer := analyze(t, analysis, impactPackage+"::PointerBase::Touch", signature("string"))
+	wantPointer := []graph.SymbolRef{impactPackage + "::PointerEmbed"}
+	if got := structuralTypes(pointer.Structural); !slices.Equal(got, wantPointer) {
+		t.Fatalf("pointer promotion types = %v, want %v", got, wantPointer)
+	}
+
+	variadic := analyze(t, analysis, impactPackage+"::VariadicBase::Collect", signature("[]string"))
+	wantVariadic := []graph.SymbolRef{impactPackage + "::VariadicEmbed"}
+	if got := structuralTypes(variadic.Structural); !slices.Equal(got, wantVariadic) {
+		t.Fatalf("variadic promotion types = %v, want %v", got, wantVariadic)
+	}
+}
+
+func TestAnalyzeParameterChangeStructuralImpactExcludesFunctionsAndInterfaces(t *testing.T) {
+	analysis := loadImpactAnalysis(t)
+	ordinary := analyze(t, analysis, impactPackage+"::UseID", signature("string"))
+	if len(ordinary.Structural) != 0 {
+		t.Fatalf("package function structural impacts = %+v", ordinary.Structural)
+	}
+	iface := analyze(t, analysis, impactPackage+"::Store::Save", signature("string"))
+	if len(iface.Structural) != 0 {
+		t.Fatalf("interface method structural impacts = %+v", iface.Structural)
+	}
+}
+
 func TestAnalyzeParameterChangeValidationErrors(t *testing.T) {
 	analysis := loadImpactAnalysis(t)
 	tests := []struct {
@@ -305,6 +369,14 @@ func contractInterfaces(impacts []query.ContractImpact) []graph.SymbolRef {
 	result := make([]graph.SymbolRef, 0, len(impacts))
 	for _, impact := range impacts {
 		result = append(result, impact.Interface.Ref)
+	}
+	return result
+}
+
+func structuralTypes(impacts []query.StructuralImpact) []graph.SymbolRef {
+	result := make([]graph.SymbolRef, 0, len(impacts))
+	for _, impact := range impacts {
+		result = append(result, impact.Type.Ref)
 	}
 	return result
 }

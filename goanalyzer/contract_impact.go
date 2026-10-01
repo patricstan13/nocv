@@ -206,35 +206,6 @@ func receiverlessMethod(method *types.Func) *types.Func {
 	return types.NewFunc(method.Pos(), method.Pkg(), method.Name(), signature)
 }
 
-func signatureWithParameters(
-	original *types.Signature,
-	receiver *types.Var,
-	proposed resolvedSignature,
-) *types.Signature {
-	parameters := make([]*types.Var, 0, len(proposed.types))
-	for index, typ := range proposed.types {
-		if proposed.model.Variadic && index == len(proposed.types)-1 {
-			typ = types.NewSlice(typ)
-		}
-		name := ""
-		var pkg *types.Package
-		if index < original.Params().Len() {
-			parameter := original.Params().At(index)
-			name = parameter.Name()
-			pkg = parameter.Pkg()
-		}
-		parameters = append(parameters, types.NewVar(token.NoPos, pkg, name, typ))
-	}
-	return types.NewSignatureType(
-		receiver,
-		nil,
-		nil,
-		types.NewTuple(parameters...),
-		original.Results(),
-		proposed.model.Variadic,
-	)
-}
-
 func (a *Analysis) symbolSummaryForObject(object types.Object) query.SymbolSummary {
 	id, represented := a.symbols.objects[object]
 	if !represented {

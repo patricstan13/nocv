@@ -55,17 +55,33 @@ func printParameterChangeImpact(out io.Writer, analysis *goanalyzer.Analysis, va
 	fmt.Fprintln(out, "\nCONTRACT IMPACT")
 	if len(impact.Contracts) == 0 {
 		fmt.Fprintln(out, "  (none)")
+	} else {
+		fmt.Fprintln(out, "\nLOST IMPLEMENTATION")
+		for _, contract := range impact.Contracts {
+			fmt.Fprintf(out, "  %s no longer implements %s\n", contract.Concrete.Name, contract.Interface.Name)
+			if contract.ConcreteMethod.Ref != "" {
+				fmt.Fprintf(out, "    %s\n", methodDisplay(contract.ConcreteMethod))
+			}
+			if contract.InterfaceMethod.Ref != "" {
+				fmt.Fprintf(out, "    %s\n", methodDisplay(contract.InterfaceMethod))
+			}
+		}
+	}
+
+	fmt.Fprintln(out, "\nSTRUCTURAL IMPACT")
+	if len(impact.Structural) == 0 {
+		fmt.Fprintln(out, "  (none)")
 		return nil
 	}
-	fmt.Fprintln(out, "\nLOST IMPLEMENTATION")
-	for _, contract := range impact.Contracts {
-		fmt.Fprintf(out, "  %s no longer implements %s\n", contract.Concrete.Name, contract.Interface.Name)
-		if contract.ConcreteMethod.Ref != "" {
-			fmt.Fprintf(out, "    %s\n", methodDisplay(contract.ConcreteMethod))
-		}
-		if contract.InterfaceMethod.Ref != "" {
-			fmt.Fprintf(out, "    %s\n", methodDisplay(contract.InterfaceMethod))
-		}
+	fmt.Fprintln(out, "\nPROMOTED METHOD CHANGED")
+	for _, structural := range impact.Structural {
+		fmt.Fprintf(
+			out,
+			"  %s exposes %s from %s\n",
+			structural.Type.Name,
+			structural.OriginMethod.Name,
+			methodDisplay(structural.OriginMethod),
+		)
 	}
 	return nil
 }

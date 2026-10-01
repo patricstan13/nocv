@@ -48,6 +48,53 @@ type StringStore struct{}
 
 func (StringStore) Save(value string) {}
 
+type PromotionBase struct{}
+
+func (PromotionBase) Change(id ID) {}
+
+type PromotionWrapper struct {
+	PromotionBase
+}
+
+type PromotionOuter struct {
+	PromotionWrapper
+}
+
+type PromotionShadow struct {
+	PromotionBase
+}
+
+func (PromotionShadow) Change(id ID) {}
+
+type PromotionRival struct{}
+
+func (PromotionRival) Change(id ID) {}
+
+type PromotionAmbiguous struct {
+	PromotionBase
+	PromotionRival
+}
+
+type PointerBase struct{}
+
+func (*PointerBase) Touch(id ID) {}
+
+type ValueEmbed struct {
+	PointerBase
+}
+
+type PointerEmbed struct {
+	*PointerBase
+}
+
+type VariadicBase struct{}
+
+func (VariadicBase) Collect(values ...string) {}
+
+type VariadicEmbed struct {
+	VariadicBase
+}
+
 func UseID(id ID) {}
 
 func UseString(value string) {}
