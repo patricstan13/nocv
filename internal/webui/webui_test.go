@@ -1,16 +1,19 @@
 package webui
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
+	"nocv/goanalyzer"
 	"nocv/graph"
 )
 
@@ -124,7 +127,8 @@ func TestClientRendersNavigableSymbolInspectors(t *testing.T) {
 		`nonEmptySection("Methods", detail.methods, symbolItem)`,
 		`button.addEventListener("click", () => inspectSymbol(ref))`,
 		`const method = result.node.parentKind === "struct" || result.node.parentKind === "interface"`,
-		`const heading = method ? result.node.parentName + "." + result.node.name : result.node.name`,
+		`function callableHeading(result)`,
+		`return method ? result.node.parentName + "." + result.node.name : result.node.name`,
 		`parts.push(element("h3", "Owner"))`,
 		`ref: result.node.parent`,
 		`name: result.node.parentName`,
@@ -336,6 +340,79 @@ func TestClientProvidesContextualTypeDrilldown(t *testing.T) {
 	}
 }
 
+func TestClientProvidesParameterChangeWorkflow(t *testing.T) {
+	client := readAsset(t, "static/app.js")
+	for _, required := range []string{
+		`let inspectorState = { kind: "symbol", inspection: null, proposal: null, result: null }`,
+		`renderWorkflowButton("Analyze parameter change"`,
+		`result.function.signature.parameters.map((parameter) => parameter.type.display)`,
+		`"+ Add parameter"`,
+		`"Remove parameter " + (index + 1)`,
+		`"Final parameter is variadic"`,
+		`renderWorkflowButton("Analyze"`,
+		`renderWorkflowButton("Cancel"`,
+		`postJSON("/api/parameter-impact"`,
+		`callable: state.inspection.node.id`,
+		`parameters: parameters.map((type) => ({ type }))`,
+		`variadic: state.proposal.variadic`,
+		`renderWorkflowButton("Edit proposed parameters"`,
+		`renderWorkflowButton("Back to " + callableKind(state.inspection)`,
+	} {
+		if !strings.Contains(client, required) {
+			t.Errorf("parameter-change workflow source lacks %q", required)
+		}
+	}
+	if strings.Count(client, `renderWorkflowButton("Analyze parameter change"`) != 1 {
+		t.Error("parameter-change action must be defined only by the function/method inspector")
+	}
+}
+
+func TestClientRendersParameterImpactReadModel(t *testing.T) {
+	client := readAsset(t, "static/app.js")
+	for _, required := range []string{
+		`element("h3", "Call-site impact")`,
+		`site.compatibility === "incompatible"`,
+		`site.compatibility === "compatible"`,
+		`site.compatibility === "unknown"`,
+		`"Show compatible call sites (" + compatible.length + ")"`,
+		`renderSymbolButton(site.caller)`,
+		`element("h3", "Contract impact")`,
+		`renderSymbolButton(contract.concrete)`,
+		`renderSymbolButton(contract.interface)`,
+		`element("h3", "Structural impact")`,
+		`structural.exposure === "pointer only"`,
+		`name: "*" + structural.type.name`,
+		`renderSymbolButton(structural.originMethod)`,
+	} {
+		if !strings.Contains(client, required) {
+			t.Errorf("parameter-impact rendering source lacks %q", required)
+		}
+	}
+}
+
+func TestClientGuardsParameterImpactRequestsAgainstStaleResults(t *testing.T) {
+	client := readAsset(t, "static/app.js")
+	start := strings.Index(client, "async function requestParameterImpact(state)")
+	end := strings.Index(client[start:], "function renderCallSiteProblem")
+	if start < 0 || end < 0 {
+		t.Fatal("requestParameterImpact helper is missing")
+	}
+	requestSource := client[start : start+end]
+	for _, required := range []string{
+		`const generation = ++inspectorRequestGeneration`,
+		`if (generation !== inspectorRequestGeneration) return`,
+		`renderParameterImpact({ ...state, kind: "parameter-result", result })`,
+		`renderParameterChangeEditor(state, error.message)`,
+	} {
+		if !strings.Contains(requestSource, required) {
+			t.Errorf("parameter-impact stale guard lacks %q", required)
+		}
+	}
+	if strings.Count(requestSource, `if (generation !== inspectorRequestGeneration) return`) != 2 {
+		t.Error("parameter-impact success and error paths must both reject stale responses")
+	}
+}
+
 func readAsset(t *testing.T, name string) string {
 	t.Helper()
 	contents, err := fs.ReadFile(assets, name)
@@ -346,7 +423,7 @@ func readAsset(t *testing.T, name string) string {
 }
 
 func TestHandlerServesEmbeddedInterfaceAndAssets(t *testing.T) {
-	handler := Handler(webFixture(t))
+	handler := graphHandler(webFixture(t))
 
 	tests := []struct {
 		path        string
@@ -379,7 +456,7 @@ func TestHandlerServesEmbeddedInterfaceAndAssets(t *testing.T) {
 }
 
 func TestPackagesAPIIsDeterministicAndExcludesImports(t *testing.T) {
-	handler := Handler(webFixture(t))
+	handler := graphHandler(webFixture(t))
 	first := request(t, handler, http.MethodGet, "/api/packages")
 	second := request(t, handler, http.MethodGet, "/api/packages")
 	if first.Code != http.StatusOK {
@@ -423,7 +500,7 @@ func TestPackagesAPIPreservesRefsForDuplicateLabels(t *testing.T) {
 		}
 	}
 
-	response := request(t, Handler(g), http.MethodGet, "/api/packages")
+	response := request(t, graphHandler(g), http.MethodGet, "/api/packages")
 	var result packageGraph
 	decode(t, response, &result)
 	want := []packageNode{
@@ -436,7 +513,7 @@ func TestPackagesAPIPreservesRefsForDuplicateLabels(t *testing.T) {
 }
 
 func TestNodeAPIUsesInspectNodePresentation(t *testing.T) {
-	handler := Handler(webFixture(t))
+	handler := graphHandler(webFixture(t))
 	response := request(t, handler, http.MethodGet, "/api/node?id=example.com%2Fapp")
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
@@ -461,7 +538,7 @@ func TestNodeAPIUsesInspectNodePresentation(t *testing.T) {
 }
 
 func TestNodeAPIPreservesDependencyDirectionForRelationshipNavigation(t *testing.T) {
-	response := request(t, Handler(webFixture(t)), http.MethodGet, "/api/node?id=example.com%2Fservice")
+	response := request(t, graphHandler(webFixture(t)), http.MethodGet, "/api/node?id=example.com%2Fservice")
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
@@ -484,7 +561,7 @@ func TestNodeAPIPreservesDependencyDirectionForRelationshipNavigation(t *testing
 }
 
 func TestNodeAPISerializesSymbolCentricTypeAndFunctionInspection(t *testing.T) {
-	handler := Handler(webFixture(t))
+	handler := graphHandler(webFixture(t))
 
 	typeResponse := request(t, handler, http.MethodGet, "/api/node?id=example.com%2Fservice%3A%3AService")
 	if typeResponse.Code != http.StatusOK {
@@ -536,8 +613,132 @@ func TestNodeAPISerializesSymbolCentricTypeAndFunctionInspection(t *testing.T) {
 	}
 }
 
+func TestAnalysisBackedNodeAPIIncludesCallableSignature(t *testing.T) {
+	analysis := parameterImpactAnalysis(t)
+	handler := Handler(analysis)
+
+	response := request(t, handler, http.MethodGet, "/api/node?id=example.com%2Fparameterimpact%3A%3AVariadic")
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var result nodeInspection
+	decode(t, response, &result)
+	if result.Function == nil || result.Function.Signature == nil {
+		t.Fatalf("function signature is missing: %#v", result.Function)
+	}
+	signature := result.Function.Signature
+	if !signature.Variadic || len(signature.Parameters) != 1 || signature.Parameters[0].Type.Display != "string" {
+		t.Fatalf("signature = %#v, want variadic string", signature)
+	}
+
+	qualified := request(t, handler, http.MethodGet, "/api/node?id=example.com%2Fparameterimpact%3A%3ACallsMethod")
+	var qualifiedResult nodeInspection
+	decode(t, qualified, &qualifiedResult)
+	if qualified.Code != http.StatusOK || qualifiedResult.Function == nil || qualifiedResult.Function.Signature == nil {
+		t.Fatalf("qualified signature response = status %d, result %#v", qualified.Code, qualifiedResult)
+	}
+	parameters := qualifiedResult.Function.Signature.Parameters
+	if len(parameters) != 2 || parameters[0].Type.Display != "Service" || parameters[1].Type.Display != "ID" {
+		t.Fatalf("editable qualified signature = %#v, want package-local Go expressions", parameters)
+	}
+
+	interfaceMethod := request(t, handler, http.MethodGet, "/api/node?id=example.com%2Fparameterimpact%3A%3AStore%3A%3ASave")
+	var interfaceResult nodeInspection
+	decode(t, interfaceMethod, &interfaceResult)
+	if interfaceMethod.Code != http.StatusOK || interfaceResult.Function == nil || interfaceResult.Function.Signature == nil {
+		t.Fatalf("interface method lacks callable signature: status %d, result %#v", interfaceMethod.Code, interfaceResult)
+	}
+}
+
+func TestParameterImpactAPIUsesAnalysisReadModel(t *testing.T) {
+	analysis := parameterImpactAnalysis(t)
+	handler := Handler(analysis)
+
+	tests := []struct {
+		name       string
+		body       string
+		assertions func(*testing.T, parameterImpact)
+	}{
+		{
+			name: "call sites and contracts",
+			body: `{"callable":"example.com/parameterimpact::Service::Save","parameters":[{"type":"string"}],"variadic":false}`,
+			assertions: func(t *testing.T, result parameterImpact) {
+				if len(result.CallSites) == 0 || len(result.Contracts) == 0 {
+					t.Fatalf("impact lacks call sites or contracts: %#v", result)
+				}
+				if result.CallSites[0].Compatibility == "" || result.Contracts[0].Kind != "lost implementation" {
+					t.Fatalf("impact presentation = %#v", result)
+				}
+			},
+		},
+		{
+			name: "structural exposure",
+			body: `{"callable":"example.com/parameterimpact::PromotionBase::Change","parameters":[{"type":"string"}]}`,
+			assertions: func(t *testing.T, result parameterImpact) {
+				if len(result.Structural) == 0 {
+					t.Fatalf("impact lacks structural consequences: %#v", result)
+				}
+				if result.Structural[0].Exposure == "" || result.Structural[0].OriginMethod.Ref == "" {
+					t.Fatalf("structural presentation = %#v", result.Structural)
+				}
+			},
+		},
+		{
+			name: "variadic",
+			body: `{"callable":"example.com/parameterimpact::Variadic","parameters":[{"type":"string"}],"variadic":true}`,
+			assertions: func(t *testing.T, result parameterImpact) {
+				if !result.After.Variadic || len(result.CallSites) == 0 {
+					t.Fatalf("variadic impact = %#v", result)
+				}
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			response := requestBody(t, handler, http.MethodPost, "/api/parameter-impact", test.body)
+			if response.Code != http.StatusOK {
+				t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+			}
+			var result parameterImpact
+			decode(t, response, &result)
+			test.assertions(t, result)
+		})
+	}
+}
+
+func TestParameterImpactAPIErrorsAreConcise(t *testing.T) {
+	handler := Handler(parameterImpactAnalysis(t))
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "invalid symbol", body: `{"callable":"example.com/parameterimpact::Missing","parameters":[]}`, want: "unknown symbol"},
+		{name: "invalid type", body: `{"callable":"example.com/parameterimpact::UseID","parameters":[{"type":"DoesNotExist"}]}`, want: "resolve proposed parameter 1 type"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			response := requestBody(t, handler, http.MethodPost, "/api/parameter-impact", test.body)
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400; body = %s", response.Code, response.Body.String())
+			}
+			var result map[string]string
+			decode(t, response, &result)
+			if !strings.Contains(result["error"], test.want) {
+				t.Fatalf("error = %q, want containing %q", result["error"], test.want)
+			}
+		})
+	}
+
+	wrongMethod := request(t, handler, http.MethodGet, "/api/parameter-impact")
+	if wrongMethod.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET status = %d, want 405", wrongMethod.Code)
+	}
+}
+
 func TestDependencyAPISeparatesTypeAndExactOnlyEvidence(t *testing.T) {
-	handler := Handler(webFixture(t))
+	handler := graphHandler(webFixture(t))
 
 	typeBacked := request(t, handler, http.MethodGet, "/api/package-dependency?from=example.com%2Fservice&to=example.com%2Frepository")
 	if typeBacked.Code != http.StatusOK {
@@ -562,7 +763,7 @@ func TestDependencyAPISeparatesTypeAndExactOnlyEvidence(t *testing.T) {
 }
 
 func TestAPIErrorsAreSmallJSONResponses(t *testing.T) {
-	handler := Handler(webFixture(t))
+	handler := graphHandler(webFixture(t))
 	tests := []struct {
 		method string
 		path   string
@@ -602,9 +803,24 @@ func TestAPIErrorsAreSmallJSONResponses(t *testing.T) {
 
 func request(t *testing.T, handler http.Handler, method, path string) *httptest.ResponseRecorder {
 	t.Helper()
+	return requestBody(t, handler, method, path, "")
+}
+
+func requestBody(t *testing.T, handler http.Handler, method, path, body string) *httptest.ResponseRecorder {
+	t.Helper()
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(method, path, nil))
+	handler.ServeHTTP(response, httptest.NewRequest(method, path, strings.NewReader(body)))
 	return response
+}
+
+func parameterImpactAnalysis(t *testing.T) *goanalyzer.Analysis {
+	t.Helper()
+	dir := filepath.Join("..", "..", "goanalyzer", "testdata", "parameterimpact")
+	analysis, err := goanalyzer.LoadAnalysis(context.Background(), dir, "./...")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return analysis
 }
 
 func decode(t *testing.T, response *httptest.ResponseRecorder, target any) {

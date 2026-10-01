@@ -37,6 +37,41 @@ type actualArgument struct {
 	typeAndValue types.TypeAndValue
 }
 
+// CallableSignature returns the compiler-extracted parameter signature for a
+// modeled function or method without exposing compiler objects. Its type
+// displays use declaration-context package qualifiers so they can be submitted
+// again as proposed Go type expressions.
+func (a *Analysis) CallableSignature(callable graph.SymbolRef) (query.CallableSignature, error) {
+	resolved, err := a.resolveCallable(callable)
+	if err != nil {
+		return query.CallableSignature{}, err
+	}
+	return a.editableSignature(resolved), nil
+}
+
+func (a *Analysis) editableSignature(callable resolvedCallable) query.CallableSignature {
+	signature := callable.signature
+	result := query.CallableSignature{Variadic: signature.Variadic()}
+	for index := 0; index < signature.Params().Len(); index++ {
+		variable := signature.Params().At(index)
+		typ := variable.Type()
+		if signature.Variadic() && index == signature.Params().Len()-1 {
+			if slice, ok := types.Unalias(typ).(*types.Slice); ok {
+				typ = slice.Elem()
+			}
+		}
+		typeRef := a.goTypeRef(typ)
+		typeRef.Display = types.TypeString(typ, func(pkg *types.Package) string {
+			if pkg == callable.pkg.Types {
+				return ""
+			}
+			return pkg.Name()
+		})
+		result.Parameters = append(result.Parameters, query.Parameter{Name: variable.Name(), Type: typeRef})
+	}
+	return result
+}
+
 // AnalyzeParameterChange evaluates every known direct source call to callable
 // against a hypothetical parameter signature. Proposed Go type expressions are
 // resolved by go/types in the callable declaration file's lexical context.

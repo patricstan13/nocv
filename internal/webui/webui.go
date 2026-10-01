@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"net/http"
 
+	"nocv/goanalyzer"
 	"nocv/graph"
 	"nocv/query"
 )
@@ -78,6 +79,7 @@ type functionInspection struct {
 	Returns       []symbolRelationship `json:"returns"`
 	Implements    []symbolRelationship `json:"implements"`
 	ImplementedBy []symbolRelationship `json:"implementedBy"`
+	Signature     *callableSignature   `json:"signature,omitempty"`
 }
 
 type symbolSummary struct {
@@ -120,9 +122,22 @@ type dependencyInspection struct {
 	ExactOnly        []relationship    `json:"exactOnly"`
 }
 
-// Handler returns a self-contained HTTP handler over the supplied immutable
-// graph. The handler does not mutate or reload the graph.
-func Handler(g *graph.Graph) http.Handler {
+// Handler returns a self-contained HTTP handler over one retained Go analysis.
+// Compiler state remains private to goanalyzer; HTTP responses contain only
+// detached read models.
+func Handler(analysis *goanalyzer.Analysis) http.Handler {
+	var g *graph.Graph
+	if analysis != nil {
+		g = analysis.Graph()
+	}
+	return handler(analysis, g)
+}
+
+func graphHandler(g *graph.Graph) http.Handler {
+	return handler(nil, g)
+}
+
+func handler(analysis *goanalyzer.Analysis, g *graph.Graph) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/packages", getOnly(func(w http.ResponseWriter, _ *http.Request) {
 		if g == nil {
@@ -156,7 +171,16 @@ func Handler(g *graph.Graph) http.Handler {
 			writeError(w, http.StatusNotFound, "node not found")
 			return
 		}
-		writeJSON(w, http.StatusOK, presentNodeInspection(g, inspection))
+		var signature *query.CallableSignature
+		if inspection.Function != nil && analysis != nil {
+			current, err := analysis.CallableSignature(id)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			signature = &current
+		}
+		writeJSON(w, http.StatusOK, presentNodeInspection(g, inspection, signature))
 	}))
 	mux.HandleFunc("/api/package-dependency", getOnly(func(w http.ResponseWriter, r *http.Request) {
 		from := graph.SymbolRef(r.URL.Query().Get("from"))
@@ -178,6 +202,9 @@ func Handler(g *graph.Graph) http.Handler {
 			return
 		}
 		writeJSON(w, http.StatusOK, presentDependencyInspection(query.InspectPackageDependency(g, *direct)))
+	}))
+	mux.HandleFunc("/api/parameter-impact", postOnly(func(w http.ResponseWriter, r *http.Request) {
+		handleParameterImpact(w, r, analysis)
 	}))
 
 	staticFS, err := fs.Sub(assets, "static")
@@ -211,11 +238,21 @@ func getOnly(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+func postOnly(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		next(w, r)
+	}
+}
+
 func edgeID(from, to graph.SymbolRef) string {
 	return fmt.Sprintf("%d:%s>%d:%s", len(from), from, len(to), to)
 }
 
-func presentNodeInspection(g *graph.Graph, source query.NodeInspection) nodeInspection {
+func presentNodeInspection(g *graph.Graph, source query.NodeInspection, signature *query.CallableSignature) nodeInspection {
 	result := nodeInspection{Node: presentNode(g, source.Node)}
 	if source.Package != nil {
 		result.Package = &packageInspection{
@@ -244,6 +281,10 @@ func presentNodeInspection(g *graph.Graph, source query.NodeInspection) nodeInsp
 			Returns:       presentSymbolRelationships(source.Function.Returns),
 			Implements:    presentSymbolRelationships(source.Function.Implements),
 			ImplementedBy: presentSymbolRelationships(source.Function.ImplementedBy),
+		}
+		if signature != nil {
+			presented := presentCallableSignature(*signature)
+			result.Function.Signature = &presented
 		}
 	}
 	return result

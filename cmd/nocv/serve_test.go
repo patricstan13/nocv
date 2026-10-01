@@ -2,12 +2,14 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"net"
+	"path/filepath"
 	"strings"
 	"testing"
 
-	"nocv/graph"
+	"nocv/goanalyzer"
 )
 
 func TestListenForExplorerUsesLoopbackAndEphemeralPort(t *testing.T) {
@@ -29,10 +31,18 @@ func TestListenForExplorerUsesLoopbackAndEphemeralPort(t *testing.T) {
 	}
 }
 
-func TestServeListenerPrintsURLAndEntersHTTPServer(t *testing.T) {
+func TestServeListenerRetainsAnalysisAndEntersHTTPServer(t *testing.T) {
+	analysis, err := goanalyzer.LoadAnalysis(
+		context.Background(),
+		filepath.Join("..", "..", "goanalyzer", "testdata", "parameterimpact"),
+		"./...",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
 	listener := &stoppedListener{address: &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 43123}}
 	var output bytes.Buffer
-	err := serveListener(&output, graph.New(), listener)
+	err = serveListener(&output, analysis, listener)
 	if err == nil || !strings.Contains(err.Error(), "test listener stopped") {
 		t.Fatalf("serveListener() error = %v", err)
 	}

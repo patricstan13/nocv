@@ -19,6 +19,7 @@
   let packageLabels = new Map();
   let packageDependencyOriginRef = null;
   let inspectorRequestGeneration = 0;
+  let inspectorState = { kind: "symbol", inspection: null, proposal: null, result: null };
 
   function element(tag, text, className) {
     const item = document.createElement(tag);
@@ -29,6 +30,22 @@
 
   async function getJSON(url) {
     const response = await fetch(url, { headers: { Accept: "application/json" } });
+    let body;
+    try {
+      body = await response.json();
+    } catch (_) {
+      throw new Error("The server returned an unreadable response.");
+    }
+    if (!response.ok) throw new Error(body.error || "Request failed.");
+    return body;
+  }
+
+  async function postJSON(url, payload) {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
     let body;
     try {
       body = await response.json();
@@ -578,15 +595,278 @@
     replaceInspector(parts);
   }
 
+  function callableHeading(result) {
+    const method = result.node.parentKind === "struct" || result.node.parentKind === "interface";
+    return method ? result.node.parentName + "." + result.node.name : result.node.name;
+  }
+
+  function callableKind(result) {
+    return result.node.parentKind === "struct" || result.node.parentKind === "interface" ? "method" : "function";
+  }
+
+  function formatCallableSignature(name, signature) {
+    const parameters = (signature.parameters || []).map((parameter, index) => {
+      const prefix = signature.variadic && index === signature.parameters.length - 1 ? "..." : "";
+      return prefix + parameter.type.display;
+    });
+    return name + "(" + parameters.join(", ") + ")";
+  }
+
+  function initialParameterProposal(result) {
+    return {
+      parameters: result.function.signature.parameters.map((parameter) => parameter.type.display),
+      variadic: result.function.signature.variadic,
+    };
+  }
+
+  function renderWorkflowButton(label, className, action) {
+    const button = element("button", label, className || "workflow-button");
+    button.type = "button";
+    button.addEventListener("click", action);
+    return button;
+  }
+
+  function beginParameterChange(result) {
+    invalidateInspectorRequests();
+    renderParameterChangeEditor({
+      kind: "parameter-edit",
+      inspection: result,
+      proposal: initialParameterProposal(result),
+      result: null,
+    });
+  }
+
+  function returnToCallableInspection(inspection) {
+    invalidateInspectorRequests();
+    renderFunctionInspection(inspection);
+  }
+
+  function renderParameterChangeEditor(state, message) {
+    inspectorState = state;
+    const heading = callableHeading(state.inspection);
+    const signature = state.inspection.function.signature;
+    const parts = [
+      element("p", "Parameter change", "eyebrow"),
+      element("h2", heading),
+      element("h3", "Current"),
+      element("p", formatCallableSignature(heading, signature), "signature-line"),
+      element("h3", "Proposed parameters"),
+    ];
+    if (message) parts.push(element("p", message, "error"));
+
+    const form = element("form", undefined, "parameter-editor");
+    state.proposal.parameters.forEach((typeExpression, index) => {
+      const row = element("div", undefined, "parameter-row");
+      const label = element("label", undefined, "visually-hidden");
+      label.htmlFor = "parameter-type-" + index;
+      label.textContent = "Parameter " + (index + 1) + " type";
+      const input = element("input", undefined, "parameter-input");
+      input.id = label.htmlFor;
+      input.type = "text";
+      input.value = typeExpression;
+      input.placeholder = "Go type expression";
+      input.addEventListener("input", () => { state.proposal.parameters[index] = input.value; });
+      const remove = renderWorkflowButton("×", "parameter-remove", () => {
+        state.proposal.parameters.splice(index, 1);
+        if (state.proposal.parameters.length === 0) state.proposal.variadic = false;
+        renderParameterChangeEditor(state);
+      });
+      remove.setAttribute("aria-label", "Remove parameter " + (index + 1));
+      row.append(label, input, remove);
+      form.appendChild(row);
+    });
+
+    const add = renderWorkflowButton("+ Add parameter", "workflow-button secondary", () => {
+      state.proposal.parameters.push("");
+      renderParameterChangeEditor(state);
+    });
+    add.setAttribute("aria-label", "Add parameter");
+    form.appendChild(add);
+
+    const variadicLabel = element("label", undefined, "variadic-control");
+    const variadic = element("input");
+    variadic.type = "checkbox";
+    variadic.checked = state.proposal.variadic;
+    variadic.disabled = state.proposal.parameters.length === 0;
+    variadic.setAttribute("aria-label", "Final parameter is variadic");
+    variadic.addEventListener("change", () => { state.proposal.variadic = variadic.checked; });
+    variadicLabel.append(variadic, document.createTextNode(" Final parameter is variadic"));
+    form.appendChild(variadicLabel);
+
+    const actions = element("div", undefined, "workflow-actions");
+    actions.append(
+      renderWorkflowButton("Analyze", "workflow-button primary", () => requestParameterImpact(state)),
+      renderWorkflowButton("Cancel", "workflow-button secondary", () => returnToCallableInspection(state.inspection)),
+    );
+    form.appendChild(actions);
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      requestParameterImpact(state);
+    });
+    parts.push(form);
+    replaceInspector(parts);
+  }
+
+  async function requestParameterImpact(state) {
+    const parameters = state.proposal.parameters.map((value) => value.trim());
+    if (parameters.some((value) => value === "")) {
+      renderParameterChangeEditor(state, "Every parameter needs a type expression.");
+      return;
+    }
+    if (state.proposal.variadic && parameters.length === 0) {
+      renderParameterChangeEditor(state, "A variadic signature needs at least one parameter.");
+      return;
+    }
+
+    const generation = ++inspectorRequestGeneration;
+    replaceInspector([
+      element("p", "Parameter change", "eyebrow"),
+      element("h2", callableHeading(state.inspection)),
+      element("p", "Analyzing…", "muted"),
+    ]);
+    try {
+      const result = await postJSON("/api/parameter-impact", {
+        callable: state.inspection.node.id,
+        parameters: parameters.map((type) => ({ type })),
+        variadic: state.proposal.variadic,
+      });
+      if (generation !== inspectorRequestGeneration) return;
+      renderParameterImpact({ ...state, kind: "parameter-result", result });
+    } catch (error) {
+      if (generation !== inspectorRequestGeneration) return;
+      renderParameterChangeEditor(state, error.message);
+    }
+  }
+
+  function renderCallSiteProblem(problem) {
+    if (problem.kind === "argument count") return "argument count: " + problem.actualCount + " → " + problem.expectedCount;
+    if (problem.kind === "argument type") return "argument " + problem.argument + ": " + problem.actual.display + " → " + problem.expected.display;
+    if (problem.kind === "variadic call") return "variadic argument compatibility changed";
+    return problem.argument ? "argument " + problem.argument + ": compatibility unknown" : "compatibility unknown";
+  }
+
+  function compactLocation(location) {
+    if (!location || !location.file) return "unknown location";
+    const components = location.file.split(/[\\/]/);
+    return components[components.length - 1] + (location.offset ? " @ " + location.offset : "");
+  }
+
+  function renderImpactCallSite(site) {
+    const item = element("li", undefined, "impact-row");
+    item.appendChild(renderSymbolButton(site.caller));
+    (site.problems || []).forEach((problem) => item.appendChild(element("span", renderCallSiteProblem(problem), "impact-detail")));
+    item.appendChild(element("span", compactLocation(site.location), "evidence"));
+    return item;
+  }
+
+  function impactList(title, values, render) {
+    const parts = [element("h4", title)];
+    const list = element("ul");
+    values.forEach((value) => list.appendChild(render(value)));
+    parts.push(list);
+    return parts;
+  }
+
+  function renderCallSiteImpact(result) {
+    const sites = result.callSites || [];
+    const incompatible = sites.filter((site) => site.compatibility === "incompatible");
+    const compatible = sites.filter((site) => site.compatibility === "compatible");
+    const unknown = sites.filter((site) => site.compatibility === "unknown");
+    const parts = [
+      element("h3", "Call-site impact"),
+      element("p", incompatible.length + " incompatible · " + compatible.length + " compatible · " + unknown.length + " unknown", "impact-summary"),
+    ];
+    if (incompatible.length > 0) parts.push(...impactList("Incompatible", incompatible, renderImpactCallSite));
+    if (unknown.length > 0) parts.push(...impactList("Unknown", unknown, renderImpactCallSite));
+    if (compatible.length > 0) {
+      const list = element("ul");
+      compatible.forEach((site) => list.appendChild(renderImpactCallSite(site)));
+      parts.push(disclosure("Show compatible call sites (" + compatible.length + ")", [list], "impact-disclosure"));
+    }
+    return parts;
+  }
+
+  function renderContractImpact(result) {
+    const contracts = result.contracts || [];
+    const parts = [element("h3", "Contract impact")];
+    if (contracts.length === 0) {
+      parts.push(element("p", "None", "muted"));
+      return parts;
+    }
+    parts.push(element("h4", "Lost implementation"));
+    const list = element("ul");
+    contracts.forEach((contract) => {
+      const item = element("li", undefined, "impact-row impact-sentence");
+      item.append(renderSymbolButton(contract.concrete), document.createTextNode(" no longer implements "), renderSymbolButton(contract.interface));
+      if (contract.concreteMethod.ref && contract.interfaceMethod.ref) {
+        const methods = element("div", undefined, "impact-methods");
+        methods.append(renderSymbolButton(contract.concreteMethod), document.createTextNode(" · "), renderSymbolButton(contract.interfaceMethod));
+        item.appendChild(methods);
+      }
+      list.appendChild(item);
+    });
+    parts.push(list);
+    return parts;
+  }
+
+  function renderStructuralImpact(result) {
+    const impacts = result.structural || [];
+    const parts = [element("h3", "Structural impact")];
+    if (impacts.length === 0) {
+      parts.push(element("p", "None", "muted"));
+      return parts;
+    }
+    parts.push(element("h4", "Promoted method changed"));
+    const list = element("ul");
+    impacts.forEach((structural) => {
+      const item = element("li", undefined, "impact-row impact-sentence");
+      const exposedType = structural.exposure === "pointer only" ? { ...structural.type, name: "*" + structural.type.name } : structural.type;
+      item.append(renderSymbolButton(exposedType), document.createTextNode(" exposes " + structural.originMethod.name + " from "), renderSymbolButton(structural.originMethod));
+      list.appendChild(item);
+    });
+    parts.push(list);
+    return parts;
+  }
+
+  function renderParameterImpact(state) {
+    inspectorState = state;
+    const heading = callableHeading(state.inspection);
+    const parts = [
+      element("p", "Proposed parameter change", "eyebrow"),
+      element("h2", heading),
+      element("h3", "Before"),
+      element("p", formatCallableSignature(heading, state.result.before), "signature-line"),
+      element("h3", "After"),
+      element("p", formatCallableSignature(heading, state.result.after), "signature-line"),
+    ];
+    parts.push(...renderCallSiteImpact(state.result));
+    parts.push(...renderContractImpact(state.result));
+    parts.push(...renderStructuralImpact(state.result));
+    const actions = element("div", undefined, "workflow-actions result-actions");
+    actions.append(
+      renderWorkflowButton("Edit proposed parameters", "workflow-button primary", () => {
+        invalidateInspectorRequests();
+        renderParameterChangeEditor({ ...state, kind: "parameter-edit" });
+      }),
+      renderWorkflowButton("Back to " + callableKind(state.inspection), "workflow-button secondary", () => returnToCallableInspection(state.inspection)),
+    );
+    parts.push(actions);
+    replaceInspector(parts);
+  }
+
   function renderFunctionInspection(result) {
     const detail = result.function;
     const method = result.node.parentKind === "struct" || result.node.parentKind === "interface";
-    const heading = method ? result.node.parentName + "." + result.node.name : result.node.name;
+    const heading = callableHeading(result);
+    inspectorState = { kind: "symbol", inspection: result, proposal: null, result: null };
     const parts = [
       element("p", method ? "Method" : "Function", "eyebrow"),
       element("h2", heading),
       element("p", result.node.id, "symbol identity-line"),
     ];
+    if (detail.signature) {
+      parts.push(renderWorkflowButton("Analyze parameter change", "workflow-button impact-action", () => beginParameterChange(result)));
+    }
     if (method) {
       const owner = {
         ref: result.node.parent,

@@ -78,6 +78,10 @@ Type and function inspectors expose related symbols directly. Methods, call
 targets, accepted and returned types, callers, owners, and implementation
 relationships can be followed without leaving the inspector. Evidence
 locations remain available as collapsed supporting detail.
+Function and method inspectors can also evaluate a hypothetical parameter-list
+change and show direct call-site compatibility, lost interface contracts, and
+promoted-method structural consequences. This workflow is analysis-only and
+supports parameter changes only.
 
 The graph model is language-independent. Go syntax trees are used only inside
 `goanalyzer` and are converted into graph nodes and semantic edges before being
@@ -141,9 +145,8 @@ itself from methods visible only on `*T`.
 
 This first change-impact capability covers parameter types, counts, and
 variadic status only. It does not analyze result changes, receiver changes,
-embedding or promoted-method structural effects, transitive architectural
-impact, or source edits. Contract analysis is limited to existing
-implementations and does not report newly gained contracts.
+transitive architectural impact, or source edits. Contract analysis is limited
+to existing implementations and does not report newly gained contracts.
 
 Imports are stored direct package-level Go dependencies when both packages are
 represented in the loaded graph. They are distinct from NOCV semantic

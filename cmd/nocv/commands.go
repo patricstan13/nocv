@@ -72,7 +72,10 @@ func executeCommand(out io.Writer, g *graph.Graph, invocation invocation) error 
 func executeCommandWithAnalysis(out io.Writer, g *graph.Graph, analysis *goanalyzer.Analysis, invocation invocation) error {
 	switch invocation.name {
 	case "serve":
-		return serve(out, g)
+		if analysis == nil {
+			return fmt.Errorf("Go analysis is unavailable for serve")
+		}
+		return serve(out, analysis)
 	case "tree":
 		printTree(out, g)
 	case "calls":
