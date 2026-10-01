@@ -29,7 +29,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "Analyzing project...")
 		analysisStart = time.Now()
 	}
-	g, err := load(invocation.pattern)
+	analysis, err := loadAnalysis(invocation.pattern)
 	if invocation.name == "serve" {
 		fmt.Fprintf(stdout, "Analysis total: %s\n", time.Since(analysisStart).Round(time.Millisecond))
 	}
@@ -37,7 +37,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "nocv:", err)
 		return 1
 	}
-	if err := executeCommand(stdout, g, invocation); err != nil {
+	if err := executeCommandWithAnalysis(stdout, analysis.Graph(), analysis, invocation); err != nil {
 		fmt.Fprintln(stderr, "nocv:", err)
 		return 1
 	}
@@ -45,8 +45,16 @@ func run(args []string, stdout, stderr io.Writer) int {
 }
 
 func load(pattern string) (*graph.Graph, error) {
+	analysis, err := loadAnalysis(pattern)
+	if err != nil {
+		return nil, err
+	}
+	return analysis.Graph(), nil
+}
+
+func loadAnalysis(pattern string) (*goanalyzer.Analysis, error) {
 	dir, loadPattern := localModulePattern(pattern)
-	return goanalyzer.Load(context.Background(), dir, loadPattern)
+	return goanalyzer.LoadAnalysis(context.Background(), dir, loadPattern)
 }
 
 func localModulePattern(pattern string) (string, string) {

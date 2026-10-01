@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 
+	"nocv/goanalyzer"
 	"nocv/graph"
 	"nocv/query"
 )
@@ -29,6 +30,7 @@ var commandSpecs = map[string]commandSpec{
 	"direct-deps":                {usage: "nocv direct-deps <pattern> <symbol-ref>", extraCount: 1},
 	"direct-dependents":          {usage: "nocv direct-dependents <pattern> <symbol-ref>", extraCount: 1},
 	"impact":                     {usage: "nocv impact <pattern> <symbol-ref>", extraCount: 1},
+	"impact-params":              {usage: "nocv impact-params <pattern> <symbol-ref> [--param <go-type>]... [--variadic]", extraCount: -1},
 	"paths":                      {usage: "nocv paths <pattern> <from-symbol> <to-symbol>", extraCount: 2},
 	"package-paths":              {usage: "nocv package-paths <pattern> <from-package> <to-package>", extraCount: 2},
 	"package-deps":               {usage: "nocv package-deps <pattern>"},
@@ -47,19 +49,27 @@ type invocation struct {
 
 func parseInvocation(args []string) (invocation, error) {
 	if len(args) == 0 {
-		return invocation{}, fmt.Errorf("usage: nocv <command> <pattern> [arguments...]\ncommands: serve, tree, calls, implementations, embeddings, signatures, imports, package-imports, package-importers, import-cycle, check-forbidden-import, check-forbidden-dependency, direct-deps, direct-dependents, impact, paths, package-paths, package-deps, why-package-dep, type-deps, type-paths, inspect-dependency, inspect-node")
+		return invocation{}, fmt.Errorf("usage: nocv <command> <pattern> [arguments...]\ncommands: serve, tree, calls, implementations, embeddings, signatures, imports, package-imports, package-importers, import-cycle, check-forbidden-import, check-forbidden-dependency, direct-deps, direct-dependents, impact, impact-params, paths, package-paths, package-deps, why-package-dep, type-deps, type-paths, inspect-dependency, inspect-node")
 	}
 	spec, exists := commandSpecs[args[0]]
 	if !exists {
 		return invocation{}, fmt.Errorf("unknown command %q", args[0])
 	}
-	if len(args) != 2+spec.extraCount {
+	if spec.extraCount < 0 {
+		if len(args) < 3 {
+			return invocation{}, fmt.Errorf("usage: %s", spec.usage)
+		}
+	} else if len(args) != 2+spec.extraCount {
 		return invocation{}, fmt.Errorf("usage: %s", spec.usage)
 	}
 	return invocation{name: args[0], pattern: args[1], values: args[2:]}, nil
 }
 
 func executeCommand(out io.Writer, g *graph.Graph, invocation invocation) error {
+	return executeCommandWithAnalysis(out, g, nil, invocation)
+}
+
+func executeCommandWithAnalysis(out io.Writer, g *graph.Graph, analysis *goanalyzer.Analysis, invocation invocation) error {
 	switch invocation.name {
 	case "serve":
 		return serve(out, g)
@@ -135,6 +145,11 @@ func executeCommand(out io.Writer, g *graph.Graph, invocation invocation) error 
 			return err
 		}
 		printImpact(out, g, id)
+	case "impact-params":
+		if analysis == nil {
+			return fmt.Errorf("Go analysis is unavailable for impact-params")
+		}
+		return printParameterChangeImpact(out, analysis, invocation.values)
 	case "paths":
 		from := graph.SymbolRef(invocation.values[0])
 		to := graph.SymbolRef(invocation.values[1])

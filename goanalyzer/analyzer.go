@@ -16,9 +16,36 @@ import (
 	"nocv/graph"
 )
 
+// Analysis owns one graph together with the Go compiler state needed by
+// language-specific queries. Compiler objects never enter the graph or query
+// read models.
+type Analysis struct {
+	graph    *graph.Graph
+	packages []*packages.Package
+	symbols  *symbolIndex
+}
+
+// Graph returns the language-independent graph produced by this analysis.
+func (a *Analysis) Graph() *graph.Graph {
+	if a == nil {
+		return nil
+	}
+	return a.graph
+}
+
 // Load analyzes the packages matching patterns from dir. Patterns use the same
 // syntax as go list; when omitted, the current package is loaded.
 func Load(ctx context.Context, dir string, patterns ...string) (*graph.Graph, error) {
+	analysis, err := LoadAnalysis(ctx, dir, patterns...)
+	if err != nil {
+		return nil, err
+	}
+	return analysis.Graph(), nil
+}
+
+// LoadAnalysis loads the graph and retains the compiler state required for
+// Go-specific analyses such as hypothetical parameter changes.
+func LoadAnalysis(ctx context.Context, dir string, patterns ...string) (*Analysis, error) {
 	if len(patterns) == 0 {
 		patterns = []string{"."}
 	}
@@ -67,7 +94,7 @@ func Load(ctx context.Context, dir string, patterns ...string) (*graph.Graph, er
 	if err := addImplementations(g, symbols); err != nil {
 		return nil, fmt.Errorf("analyze interface implementations: %w", err)
 	}
-	return g, nil
+	return &Analysis{graph: g, packages: pkgs, symbols: symbols}, nil
 }
 
 func addImports(g *graph.Graph, pkg *packages.Package) error {

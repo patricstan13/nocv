@@ -30,6 +30,7 @@ go run ./cmd/nocv check-forbidden-dependency ./... nocv/cmd/nocv nocv/graph
 go run ./cmd/nocv direct-deps ./... nocv/query::Impact
 go run ./cmd/nocv direct-dependents ./... nocv/query::DirectDependents
 go run ./cmd/nocv impact ./... nocv/graph::Graph
+go run ./cmd/nocv impact-params ./goanalyzer/testdata/parameterimpact/... example.com/parameterimpact::UseID --param string
 go run ./cmd/nocv paths ./... nocv/query::Impact nocv/graph::Graph
 go run ./cmd/nocv package-paths ./... nocv/cmd/nocv nocv/query
 go run ./cmd/nocv package-deps ./...
@@ -119,6 +120,21 @@ that have no type-level representation.
 `inspect-node` shows declaration metadata and documentation, structural
 children, direct semantic relationships, and relevant package/type projections
 for one graph node.
+
+`impact-params` evaluates every known direct Go call site to a selected
+function or method against a hypothetical parameter signature. Supply the new
+ordered types with repeated `--param <go-type>` flags and add `--variadic` when
+the final parameter is variadic. Type expressions are resolved with Go's type
+checker in the callable declaration file's context, so builtins, local named
+types, imported qualified types, aliases, and composite types retain compiler
+semantics. Primitive and named non-struct types participate without becoming
+graph nodes. The result reports compatible, incompatible, and genuinely
+unknown call sites separately.
+
+This first change-impact capability covers parameter types, counts, and
+variadic status only. It does not analyze result changes, receiver changes,
+interface-contract consequences, embedding or promoted-method effects,
+transitive architectural impact, or source edits.
 
 Imports are stored direct package-level Go dependencies when both packages are
 represented in the loaded graph. They are distinct from NOCV semantic
