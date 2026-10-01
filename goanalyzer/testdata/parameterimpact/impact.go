@@ -125,6 +125,8 @@ func UseAny(value any) {}
 
 func UseNumber(value int) {}
 
+func NamedResult(id ID) (item Item) { return Item{} }
+
 func Variadic(values ...string) {}
 
 func Unused(value string) {}

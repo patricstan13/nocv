@@ -57,6 +57,18 @@ func TestAnalyzeSignatureChangeDirtyBaselineKeepsOnlyDelta(t *testing.T) {
 	}
 }
 
+func TestAnalyzeSignatureChangeShiftedDirtyDiagnosticIsUncertain(t *testing.T) {
+	analysis := loadSignatureFixture(t, "results", "example.com/hypothetical/broken")
+	impact := analyzeSignature(t, analysis, "example.com/hypothetical/broken::Shift", []string{"struct {\n\tValue int\n}"}, nil, false)
+	if impact.Compiler.BaselineStatus != goanalyzer.BaselineHasDiagnostics || len(impact.Compiler.Consequences) != 1 {
+		t.Fatalf("shifted dirty impact = %#v", impact.Compiler)
+	}
+	consequence := impact.Compiler.Consequences[0]
+	if consequence.Classification != goanalyzer.DiagnosticUncertain || consequence.Symbol != nil || !strings.Contains(consequence.Message, "existing") {
+		t.Fatalf("shifted diagnostic = %#v, want uncertain package-level baseline diagnostic", consequence)
+	}
+}
+
 func TestAnalyzeSignatureChangeCombinedContractAndStructural(t *testing.T) {
 	analysis := loadSignatureFixture(t, "parameterimpact", ".")
 	combined := analyzeSignature(t, analysis, "example.com/parameterimpact::Service::Save", []string{"string"}, []string{"error"}, false)
@@ -129,6 +141,26 @@ func TestAnalyzeSignatureChangeNoopAndVariadicOnly(t *testing.T) {
 	variadic := analyzeSignature(t, analysis, "example.com/parameterimpact::Variadic", []string{"string"}, nil, false)
 	if len(variadic.CallSites) == 0 || len(variadic.Compiler.AffectedPackages) == 0 {
 		t.Fatalf("variadic-only impact = %#v", variadic)
+	}
+}
+
+func TestAnalyzeSignatureChangeAddedSlotsKeepNamedDeclarationValid(t *testing.T) {
+	analysis := loadSignatureFixture(t, "parameterimpact", ".")
+	addedParameter := analyzeSignature(t, analysis, "example.com/parameterimpact::UseID", []string{"ID", "bool"}, nil, false)
+	assertNoCompilerMessage(t, addedParameter, "missing parameter type", "mixed named and unnamed parameters")
+
+	addedResult := analyzeSignature(t, analysis, "example.com/parameterimpact::NamedResult", []string{"ID"}, []string{"Item", "error"}, false)
+	assertNoCompilerMessage(t, addedResult, "missing parameter type", "mixed named and unnamed parameters")
+}
+
+func assertNoCompilerMessage(t *testing.T, impact goanalyzer.SignatureChangeImpact, fragments ...string) {
+	t.Helper()
+	for _, consequence := range impact.Compiler.Consequences {
+		for _, fragment := range fragments {
+			if strings.Contains(consequence.Message, fragment) {
+				t.Fatalf("compiler consequence %q contains overlay syntax error %q", consequence.Message, fragment)
+			}
+		}
 	}
 }
 

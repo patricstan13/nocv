@@ -256,6 +256,7 @@ func signatureOverlay(callable resolvedCallable, proposed resolvedSignature) (st
 }
 
 func renderSourceSignature(current *types.Signature, proposed resolvedSignature) []byte {
+	namedParameters := tupleHasNames(current.Params())
 	parameters := make([]string, 0, len(proposed.parameterSources))
 	for index, source := range proposed.parameterSources {
 		if proposed.model.Variadic && index == len(proposed.parameterSources)-1 {
@@ -264,6 +265,8 @@ func renderSourceSignature(current *types.Signature, proposed resolvedSignature)
 		name := ""
 		if index < current.Params().Len() {
 			name = current.Params().At(index).Name()
+		} else if namedParameters {
+			name = "_"
 		}
 		if name != "" {
 			source = name + " " + source
@@ -271,11 +274,14 @@ func renderSourceSignature(current *types.Signature, proposed resolvedSignature)
 		parameters = append(parameters, source)
 	}
 	text := "(" + strings.Join(parameters, ", ") + ")"
+	namedResults := tupleHasNames(current.Results())
 	results := make([]string, 0, len(proposed.resultSources))
 	for index, source := range proposed.resultSources {
 		name := ""
 		if index < current.Results().Len() {
 			name = current.Results().At(index).Name()
+		} else if namedResults {
+			name = "_"
 		}
 		if name != "" {
 			source = name + " " + source
@@ -288,6 +294,15 @@ func renderSourceSignature(current *types.Signature, proposed resolvedSignature)
 		text += " (" + strings.Join(results, ", ") + ")"
 	}
 	return []byte(text)
+}
+
+func tupleHasNames(tuple *types.Tuple) bool {
+	for index := 0; index < tuple.Len(); index++ {
+		if tuple.At(index).Name() != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func currentResultName(current *types.Signature, index int) string {

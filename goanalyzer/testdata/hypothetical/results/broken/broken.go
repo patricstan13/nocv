@@ -5,6 +5,8 @@ import (
 	"example.com/hypothetical/repo"
 )
 
+func Shift(value int) {}
+
 var existing int = "existing"
 
 func consumeUser(model.User) {}

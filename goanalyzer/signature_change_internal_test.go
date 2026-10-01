@@ -22,3 +22,19 @@ func TestCompareCompilerDiagnosticsSuppressesExactBaselineOccurrence(t *testing.
 		t.Fatalf("exact baseline diagnostic returned as consequence: %#v", delta)
 	}
 }
+
+func TestCompareCompilerDiagnosticsUsesDuplicateCountsConservatively(t *testing.T) {
+	baseline := []compilerDiagnostic{
+		{Package: "example.com/app", Pos: "/tmp/app.go:10:2", Message: "same problem"},
+		{Package: "example.com/app", Pos: "/tmp/app.go:20:2", Message: "same problem"},
+	}
+	changed := []compilerDiagnostic{
+		baseline[0],
+		{Package: "example.com/app", Pos: "/tmp/app.go:22:2", Message: "same problem"},
+		{Package: "example.com/app", Pos: "/tmp/app.go:30:2", Message: "same problem"},
+	}
+	delta := compareCompilerDiagnostics(baseline, changed)
+	if len(delta) != 2 || delta[0].classification != DiagnosticUncertain || delta[1].classification != DiagnosticNew {
+		t.Fatalf("duplicate diagnostic delta = %#v", delta)
+	}
+}
