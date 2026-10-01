@@ -2,10 +2,12 @@ package query
 
 import "nocv/graph"
 
-// CallableSignature describes only a callable's parameters. Results and the
-// receiver are deliberately outside the parameter-change impact model.
+// CallableSignature is a detached presentation of a callable's parameters and
+// results. The receiver and type parameters are deliberately outside the
+// hypothetical signature-change model.
 type CallableSignature struct {
 	Parameters []Parameter
+	Results    []Result
 	Variadic   bool
 }
 
@@ -23,10 +25,25 @@ type ProposedParameter struct {
 	TypeExpr string
 }
 
+// Result is one ordered callable result. Name is descriptive only and does not
+// participate in signature identity.
+type Result struct {
+	Name string
+	Type GoTypeRef
+}
+
+// ProposedResult is a Go type expression to resolve in the callable's
+// declaration-file context. Name is optional and semantically irrelevant.
+type ProposedResult struct {
+	Name     string
+	TypeExpr string
+}
+
 // ProposedSignature is the public, compiler-independent input for a
-// hypothetical parameter signature.
+// hypothetical callable signature.
 type ProposedSignature struct {
 	Parameters []ProposedParameter
+	Results    []ProposedResult
 	Variadic   bool
 }
 
@@ -37,9 +54,8 @@ type GoTypeRef struct {
 	Symbol  graph.SymbolRef
 }
 
-// ParameterChangeImpact reports direct call-site compatibility, existing
-// implementation contracts lost, and promoted method surfaces changed by one
-// hypothetical parameter signature.
+// ParameterChangeImpact remains as the compatibility model for the
+// impact-params CLI. New product surfaces use goanalyzer.SignatureChangeImpact.
 type ParameterChangeImpact struct {
 	Callable   graph.SymbolRef
 	Before     CallableSignature

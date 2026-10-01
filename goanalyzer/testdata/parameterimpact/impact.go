@@ -103,6 +103,20 @@ type VariadicEmbed struct {
 	VariadicBase
 }
 
+type ResultBase struct{}
+
+func (ResultBase) Fetch(id ID) Item { return Item{} }
+
+type ResultWrapper struct {
+	ResultBase
+}
+
+type ResultStore interface {
+	Fetch(id ID) Item
+}
+
+var _ ResultStore = ResultBase{}
+
 func UseID(id ID) {}
 
 func UseString(value string) {}

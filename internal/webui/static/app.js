@@ -609,12 +609,17 @@
       const prefix = signature.variadic && index === signature.parameters.length - 1 ? "..." : "";
       return prefix + parameter.type.display;
     });
-    return name + "(" + parameters.join(", ") + ")";
+    const results = (signature.results || []).map((result) => result.type.display);
+    let resultDisplay = "";
+    if (results.length === 1) resultDisplay = " " + results[0];
+    if (results.length > 1) resultDisplay = " (" + results.join(", ") + ")";
+    return name + "(" + parameters.join(", ") + ")" + resultDisplay;
   }
 
-  function initialParameterProposal(result) {
+  function initialSignatureProposal(result) {
     return {
       parameters: result.function.signature.parameters.map((parameter) => parameter.type.display),
+      results: (result.function.signature.results || []).map((value) => value.type.display),
       variadic: result.function.signature.variadic,
     };
   }
@@ -626,12 +631,12 @@
     return button;
   }
 
-  function beginParameterChange(result) {
+  function beginSignatureChange(result) {
     invalidateInspectorRequests();
-    renderParameterChangeEditor({
-      kind: "parameter-edit",
+    renderSignatureChangeEditor({
+	      kind: "signature-edit",
       inspection: result,
-      proposal: initialParameterProposal(result),
+      proposal: initialSignatureProposal(result),
       result: null,
     });
   }
@@ -641,16 +646,16 @@
     renderFunctionInspection(inspection);
   }
 
-  function renderParameterChangeEditor(state, message) {
+  function renderSignatureChangeEditor(state, message) {
     inspectorState = state;
     const heading = callableHeading(state.inspection);
     const signature = state.inspection.function.signature;
     const parts = [
-      element("p", "Parameter change", "eyebrow"),
+      element("p", "Signature change", "eyebrow"),
       element("h2", heading),
       element("h3", "Current"),
       element("p", formatCallableSignature(heading, signature), "signature-line"),
-      element("h3", "Proposed parameters"),
+      element("h3", "Parameters"),
     ];
     if (message) parts.push(element("p", message, "error"));
 
@@ -669,7 +674,7 @@
       const remove = renderWorkflowButton("×", "parameter-remove", () => {
         state.proposal.parameters.splice(index, 1);
         if (state.proposal.parameters.length === 0) state.proposal.variadic = false;
-        renderParameterChangeEditor(state);
+        renderSignatureChangeEditor(state);
       });
       remove.setAttribute("aria-label", "Remove parameter " + (index + 1));
       row.append(label, input, remove);
@@ -678,10 +683,37 @@
 
     const add = renderWorkflowButton("+ Add parameter", "workflow-button secondary", () => {
       state.proposal.parameters.push("");
-      renderParameterChangeEditor(state);
+      renderSignatureChangeEditor(state);
     });
     add.setAttribute("aria-label", "Add parameter");
     form.appendChild(add);
+
+    form.appendChild(element("h3", "Results"));
+    state.proposal.results.forEach((typeExpression, index) => {
+      const row = element("div", undefined, "parameter-row");
+      const label = element("label", undefined, "visually-hidden");
+      label.htmlFor = "result-type-" + index;
+      label.textContent = "Result " + (index + 1) + " type";
+      const input = element("input", undefined, "parameter-input");
+      input.id = label.htmlFor;
+      input.type = "text";
+      input.value = typeExpression;
+      input.placeholder = "Go type expression";
+      input.addEventListener("input", () => { state.proposal.results[index] = input.value; });
+      const remove = renderWorkflowButton("×", "parameter-remove", () => {
+        state.proposal.results.splice(index, 1);
+        renderSignatureChangeEditor(state);
+      });
+      remove.setAttribute("aria-label", "Remove result " + (index + 1));
+      row.append(label, input, remove);
+      form.appendChild(row);
+    });
+    const addResult = renderWorkflowButton("+ Add result", "workflow-button secondary", () => {
+      state.proposal.results.push("");
+      renderSignatureChangeEditor(state);
+    });
+    addResult.setAttribute("aria-label", "Add result");
+    form.appendChild(addResult);
 
     const variadicLabel = element("label", undefined, "variadic-control");
     const variadic = element("input");
@@ -695,46 +727,52 @@
 
     const actions = element("div", undefined, "workflow-actions");
     actions.append(
-      renderWorkflowButton("Analyze", "workflow-button primary", () => requestParameterImpact(state)),
+      renderWorkflowButton("Analyze", "workflow-button primary", () => requestSignatureImpact(state)),
       renderWorkflowButton("Cancel", "workflow-button secondary", () => returnToCallableInspection(state.inspection)),
     );
     form.appendChild(actions);
     form.addEventListener("submit", (event) => {
       event.preventDefault();
-      requestParameterImpact(state);
+      requestSignatureImpact(state);
     });
     parts.push(form);
     replaceInspector(parts);
   }
 
-  async function requestParameterImpact(state) {
+  async function requestSignatureImpact(state) {
     const parameters = state.proposal.parameters.map((value) => value.trim());
+	    const results = state.proposal.results.map((value) => value.trim());
     if (parameters.some((value) => value === "")) {
-      renderParameterChangeEditor(state, "Every parameter needs a type expression.");
+      renderSignatureChangeEditor(state, "Every parameter needs a type expression.");
       return;
     }
+	    if (results.some((value) => value === "")) {
+	      renderSignatureChangeEditor(state, "Every result needs a type expression.");
+	      return;
+	    }
     if (state.proposal.variadic && parameters.length === 0) {
-      renderParameterChangeEditor(state, "A variadic signature needs at least one parameter.");
+      renderSignatureChangeEditor(state, "A variadic signature needs at least one parameter.");
       return;
     }
 
     const generation = ++inspectorRequestGeneration;
     replaceInspector([
-      element("p", "Parameter change", "eyebrow"),
+      element("p", "Signature change", "eyebrow"),
       element("h2", callableHeading(state.inspection)),
       element("p", "Analyzing…", "muted"),
     ]);
     try {
-      const result = await postJSON("/api/parameter-impact", {
+	      const result = await postJSON("/api/signature-impact", {
         callable: state.inspection.node.id,
         parameters: parameters.map((type) => ({ type })),
+	        results: results.map((type) => ({ type })),
         variadic: state.proposal.variadic,
       });
       if (generation !== inspectorRequestGeneration) return;
-      renderParameterImpact({ ...state, kind: "parameter-result", result });
+	      renderSignatureImpact({ ...state, kind: "signature-result", result });
     } catch (error) {
       if (generation !== inspectorRequestGeneration) return;
-      renderParameterChangeEditor(state, error.message);
+	      renderSignatureChangeEditor(state, error.message);
     }
   }
 
@@ -809,6 +847,33 @@
     return parts;
   }
 
+  function renderCompilerImpact(result) {
+    const compiler = result.compiler || { consequences: [], affectedPackages: [], baselineStatus: "unknown" };
+    const consequences = compiler.consequences || [];
+    const parts = [element("h3", "Compiler consequences")];
+    if (compiler.baselineStatus === "has diagnostics") {
+      parts.push(element("p", "The affected scope already had compiler diagnostics; moved or duplicated diagnostics may be uncertain.", "muted"));
+    }
+    if (consequences.length === 0) {
+      parts.push(element("p", "No new compile/type-check diagnostics were observed in the affected scope.", "muted"));
+      return parts;
+    }
+    const list = element("ul");
+    consequences.forEach((consequence) => {
+      const item = element("li", undefined, "impact-row");
+      if (consequence.symbol && consequence.symbol.ref) {
+        item.appendChild(renderSymbolButton(consequence.symbol));
+      } else {
+        item.appendChild(element("span", consequence.package, "impact-symbol"));
+      }
+      item.appendChild(element("span", consequence.message, "impact-detail"));
+      item.appendChild(element("span", consequence.classification === "uncertain" ? "Uncertain · " + compactLocation(consequence.location) : compactLocation(consequence.location), "evidence"));
+      list.appendChild(item);
+    });
+    parts.push(list);
+    return parts;
+  }
+
   function renderStructuralImpact(result) {
     const impacts = result.structural || [];
     const parts = [element("h3", "Structural impact")];
@@ -828,11 +893,11 @@
     return parts;
   }
 
-  function renderParameterImpact(state) {
+  function renderSignatureImpact(state) {
     inspectorState = state;
     const heading = callableHeading(state.inspection);
     const parts = [
-      element("p", "Proposed parameter change", "eyebrow"),
+	      element("p", "Proposed signature change", "eyebrow"),
       element("h2", heading),
       element("h3", "Before"),
       element("p", formatCallableSignature(heading, state.result.before), "signature-line"),
@@ -840,13 +905,14 @@
       element("p", formatCallableSignature(heading, state.result.after), "signature-line"),
     ];
     parts.push(...renderCallSiteImpact(state.result));
+	    parts.push(...renderCompilerImpact(state.result));
     parts.push(...renderContractImpact(state.result));
     parts.push(...renderStructuralImpact(state.result));
     const actions = element("div", undefined, "workflow-actions result-actions");
     actions.append(
-      renderWorkflowButton("Edit proposed parameters", "workflow-button primary", () => {
+	      renderWorkflowButton("Edit proposed signature", "workflow-button primary", () => {
         invalidateInspectorRequests();
-        renderParameterChangeEditor({ ...state, kind: "parameter-edit" });
+	        renderSignatureChangeEditor({ ...state, kind: "signature-edit" });
       }),
       renderWorkflowButton("Back to " + callableKind(state.inspection), "workflow-button secondary", () => returnToCallableInspection(state.inspection)),
     );
@@ -865,7 +931,7 @@
       element("p", result.node.id, "symbol identity-line"),
     ];
     if (detail.signature) {
-      parts.push(renderWorkflowButton("Analyze parameter change", "workflow-button impact-action", () => beginParameterChange(result)));
+	      parts.push(renderWorkflowButton("Analyze signature change", "workflow-button impact-action", () => beginSignatureChange(result)));
     }
     if (method) {
       const owner = {

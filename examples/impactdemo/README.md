@@ -85,7 +85,24 @@ cd examples/impactdemo
 go test ./...
 ```
 
-## Parameter-change scenarios
+## Signature-change scenarios
+
+Use the function or method inspector's **Analyze signature change** action for
+the unified workflow. The existing `impact-params` examples remain useful for
+focused parameter-only CLI checks.
+
+### Result-only change
+
+Inspect `example.com/impactdemo/repository::Repository::Find` and change its
+results from `(domain.User, error)` to `(*domain.User, error)`. The result should
+show lost implementations and compiler consequences at the forwarding service
+boundary. This is a compile/type-check observation, not a behavioral claim.
+
+### Combined parameter and result change
+
+For the same method, change the parameter from `domain.ID` to `string` and the
+results to `(*domain.User, error)`. Direct call-site compatibility should remain
+separate from the full-overlay compiler and contract consequences.
 
 ### A. Named scalar to primitive and interface contract loss
 
@@ -169,7 +186,10 @@ the ellipsis call is incompatible with the proposed non-variadic signature.
 - [ ] pointer/value promotion matches expectation
 - [ ] unchanged proposal has no false positives
 - [ ] variadic calls behave correctly
+- [ ] result-only changes show compiler consequences
+- [ ] repository result changes show contract loss
+- [ ] combined parameter/result changes keep consequence categories separate
+- [ ] a semantic no-op produces no compiler, contract, or structural consequences
 
-This sandbox does not cover return/result changes, receiver changes, generic
-callable parameter changes, transitive architectural impact, or source
-rewriting.
+This sandbox does not cover receiver changes, generic signature changes,
+transitive architectural impact, source rewriting, or behavioral correctness.

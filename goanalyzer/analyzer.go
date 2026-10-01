@@ -7,6 +7,8 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -23,6 +25,8 @@ type Analysis struct {
 	graph    *graph.Graph
 	packages []*packages.Package
 	symbols  *symbolIndex
+	loadDir  string
+	loadMode packages.LoadMode
 }
 
 // Graph returns the language-independent graph produced by this analysis.
@@ -50,10 +54,23 @@ func LoadAnalysis(ctx context.Context, dir string, patterns ...string) (*Analysi
 		patterns = []string{"."}
 	}
 
+	loadDir := dir
+	var err error
+	if loadDir == "" {
+		loadDir, err = os.Getwd()
+		if err != nil {
+			return nil, fmt.Errorf("resolve analysis directory: %w", err)
+		}
+	}
+	loadDir, err = filepath.Abs(loadDir)
+	if err != nil {
+		return nil, fmt.Errorf("resolve analysis directory: %w", err)
+	}
+	const loadMode = packages.LoadSyntax
 	pkgs, err := packages.Load(&packages.Config{
 		Context: ctx,
-		Dir:     dir,
-		Mode:    packages.LoadSyntax,
+		Dir:     loadDir,
+		Mode:    loadMode,
 		Tests:   false,
 	}, patterns...)
 	if err != nil {
@@ -94,7 +111,7 @@ func LoadAnalysis(ctx context.Context, dir string, patterns ...string) (*Analysi
 	if err := addImplementations(g, symbols); err != nil {
 		return nil, fmt.Errorf("analyze interface implementations: %w", err)
 	}
-	return &Analysis{graph: g, packages: pkgs, symbols: symbols}, nil
+	return &Analysis{graph: g, packages: pkgs, symbols: symbols, loadDir: loadDir, loadMode: loadMode}, nil
 }
 
 func addImports(g *graph.Graph, pkg *packages.Package) error {
@@ -147,6 +164,12 @@ func packageErrors(pkgs []*packages.Package) error {
 	var messages []string
 	for _, pkg := range pkgs {
 		for _, err := range pkg.Errors {
+			// Retain type-check diagnostics as baseline state for hypothetical
+			// compiler rechecks. packages.Load still supplies the partial typed
+			// syntax needed by the graph for ordinary declaration-level errors.
+			if err.Kind == packages.TypeError || strings.HasPrefix(err.Msg, "# ") {
+				continue
+			}
 			messages = append(messages, err.Error())
 		}
 	}

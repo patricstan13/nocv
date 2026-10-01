@@ -139,7 +139,18 @@ func formatSignature(signature query.CallableSignature) string {
 		}
 		parameters = append(parameters, display)
 	}
-	return "(" + strings.Join(parameters, ", ") + ")"
+	display := "(" + strings.Join(parameters, ", ") + ")"
+	results := make([]string, 0, len(signature.Results))
+	for _, result := range signature.Results {
+		results = append(results, result.Type.Display)
+	}
+	if len(results) == 1 {
+		return display + " " + results[0]
+	}
+	if len(results) > 1 {
+		return display + " (" + strings.Join(results, ", ") + ")"
+	}
+	return display
 }
 
 func printSignatureProblem(out io.Writer, problem query.SignatureProblem) {

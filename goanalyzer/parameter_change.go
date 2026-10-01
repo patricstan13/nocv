@@ -23,8 +23,11 @@ type resolvedCallable struct {
 }
 
 type resolvedSignature struct {
-	model query.CallableSignature
-	types []types.Type // a variadic final parameter is stored as its element type
+	model            query.CallableSignature
+	parameterTypes   []types.Type // a variadic final parameter is stored as its element type
+	resultTypes      []types.Type
+	parameterSources []string
+	resultSources    []string
 }
 
 type compilerCallSite struct {
@@ -69,37 +72,57 @@ func (a *Analysis) editableSignature(callable resolvedCallable) query.CallableSi
 		})
 		result.Parameters = append(result.Parameters, query.Parameter{Name: variable.Name(), Type: typeRef})
 	}
+	for index := 0; index < signature.Results().Len(); index++ {
+		variable := signature.Results().At(index)
+		typ := variable.Type()
+		typeRef := a.goTypeRef(typ)
+		typeRef.Display = types.TypeString(typ, func(pkg *types.Package) string {
+			if pkg == callable.pkg.Types {
+				return ""
+			}
+			return pkg.Name()
+		})
+		result.Results = append(result.Results, query.Result{Name: variable.Name(), Type: typeRef})
+	}
 	return result
 }
 
-// AnalyzeParameterChange evaluates every known direct source call to callable
-// against a hypothetical parameter signature. Proposed Go type expressions are
-// resolved by go/types in the callable declaration file's lexical context.
-func (a *Analysis) AnalyzeParameterChange(callable graph.SymbolRef, proposed query.ProposedSignature) (query.ParameterChangeImpact, error) {
+// AnalyzeSignatureChange evaluates a hypothetical parameter/result signature.
+// Precise local consequences are combined with a compiler overlay recheck of
+// the changed package and its reverse import closure.
+func (a *Analysis) AnalyzeSignatureChange(callable graph.SymbolRef, proposed query.ProposedSignature) (SignatureChangeImpact, error) {
 	resolved, err := a.resolveCallable(callable)
 	if err != nil {
-		return query.ParameterChangeImpact{}, err
+		return SignatureChangeImpact{}, err
 	}
 	if hasSignatureTypeParameters(resolved.signature) {
-		return query.ParameterChangeImpact{}, fmt.Errorf("generic callable parameter changes are not supported: %s", callable)
+		return SignatureChangeImpact{}, fmt.Errorf("generic callable signature changes are not supported: %s", callable)
 	}
 
 	before := a.extractSignature(resolved.signature)
 	after, err := a.resolveProposedSignature(resolved, proposed, before.model)
 	if err != nil {
-		return query.ParameterChangeImpact{}, err
+		return SignatureChangeImpact{}, err
 	}
 
-	result := query.ParameterChangeImpact{
+	result := SignatureChangeImpact{
 		Callable: callable,
 		Before:   before.model,
 		After:    after.model,
 	}
-	for _, site := range a.collectCallSites(resolved.function) {
-		result.CallSites = append(result.CallSites, a.checkCallSite(site, after))
+	if !parameterPortionIdentical(resolved.signature, after) {
+		for _, site := range a.collectCallSites(resolved.function) {
+			result.CallSites = append(result.CallSites, a.checkCallSite(site, after))
+		}
 	}
-	result.Contracts = a.contractImpacts(resolved, after)
-	result.Structural = a.structuralImpacts(resolved, after)
+	if signatureChanged(resolved.signature, after) {
+		result.Compiler, err = a.compilerImpact(resolved, after)
+		if err != nil {
+			return SignatureChangeImpact{}, err
+		}
+		result.Contracts = a.contractImpacts(resolved, after)
+		result.Structural = a.structuralImpacts(resolved, after)
+	}
 	sort.Slice(result.CallSites, func(i, j int) bool {
 		left, right := result.CallSites[i], result.CallSites[j]
 		if left.Caller.Ref != right.Caller.Ref {
@@ -111,6 +134,45 @@ func (a *Analysis) AnalyzeParameterChange(callable graph.SymbolRef, proposed que
 		return left.Location.Offset < right.Location.Offset
 	})
 	return result, nil
+}
+
+// AnalyzeParameterChange preserves the parameter-only CLI/debug surface. It
+// carries the callable's current results into the unified analysis and omits
+// the compiler consequence section from the legacy result shape.
+func (a *Analysis) AnalyzeParameterChange(callable graph.SymbolRef, proposed query.ProposedSignature) (query.ParameterChangeImpact, error) {
+	resolved, err := a.resolveCallable(callable)
+	if err != nil {
+		return query.ParameterChangeImpact{}, err
+	}
+	if hasSignatureTypeParameters(resolved.signature) {
+		return query.ParameterChangeImpact{}, fmt.Errorf("generic callable parameter changes are not supported: %s", callable)
+	}
+	before := a.extractSignature(resolved.signature)
+	current := a.editableSignature(resolved)
+	for _, result := range current.Results {
+		proposed.Results = append(proposed.Results, query.ProposedResult{Name: result.Name, TypeExpr: result.Type.Display})
+	}
+	after, err := a.resolveProposedSignature(resolved, proposed, before.model)
+	if err != nil {
+		return query.ParameterChangeImpact{}, err
+	}
+	impact := query.ParameterChangeImpact{Callable: callable, Before: before.model, After: after.model}
+	for _, site := range a.collectCallSites(resolved.function) {
+		impact.CallSites = append(impact.CallSites, a.checkCallSite(site, after))
+	}
+	impact.Contracts = a.contractImpacts(resolved, after)
+	impact.Structural = a.structuralImpacts(resolved, after)
+	sort.Slice(impact.CallSites, func(i, j int) bool {
+		left, right := impact.CallSites[i], impact.CallSites[j]
+		if left.Caller.Ref != right.Caller.Ref {
+			return left.Caller.Ref < right.Caller.Ref
+		}
+		if left.Location.File != right.Location.File {
+			return left.Location.File < right.Location.File
+		}
+		return left.Location.Offset < right.Location.Offset
+	})
+	return impact, nil
 }
 
 func (a *Analysis) resolveCallable(ref graph.SymbolRef) (resolvedCallable, error) {
@@ -161,23 +223,32 @@ func (a *Analysis) extractSignature(signature *types.Signature) resolvedSignatur
 				typ = slice.Elem()
 			}
 		}
-		result.types = append(result.types, typ)
+		result.parameterTypes = append(result.parameterTypes, typ)
 		result.model.Parameters = append(result.model.Parameters, query.Parameter{
 			Name: variable.Name(),
 			Type: a.goTypeRef(typ),
 		})
 	}
+	results := signature.Results()
+	for index := 0; index < results.Len(); index++ {
+		variable := results.At(index)
+		result.resultTypes = append(result.resultTypes, variable.Type())
+		result.model.Results = append(result.model.Results, query.Result{
+			Name: variable.Name(),
+			Type: a.goTypeRef(variable.Type()),
+		})
+	}
 	return result
 }
 
-func signatureWithParameters(
+func signatureWithProposal(
 	original *types.Signature,
 	receiver *types.Var,
 	proposed resolvedSignature,
 ) *types.Signature {
-	parameters := make([]*types.Var, 0, len(proposed.types))
-	for index, typ := range proposed.types {
-		if proposed.model.Variadic && index == len(proposed.types)-1 {
+	parameters := make([]*types.Var, 0, len(proposed.parameterTypes))
+	for index, typ := range proposed.parameterTypes {
+		if proposed.model.Variadic && index == len(proposed.parameterTypes)-1 {
 			typ = types.NewSlice(typ)
 		}
 		name := ""
@@ -189,12 +260,23 @@ func signatureWithParameters(
 		}
 		parameters = append(parameters, types.NewVar(token.NoPos, pkg, name, typ))
 	}
+	results := make([]*types.Var, 0, len(proposed.resultTypes))
+	for index, typ := range proposed.resultTypes {
+		name := ""
+		var pkg *types.Package
+		if index < original.Results().Len() {
+			result := original.Results().At(index)
+			name = result.Name()
+			pkg = result.Pkg()
+		}
+		results = append(results, types.NewVar(token.NoPos, pkg, name, typ))
+	}
 	return types.NewSignatureType(
 		receiver,
 		nil,
 		nil,
 		types.NewTuple(parameters...),
-		original.Results(),
+		types.NewTuple(results...),
 		proposed.model.Variadic,
 	)
 }
@@ -219,8 +301,28 @@ func (a *Analysis) resolveProposedSignature(callable resolvedCallable, proposed 
 		if name == "" && index < len(before.Parameters) {
 			name = before.Parameters[index].Name
 		}
-		result.types = append(result.types, value.Type)
+		result.parameterTypes = append(result.parameterTypes, value.Type)
+		result.parameterSources = append(result.parameterSources, parameter.TypeExpr)
 		result.model.Parameters = append(result.model.Parameters, query.Parameter{Name: name, Type: a.goTypeRef(value.Type)})
+	}
+	for index, proposedResult := range proposed.Results {
+		if proposedResult.TypeExpr == "" {
+			return resolvedSignature{}, fmt.Errorf("proposed result %d has an empty type", index+1)
+		}
+		value, err := types.Eval(callable.pkg.Fset, callable.pkg.Types, callable.function.Pos(), proposedResult.TypeExpr)
+		if err != nil {
+			return resolvedSignature{}, fmt.Errorf("resolve proposed result %d type %q: %w", index+1, proposedResult.TypeExpr, err)
+		}
+		if !value.IsType() || value.Type == nil {
+			return resolvedSignature{}, fmt.Errorf("proposed result %d expression %q is not a type", index+1, proposedResult.TypeExpr)
+		}
+		name := proposedResult.Name
+		if name == "" && index < len(before.Results) {
+			name = before.Results[index].Name
+		}
+		result.resultTypes = append(result.resultTypes, value.Type)
+		result.resultSources = append(result.resultSources, proposedResult.TypeExpr)
+		result.model.Results = append(result.model.Results, query.Result{Name: name, Type: a.goTypeRef(value.Type)})
 	}
 	return result, nil
 }
@@ -360,7 +462,7 @@ func expressionTypeAndValue(pkg *packages.Package, expression ast.Expr) (types.T
 }
 
 func argumentCountProblem(actual int, ellipsis bool, proposed resolvedSignature) *query.SignatureProblem {
-	expected := len(proposed.types)
+	expected := len(proposed.parameterTypes)
 	valid := actual == expected
 	if proposed.model.Variadic && !ellipsis {
 		valid = actual >= expected-1
@@ -376,14 +478,36 @@ func argumentCountProblem(actual int, ellipsis bool, proposed resolvedSignature)
 }
 
 func expectedArgumentType(index int, ellipsis bool, proposed resolvedSignature) types.Type {
-	last := len(proposed.types) - 1
+	last := len(proposed.parameterTypes) - 1
 	if !proposed.model.Variadic || index < last {
-		return proposed.types[index]
+		return proposed.parameterTypes[index]
 	}
 	if ellipsis {
-		return types.NewSlice(proposed.types[last])
+		return types.NewSlice(proposed.parameterTypes[last])
 	}
-	return proposed.types[last]
+	return proposed.parameterTypes[last]
+}
+
+func signatureChanged(current *types.Signature, proposed resolvedSignature) bool {
+	return !types.Identical(current, signatureWithProposal(current, current.Recv(), proposed))
+}
+
+func parameterPortionIdentical(current *types.Signature, proposed resolvedSignature) bool {
+	if current.Variadic() != proposed.model.Variadic || current.Params().Len() != len(proposed.parameterTypes) {
+		return false
+	}
+	for index, typ := range proposed.parameterTypes {
+		currentType := current.Params().At(index).Type()
+		if current.Variadic() && index == current.Params().Len()-1 {
+			if slice, ok := types.Unalias(currentType).(*types.Slice); ok {
+				currentType = slice.Elem()
+			}
+		}
+		if !types.Identical(currentType, typ) {
+			return false
+		}
+	}
+	return true
 }
 
 // compilerAssignable uses go/types' assignability rules and asks a small

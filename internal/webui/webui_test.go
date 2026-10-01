@@ -340,34 +340,38 @@ func TestClientProvidesContextualTypeDrilldown(t *testing.T) {
 	}
 }
 
-func TestClientProvidesParameterChangeWorkflow(t *testing.T) {
+func TestClientProvidesSignatureChangeWorkflow(t *testing.T) {
 	client := readAsset(t, "static/app.js")
 	for _, required := range []string{
 		`let inspectorState = { kind: "symbol", inspection: null, proposal: null, result: null }`,
-		`renderWorkflowButton("Analyze parameter change"`,
+		`renderWorkflowButton("Analyze signature change"`,
 		`result.function.signature.parameters.map((parameter) => parameter.type.display)`,
+		`result.function.signature.results || []`,
 		`"+ Add parameter"`,
+		`"+ Add result"`,
 		`"Remove parameter " + (index + 1)`,
+		`"Remove result " + (index + 1)`,
 		`"Final parameter is variadic"`,
 		`renderWorkflowButton("Analyze"`,
 		`renderWorkflowButton("Cancel"`,
-		`postJSON("/api/parameter-impact"`,
+		`postJSON("/api/signature-impact"`,
 		`callable: state.inspection.node.id`,
 		`parameters: parameters.map((type) => ({ type }))`,
+		`results: results.map((type) => ({ type }))`,
 		`variadic: state.proposal.variadic`,
-		`renderWorkflowButton("Edit proposed parameters"`,
+		`renderWorkflowButton("Edit proposed signature"`,
 		`renderWorkflowButton("Back to " + callableKind(state.inspection)`,
 	} {
 		if !strings.Contains(client, required) {
-			t.Errorf("parameter-change workflow source lacks %q", required)
+			t.Errorf("signature-change workflow source lacks %q", required)
 		}
 	}
-	if strings.Count(client, `renderWorkflowButton("Analyze parameter change"`) != 1 {
-		t.Error("parameter-change action must be defined only by the function/method inspector")
+	if strings.Count(client, `renderWorkflowButton("Analyze signature change"`) != 1 {
+		t.Error("signature-change action must be defined only by the function/method inspector")
 	}
 }
 
-func TestClientRendersParameterImpactReadModel(t *testing.T) {
+func TestClientRendersSignatureImpactReadModel(t *testing.T) {
 	client := readAsset(t, "static/app.js")
 	for _, required := range []string{
 		`element("h3", "Call-site impact")`,
@@ -376,6 +380,10 @@ func TestClientRendersParameterImpactReadModel(t *testing.T) {
 		`site.compatibility === "unknown"`,
 		`"Show compatible call sites (" + compatible.length + ")"`,
 		`renderSymbolButton(site.caller)`,
+		`element("h3", "Compiler consequences")`,
+		`No new compile/type-check diagnostics were observed in the affected scope.`,
+		`consequence.classification === "uncertain"`,
+		`renderSymbolButton(consequence.symbol)`,
 		`element("h3", "Contract impact")`,
 		`renderSymbolButton(contract.concrete)`,
 		`renderSymbolButton(contract.interface)`,
@@ -385,31 +393,31 @@ func TestClientRendersParameterImpactReadModel(t *testing.T) {
 		`renderSymbolButton(structural.originMethod)`,
 	} {
 		if !strings.Contains(client, required) {
-			t.Errorf("parameter-impact rendering source lacks %q", required)
+			t.Errorf("signature-impact rendering source lacks %q", required)
 		}
 	}
 }
 
-func TestClientGuardsParameterImpactRequestsAgainstStaleResults(t *testing.T) {
+func TestClientGuardsSignatureImpactRequestsAgainstStaleResults(t *testing.T) {
 	client := readAsset(t, "static/app.js")
-	start := strings.Index(client, "async function requestParameterImpact(state)")
+	start := strings.Index(client, "async function requestSignatureImpact(state)")
 	end := strings.Index(client[start:], "function renderCallSiteProblem")
 	if start < 0 || end < 0 {
-		t.Fatal("requestParameterImpact helper is missing")
+		t.Fatal("requestSignatureImpact helper is missing")
 	}
 	requestSource := client[start : start+end]
 	for _, required := range []string{
 		`const generation = ++inspectorRequestGeneration`,
 		`if (generation !== inspectorRequestGeneration) return`,
-		`renderParameterImpact({ ...state, kind: "parameter-result", result })`,
-		`renderParameterChangeEditor(state, error.message)`,
+		`renderSignatureImpact({ ...state, kind: "signature-result", result })`,
+		`renderSignatureChangeEditor(state, error.message)`,
 	} {
 		if !strings.Contains(requestSource, required) {
-			t.Errorf("parameter-impact stale guard lacks %q", required)
+			t.Errorf("signature-impact stale guard lacks %q", required)
 		}
 	}
 	if strings.Count(requestSource, `if (generation !== inspectorRequestGeneration) return`) != 2 {
-		t.Error("parameter-impact success and error paths must both reject stale responses")
+		t.Error("signature-impact success and error paths must both reject stale responses")
 	}
 }
 
@@ -631,6 +639,14 @@ func TestAnalysisBackedNodeAPIIncludesCallableSignature(t *testing.T) {
 		t.Fatalf("signature = %#v, want variadic string", signature)
 	}
 
+	resultMethod := request(t, handler, http.MethodGet, "/api/node?id=example.com%2Fparameterimpact%3A%3AResultBase%3A%3AFetch")
+	var resultMethodInspection nodeInspection
+	decode(t, resultMethod, &resultMethodInspection)
+	if resultMethod.Code != http.StatusOK || resultMethodInspection.Function == nil || resultMethodInspection.Function.Signature == nil ||
+		len(resultMethodInspection.Function.Signature.Results) != 1 || resultMethodInspection.Function.Signature.Results[0].Type.Display != "Item" {
+		t.Fatalf("result signature response = status %d, result %#v", resultMethod.Code, resultMethodInspection)
+	}
+
 	qualified := request(t, handler, http.MethodGet, "/api/node?id=example.com%2Fparameterimpact%3A%3ACallsMethod")
 	var qualifiedResult nodeInspection
 	decode(t, qualified, &qualifiedResult)
@@ -650,19 +666,19 @@ func TestAnalysisBackedNodeAPIIncludesCallableSignature(t *testing.T) {
 	}
 }
 
-func TestParameterImpactAPIUsesAnalysisReadModel(t *testing.T) {
+func TestSignatureImpactAPIUsesAnalysisReadModel(t *testing.T) {
 	analysis := parameterImpactAnalysis(t)
 	handler := Handler(analysis)
 
 	tests := []struct {
 		name       string
 		body       string
-		assertions func(*testing.T, parameterImpact)
+		assertions func(*testing.T, signatureImpact)
 	}{
 		{
 			name: "call sites and contracts",
 			body: `{"callable":"example.com/parameterimpact::Service::Save","parameters":[{"type":"string"}],"variadic":false}`,
-			assertions: func(t *testing.T, result parameterImpact) {
+			assertions: func(t *testing.T, result signatureImpact) {
 				if len(result.CallSites) == 0 || len(result.Contracts) == 0 {
 					t.Fatalf("impact lacks call sites or contracts: %#v", result)
 				}
@@ -674,7 +690,7 @@ func TestParameterImpactAPIUsesAnalysisReadModel(t *testing.T) {
 		{
 			name: "structural exposure",
 			body: `{"callable":"example.com/parameterimpact::PromotionBase::Change","parameters":[{"type":"string"}]}`,
-			assertions: func(t *testing.T, result parameterImpact) {
+			assertions: func(t *testing.T, result signatureImpact) {
 				if len(result.Structural) == 0 {
 					t.Fatalf("impact lacks structural consequences: %#v", result)
 				}
@@ -684,10 +700,19 @@ func TestParameterImpactAPIUsesAnalysisReadModel(t *testing.T) {
 			},
 		},
 		{
+			name: "results and compiler consequences",
+			body: `{"callable":"example.com/parameterimpact::ResultBase::Fetch","parameters":[{"type":"ID"}],"results":[{"type":"*Item"}]}`,
+			assertions: func(t *testing.T, result signatureImpact) {
+				if len(result.After.Results) != 1 || result.After.Results[0].Type.Display == "" || len(result.Compiler.AffectedPackages) == 0 || len(result.Compiler.Consequences) == 0 {
+					t.Fatalf("result impact presentation = %#v", result)
+				}
+			},
+		},
+		{
 			name: "variadic",
 			body: `{"callable":"example.com/parameterimpact::Variadic","parameters":[{"type":"string"}],"variadic":true}`,
-			assertions: func(t *testing.T, result parameterImpact) {
-				if !result.After.Variadic || len(result.CallSites) == 0 {
+			assertions: func(t *testing.T, result signatureImpact) {
+				if !result.After.Variadic || len(result.CallSites) != 0 || len(result.Compiler.Consequences) != 0 {
 					t.Fatalf("variadic impact = %#v", result)
 				}
 			},
@@ -696,18 +721,18 @@ func TestParameterImpactAPIUsesAnalysisReadModel(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			response := requestBody(t, handler, http.MethodPost, "/api/parameter-impact", test.body)
+			response := requestBody(t, handler, http.MethodPost, "/api/signature-impact", test.body)
 			if response.Code != http.StatusOK {
 				t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 			}
-			var result parameterImpact
+			var result signatureImpact
 			decode(t, response, &result)
 			test.assertions(t, result)
 		})
 	}
 }
 
-func TestParameterImpactAPIErrorsAreConcise(t *testing.T) {
+func TestSignatureImpactAPIErrorsAreConcise(t *testing.T) {
 	handler := Handler(parameterImpactAnalysis(t))
 	tests := []struct {
 		name string
@@ -716,10 +741,11 @@ func TestParameterImpactAPIErrorsAreConcise(t *testing.T) {
 	}{
 		{name: "invalid symbol", body: `{"callable":"example.com/parameterimpact::Missing","parameters":[]}`, want: "unknown symbol"},
 		{name: "invalid type", body: `{"callable":"example.com/parameterimpact::UseID","parameters":[{"type":"DoesNotExist"}]}`, want: "resolve proposed parameter 1 type"},
+		{name: "invalid result type", body: `{"callable":"example.com/parameterimpact::UseID","parameters":[{"type":"ID"}],"results":[{"type":"DoesNotExist"}]}`, want: "resolve proposed result 1 type"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			response := requestBody(t, handler, http.MethodPost, "/api/parameter-impact", test.body)
+			response := requestBody(t, handler, http.MethodPost, "/api/signature-impact", test.body)
 			if response.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want 400; body = %s", response.Code, response.Body.String())
 			}
@@ -731,7 +757,7 @@ func TestParameterImpactAPIErrorsAreConcise(t *testing.T) {
 		})
 	}
 
-	wrongMethod := request(t, handler, http.MethodGet, "/api/parameter-impact")
+	wrongMethod := request(t, handler, http.MethodGet, "/api/signature-impact")
 	if wrongMethod.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("GET status = %d, want 405", wrongMethod.Code)
 	}

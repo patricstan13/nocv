@@ -203,8 +203,8 @@ func handler(analysis *goanalyzer.Analysis, g *graph.Graph) http.Handler {
 		}
 		writeJSON(w, http.StatusOK, presentDependencyInspection(query.InspectPackageDependency(g, *direct)))
 	}))
-	mux.HandleFunc("/api/parameter-impact", postOnly(func(w http.ResponseWriter, r *http.Request) {
-		handleParameterImpact(w, r, analysis)
+	mux.HandleFunc("/api/signature-impact", postOnly(func(w http.ResponseWriter, r *http.Request) {
+		handleSignatureImpact(w, r, analysis)
 	}))
 
 	staticFS, err := fs.Sub(assets, "static")

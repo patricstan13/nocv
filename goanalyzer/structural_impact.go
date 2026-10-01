@@ -15,7 +15,7 @@ func (a *Analysis) structuralImpacts(callable resolvedCallable, proposed resolve
 	if !exists || parent.Kind != graph.NodeStruct {
 		return nil
 	}
-	if !parameterSignatureChanged(callable.signature, proposed) {
+	if !signatureChanged(callable.signature, proposed) {
 		return nil
 	}
 
@@ -80,9 +80,4 @@ func promotedExposure(named *types.Named, origin *types.Func) query.MethodExposu
 func methodSetPromotes(methodSet *types.MethodSet, origin *types.Func) bool {
 	selection := methodSet.Lookup(origin.Pkg(), origin.Name())
 	return selection != nil && selection.Obj() == origin && len(selection.Index()) > 1
-}
-
-func parameterSignatureChanged(current *types.Signature, proposed resolvedSignature) bool {
-	hypothetical := signatureWithParameters(current, current.Recv(), proposed)
-	return !types.Identical(current, hypothetical)
 }

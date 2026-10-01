@@ -78,10 +78,14 @@ Type and function inspectors expose related symbols directly. Methods, call
 targets, accepted and returned types, callers, owners, and implementation
 relationships can be followed without leaving the inspector. Evidence
 locations remain available as collapsed supporting detail.
-Function and method inspectors can also evaluate a hypothetical parameter-list
-change and show direct call-site compatibility, lost interface contracts, and
-promoted-method structural consequences. This workflow is analysis-only and
-supports parameter changes only.
+Function and method inspectors can also evaluate a hypothetical callable
+signature change covering ordered parameters, ordered results, and variadic
+status. The result keeps direct argument compatibility, compiler-observed
+consequences, lost interface contracts, and promoted-method structural changes
+separate. The compiler section rechecks the changed Go package and its real
+reverse import closure through an in-memory source overlay. A clean result means
+only that no new compile/type-check diagnostics were observed in that scope; it
+does not establish behavioral correctness. The workflow is analysis-only.
 
 The graph model is language-independent. Go syntax trees are used only inside
 `goanalyzer` and are converted into graph nodes and semantic edges before being
@@ -125,7 +129,8 @@ that have no type-level representation.
 children, direct semantic relationships, and relevant package/type projections
 for one graph node.
 
-`impact-params` evaluates every known direct Go call site to a selected
+`impact-params` remains a parameter-only compatibility/debug CLI while the web
+inspector is the primary unified signature-change surface. It evaluates every known direct Go call site to a selected
 function or method against a hypothetical parameter signature. Supply the new
 ordered types with repeated `--param <go-type>` flags and add `--variadic` when
 the final parameter is variadic. Type expressions are resolved with Go's type
@@ -143,10 +148,11 @@ does not itself imply a call-site incompatibility, lost interface contract, or
 compile failure. Structural results distinguish methods promoted onto `T`
 itself from methods visible only on `*T`.
 
-This first change-impact capability covers parameter types, counts, and
-variadic status only. It does not analyze result changes, receiver changes,
-transitive architectural impact, or source edits. Contract analysis is limited
-to existing implementations and does not report newly gained contracts.
+Unified signature analysis covers parameter and result types, counts, order,
+and variadic status. It does not support receiver changes, generic signature
+changes, source rewriting, test execution, or behavioral correctness. Contract
+analysis is limited to existing implementations and does not report newly
+gained contracts.
 
 Imports are stored direct package-level Go dependencies when both packages are
 represented in the loaded graph. They are distinct from NOCV semantic

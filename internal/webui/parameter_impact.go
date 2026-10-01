@@ -10,9 +10,10 @@ import (
 	"nocv/query"
 )
 
-type parameterImpactRequest struct {
+type signatureImpactRequest struct {
 	Callable   graph.SymbolRef        `json:"callable"`
 	Parameters []parameterImpactInput `json:"parameters"`
+	Results    []parameterImpactInput `json:"results"`
 	Variadic   bool                   `json:"variadic"`
 }
 
@@ -20,17 +21,19 @@ type parameterImpactInput struct {
 	Type string `json:"type"`
 }
 
-type parameterImpact struct {
+type signatureImpact struct {
 	Callable   graph.SymbolRef    `json:"callable"`
 	Before     callableSignature  `json:"before"`
 	After      callableSignature  `json:"after"`
 	CallSites  []callSiteImpact   `json:"callSites"`
+	Compiler   compilerImpact     `json:"compiler"`
 	Contracts  []contractImpact   `json:"contracts"`
 	Structural []structuralImpact `json:"structural"`
 }
 
 type callableSignature struct {
 	Parameters []parameter `json:"parameters"`
+	Results    []parameter `json:"results"`
 	Variadic   bool        `json:"variadic"`
 }
 
@@ -75,12 +78,26 @@ type structuralImpact struct {
 	OriginMethod symbolSummary `json:"originMethod"`
 }
 
-func handleParameterImpact(w http.ResponseWriter, r *http.Request, analysis *goanalyzer.Analysis) {
+type compilerImpact struct {
+	AffectedPackages []graph.SymbolRef     `json:"affectedPackages"`
+	Consequences     []compilerConsequence `json:"consequences"`
+	BaselineStatus   string                `json:"baselineStatus"`
+}
+
+type compilerConsequence struct {
+	Package        graph.SymbolRef `json:"package"`
+	Symbol         *symbolSummary  `json:"symbol,omitempty"`
+	Location       location        `json:"location"`
+	Message        string          `json:"message"`
+	Classification string          `json:"classification"`
+}
+
+func handleSignatureImpact(w http.ResponseWriter, r *http.Request, analysis *goanalyzer.Analysis) {
 	if analysis == nil {
 		writeError(w, http.StatusInternalServerError, "Go analysis is unavailable")
 		return
 	}
-	var request parameterImpactRequest
+	var request signatureImpactRequest
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil {
@@ -100,22 +117,41 @@ func handleParameterImpact(w http.ResponseWriter, r *http.Request, analysis *goa
 	for _, parameter := range request.Parameters {
 		proposed.Parameters = append(proposed.Parameters, query.ProposedParameter{TypeExpr: parameter.Type})
 	}
-	impact, err := analysis.AnalyzeParameterChange(request.Callable, proposed)
+	for _, result := range request.Results {
+		proposed.Results = append(proposed.Results, query.ProposedResult{TypeExpr: result.Type})
+	}
+	impact, err := analysis.AnalyzeSignatureChange(request.Callable, proposed)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, presentParameterImpact(impact))
+	writeJSON(w, http.StatusOK, presentSignatureImpact(impact))
 }
 
-func presentParameterImpact(source query.ParameterChangeImpact) parameterImpact {
-	result := parameterImpact{
-		Callable:   source.Callable,
-		Before:     presentCallableSignature(source.Before),
-		After:      presentCallableSignature(source.After),
-		CallSites:  make([]callSiteImpact, 0, len(source.CallSites)),
+func presentSignatureImpact(source goanalyzer.SignatureChangeImpact) signatureImpact {
+	result := signatureImpact{
+		Callable:  source.Callable,
+		Before:    presentCallableSignature(source.Before),
+		After:     presentCallableSignature(source.After),
+		CallSites: make([]callSiteImpact, 0, len(source.CallSites)),
+		Compiler: compilerImpact{
+			AffectedPackages: append([]graph.SymbolRef(nil), source.Compiler.AffectedPackages...),
+			Consequences:     make([]compilerConsequence, 0, len(source.Compiler.Consequences)),
+			BaselineStatus:   source.Compiler.BaselineStatus.String(),
+		},
 		Contracts:  make([]contractImpact, 0, len(source.Contracts)),
 		Structural: make([]structuralImpact, 0, len(source.Structural)),
+	}
+	for _, consequence := range source.Compiler.Consequences {
+		presented := compilerConsequence{
+			Package: consequence.Package, Location: location{File: consequence.Location.File, Offset: consequence.Location.Offset},
+			Message: consequence.Message, Classification: consequence.Classification.String(),
+		}
+		if consequence.Symbol != nil {
+			symbol := presentSymbolSummary(*consequence.Symbol)
+			presented.Symbol = &symbol
+		}
+		result.Compiler.Consequences = append(result.Compiler.Consequences, presented)
 	}
 	for _, site := range source.CallSites {
 		presented := callSiteImpact{
@@ -157,9 +193,16 @@ func presentParameterImpact(source query.ParameterChangeImpact) parameterImpact 
 }
 
 func presentCallableSignature(source query.CallableSignature) callableSignature {
-	result := callableSignature{Parameters: make([]parameter, 0, len(source.Parameters)), Variadic: source.Variadic}
+	result := callableSignature{
+		Parameters: make([]parameter, 0, len(source.Parameters)),
+		Results:    make([]parameter, 0, len(source.Results)),
+		Variadic:   source.Variadic,
+	}
 	for _, sourceParameter := range source.Parameters {
 		result.Parameters = append(result.Parameters, parameter{Name: sourceParameter.Name, Type: presentGoTypeRef(sourceParameter.Type)})
+	}
+	for _, sourceResult := range source.Results {
+		result.Results = append(result.Results, parameter{Name: sourceResult.Name, Type: presentGoTypeRef(sourceResult.Type)})
 	}
 	return result
 }

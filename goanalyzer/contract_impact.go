@@ -163,7 +163,7 @@ func hypotheticalMethodImplements(
 		receiverType = types.NewPointer(hypotheticalNamed)
 	}
 	receiver := types.NewVar(token.NoPos, callable.function.Pkg(), "", receiverType)
-	signature := signatureWithParameters(callable.signature, receiver, proposed)
+	signature := signatureWithProposal(callable.signature, receiver, proposed)
 	method := types.NewFunc(token.NoPos, callable.function.Pkg(), callable.function.Name(), signature)
 	hypotheticalNamed.AddMethod(method)
 
@@ -184,7 +184,7 @@ func interfaceWithSubstitutedMethod(
 	for method := range current.Methods() {
 		if method == selected {
 			original := method.Type().(*types.Signature)
-			signature := signatureWithParameters(original, nil, proposed)
+			signature := signatureWithProposal(original, nil, proposed)
 			methods = append(methods, types.NewFunc(method.Pos(), method.Pkg(), method.Name(), signature))
 			continue
 		}
