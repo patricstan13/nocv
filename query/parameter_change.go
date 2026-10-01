@@ -54,7 +54,30 @@ type ParameterChangeImpact struct {
 type StructuralImpact struct {
 	Kind         StructuralImpactKind
 	Type         SymbolSummary
+	Exposure     MethodExposure
 	OriginMethod SymbolSummary
+}
+
+// MethodExposure describes whether a promoted method is visible on T itself
+// or only on *T. Value implies visibility on T; pointer accessibility then
+// follows Go's method-set rules without requiring a second impact row.
+type MethodExposure uint8
+
+const (
+	MethodExposureUnknown MethodExposure = iota
+	MethodExposureValue
+	MethodExposurePointerOnly
+)
+
+func (e MethodExposure) String() string {
+	switch e {
+	case MethodExposureValue:
+		return "value"
+	case MethodExposurePointerOnly:
+		return "pointer only"
+	default:
+		return "unknown"
+	}
 }
 
 // StructuralImpactKind identifies a deterministic structural consequence.

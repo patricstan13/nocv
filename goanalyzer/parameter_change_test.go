@@ -247,6 +247,9 @@ func TestAnalyzeParameterChangeDirectRecursiveAndShadowedPromotion(t *testing.T)
 		if impact.Kind != query.StructuralPromotedMethodChanged {
 			t.Errorf("structural kind = %v", impact.Kind)
 		}
+		if impact.Exposure != query.MethodExposureValue {
+			t.Errorf("%s exposure = %v, want value", impact.Type.Ref, impact.Exposure)
+		}
 		if impact.OriginMethod.Ref != impactPackage+"::PromotionBase::Change" {
 			t.Errorf("origin method = %+v", impact.OriginMethod)
 		}
@@ -269,15 +272,33 @@ func TestAnalyzeParameterChangeDirectRecursiveAndShadowedPromotion(t *testing.T)
 func TestAnalyzeParameterChangePointerAndVariadicPromotion(t *testing.T) {
 	analysis := loadImpactAnalysis(t)
 	pointer := analyze(t, analysis, impactPackage+"::PointerBase::Touch", signature("string"))
-	wantPointer := []graph.SymbolRef{impactPackage + "::PointerEmbed"}
-	if got := structuralTypes(pointer.Structural); !slices.Equal(got, wantPointer) {
-		t.Fatalf("pointer promotion types = %v, want %v", got, wantPointer)
+	wantPointer := []struct {
+		ref      graph.SymbolRef
+		exposure query.MethodExposure
+	}{
+		{ref: impactPackage + "::PointerEmbed", exposure: query.MethodExposureValue},
+		{ref: impactPackage + "::RecursivePointerMid", exposure: query.MethodExposurePointerOnly},
+		{ref: impactPackage + "::RecursivePointerOuter", exposure: query.MethodExposurePointerOnly},
+		{ref: impactPackage + "::ValueEmbed", exposure: query.MethodExposurePointerOnly},
+	}
+	if len(pointer.Structural) != len(wantPointer) {
+		t.Fatalf("pointer promotion impacts = %+v, want %d", pointer.Structural, len(wantPointer))
+	}
+	for index, want := range wantPointer {
+		got := pointer.Structural[index]
+		if got.Type.Ref != want.ref || got.Exposure != want.exposure {
+			t.Errorf("pointer impact %d = (%s, %s), want (%s, %s)",
+				index, got.Type.Ref, got.Exposure, want.ref, want.exposure)
+		}
 	}
 
 	variadic := analyze(t, analysis, impactPackage+"::VariadicBase::Collect", signature("[]string"))
 	wantVariadic := []graph.SymbolRef{impactPackage + "::VariadicEmbed"}
 	if got := structuralTypes(variadic.Structural); !slices.Equal(got, wantVariadic) {
 		t.Fatalf("variadic promotion types = %v, want %v", got, wantVariadic)
+	}
+	if variadic.Structural[0].Exposure != query.MethodExposureValue {
+		t.Fatalf("variadic exposure = %v, want value", variadic.Structural[0].Exposure)
 	}
 }
 

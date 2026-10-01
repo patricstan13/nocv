@@ -136,7 +136,8 @@ itself assert that the program will fail to compile. Parameter-change analysis
 also reports concrete types whose effective method surface changes because the
 selected method is promoted through concrete embedding. This structural fact
 does not itself imply a call-site incompatibility, lost interface contract, or
-compile failure.
+compile failure. Structural results distinguish methods promoted onto `T`
+itself from methods visible only on `*T`.
 
 This first change-impact capability covers parameter types, counts, and
 variadic status only. It does not analyze result changes, receiver changes,

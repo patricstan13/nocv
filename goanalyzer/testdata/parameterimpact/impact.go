@@ -87,6 +87,14 @@ type PointerEmbed struct {
 	*PointerBase
 }
 
+type RecursivePointerMid struct {
+	PointerBase
+}
+
+type RecursivePointerOuter struct {
+	RecursivePointerMid
+}
+
 type VariadicBase struct{}
 
 func (VariadicBase) Collect(values ...string) {}

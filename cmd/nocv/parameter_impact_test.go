@@ -101,6 +101,22 @@ func TestImpactParamsCommandRendersPromotedMethodStructuralImpact(t *testing.T) 
 			t.Errorf("output unexpectedly contains %q:\n%s", unwanted, output.String())
 		}
 	}
+
+	invocation.values = []string{"example.com/parameterimpact::PointerBase::Touch", "--param", "string"}
+	output.Reset()
+	if err := executeCommandWithAnalysis(&output, analysis.Graph(), analysis, invocation); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"PointerEmbed exposes Touch from PointerBase.Touch",
+		"*ValueEmbed exposes Touch from PointerBase.Touch",
+		"*RecursivePointerMid exposes Touch from PointerBase.Touch",
+		"*RecursivePointerOuter exposes Touch from PointerBase.Touch",
+	} {
+		if !strings.Contains(output.String(), want) {
+			t.Errorf("pointer output lacks %q:\n%s", want, output.String())
+		}
+	}
 }
 
 func TestImpactParamsCommandRendersConcreteAndInterfaceContractImpact(t *testing.T) {

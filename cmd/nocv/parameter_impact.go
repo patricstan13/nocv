@@ -75,10 +75,14 @@ func printParameterChangeImpact(out io.Writer, analysis *goanalyzer.Analysis, va
 	}
 	fmt.Fprintln(out, "\nPROMOTED METHOD CHANGED")
 	for _, structural := range impact.Structural {
+		typeName := structural.Type.Name
+		if structural.Exposure == query.MethodExposurePointerOnly {
+			typeName = "*" + typeName
+		}
 		fmt.Fprintf(
 			out,
 			"  %s exposes %s from %s\n",
-			structural.Type.Name,
+			typeName,
 			structural.OriginMethod.Name,
 			methodDisplay(structural.OriginMethod),
 		)

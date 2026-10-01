@@ -8,10 +8,8 @@ import (
 	"nocv/query"
 )
 
-// structuralImpacts reports concrete named types whose value method set
-// contains the selected declaration through promotion. Pointer-only modeled
-// types are not synthesized; embedding *T naturally contributes *T's methods
-// to the embedding named type's method set according to go/types.
+// structuralImpacts reports concrete named types whose value or pointer method
+// set contains the selected declaration through promotion.
 func (a *Analysis) structuralImpacts(callable resolvedCallable, proposed resolvedSignature) []query.StructuralImpact {
 	parent, exists := a.graph.Node(callable.node.Parent)
 	if !exists || parent.Kind != graph.NodeStruct {
@@ -27,12 +25,14 @@ func (a *Analysis) structuralImpacts(callable resolvedCallable, proposed resolve
 		if named == nil || hasTypeParameters(named) {
 			continue
 		}
-		if !methodSetPromotes(types.NewMethodSet(named), callable.function) {
+		exposure := promotedExposure(named, callable.function)
+		if exposure == query.MethodExposureUnknown {
 			continue
 		}
 		result = append(result, query.StructuralImpact{
 			Kind:         query.StructuralPromotedMethodChanged,
 			Type:         a.symbolSummary(candidateID),
+			Exposure:     exposure,
 			OriginMethod: a.symbolSummary(callable.node.ID),
 		})
 	}
@@ -65,6 +65,16 @@ func (a *Analysis) embeddingCandidates(origin graph.NodeID) []graph.NodeID {
 		}
 	}
 	return result
+}
+
+func promotedExposure(named *types.Named, origin *types.Func) query.MethodExposure {
+	if methodSetPromotes(types.NewMethodSet(named), origin) {
+		return query.MethodExposureValue
+	}
+	if methodSetPromotes(types.NewMethodSet(types.NewPointer(named)), origin) {
+		return query.MethodExposurePointerOnly
+	}
+	return query.MethodExposureUnknown
 }
 
 func methodSetPromotes(methodSet *types.MethodSet, origin *types.Func) bool {
