@@ -88,8 +88,9 @@ go test ./...
 ## Signature-change scenarios
 
 Use the function or method inspector's **Analyze signature change** action for
-the unified workflow. The existing `impact-params` examples remain useful for
-focused parameter-only CLI checks.
+the unified workflow. Parameter-only proposals use this same action and include
+compiler consequences as well as structured call-site, contract, and structural
+results.
 
 ### Result-only change
 
@@ -106,33 +107,24 @@ separate from the full-overlay compiler and contract consequences.
 
 ### A. Named scalar to primitive and interface contract loss
 
-```bash
-go run ./cmd/nocv impact-params ./examples/impactdemo/... \
-  example.com/impactdemo/repository::Repository::Save \
-  --param string
-```
+Inspect `example.com/impactdemo/repository::Repository::Save`, replace its
+`domain.ID` parameter with `string`, and analyze the proposal.
 
 Expected: the calls from `Service.CreateUser` and `SaveWith` are incompatible,
 and both current implementations lose the `Repository` contract.
 
 ### B. Add a service parameter
 
-```bash
-go run ./cmd/nocv impact-params ./examples/impactdemo/... \
-  example.com/impactdemo/service::Service::CreateUser \
-  --param domain.ID --param string --param bool
-```
+Inspect `example.com/impactdemo/service::Service::CreateUser`, keep the existing
+`domain.ID` and `string` parameters, add `bool`, and analyze the proposal.
 
 Expected: `Handler.CreateUser` is incompatible by argument count. Because
 `ExtendedService` embeds `Service`, its pointer method surface also changes.
 
 ### C. Promoted method change and shadowing
 
-```bash
-go run ./cmd/nocv impact-params ./examples/impactdemo/... \
-  example.com/impactdemo/service::BaseService::Validate \
-  --param string
-```
+Inspect `example.com/impactdemo/service::BaseService::Validate`, replace its
+`domain.ID` parameter with `string`, and analyze the proposal.
 
 Expected: the `domain.ID` call in `Service.CreateUser` is incompatible, the
 untyped string call in `Handler.ValidateGuest` remains compatible, and
@@ -141,11 +133,9 @@ excluded because it declares its own `Validate`.
 
 For the pointer-only promotion case:
 
-```bash
-go run ./cmd/nocv impact-params ./examples/impactdemo/... \
-  example.com/impactdemo/service::AuditBase::Audit \
-  --param string
-```
+For the pointer-only promotion case, inspect
+`example.com/impactdemo/service::AuditBase::Audit`, replace its `domain.ID`
+parameter with `string`, and analyze the proposal.
 
 Expected: structural results identify `*Service` and `*ExtendedService`.
 
@@ -156,22 +146,14 @@ report both current implementers as lost; structural impact remains empty.
 
 ### E. Unchanged proposal
 
-```bash
-go run ./cmd/nocv impact-params ./examples/impactdemo/... \
-  example.com/impactdemo/service::BaseService::Validate \
-  --param domain.ID
-```
-
-Expected: both existing calls are compatible, with no contract or structural
-impact.
+Inspect `example.com/impactdemo/service::BaseService::Validate` and submit its
+existing `domain.ID` parameter unchanged. Expected: no call-site, compiler,
+contract, or structural impact.
 
 ### F. Variadic to slice
 
-```bash
-go run ./cmd/nocv impact-params ./examples/impactdemo/... \
-  example.com/impactdemo/util::JoinTags \
-  --param '[]string'
-```
+Inspect `example.com/impactdemo/util::JoinTags`, change its variadic `string`
+parameter to non-variadic `[]string`, and analyze the proposal.
 
 Expected: the ordinary two-argument call has the wrong argument count, while
 the ellipsis call is incompatible with the proposed non-variadic signature.

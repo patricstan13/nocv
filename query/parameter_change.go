@@ -54,17 +54,6 @@ type GoTypeRef struct {
 	Symbol  graph.SymbolRef
 }
 
-// ParameterChangeImpact remains as the compatibility model for the
-// impact-params CLI. New product surfaces use goanalyzer.SignatureChangeImpact.
-type ParameterChangeImpact struct {
-	Callable   graph.SymbolRef
-	Before     CallableSignature
-	After      CallableSignature
-	CallSites  []CallSiteImpact
-	Contracts  []ContractImpact
-	Structural []StructuralImpact
-}
-
 // StructuralImpact describes a modeled type whose effective method surface is
 // changed because the selected concrete method is promoted through embedding.
 type StructuralImpact struct {

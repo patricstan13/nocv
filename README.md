@@ -30,7 +30,6 @@ go run ./cmd/nocv check-forbidden-dependency ./... nocv/cmd/nocv nocv/graph
 go run ./cmd/nocv direct-deps ./... nocv/query::Impact
 go run ./cmd/nocv direct-dependents ./... nocv/query::DirectDependents
 go run ./cmd/nocv impact ./... nocv/graph::Graph
-go run ./cmd/nocv impact-params ./goanalyzer/testdata/parameterimpact/... example.com/parameterimpact::UseID --param string
 go run ./cmd/nocv paths ./... nocv/query::Impact nocv/graph::Graph
 go run ./cmd/nocv package-paths ./... nocv/cmd/nocv nocv/query
 go run ./cmd/nocv package-deps ./...
@@ -129,27 +128,19 @@ that have no type-level representation.
 children, direct semantic relationships, and relevant package/type projections
 for one graph node.
 
-`impact-params` remains a parameter-only compatibility/debug CLI while the web
-inspector is the primary unified signature-change surface. It evaluates every known direct Go call site to a selected
-function or method against a hypothetical parameter signature. Supply the new
-ordered types with repeated `--param <go-type>` flags and add `--variadic` when
-the final parameter is variadic. Type expressions are resolved with Go's type
-checker in the callable declaration file's context, so builtins, local named
-types, imported qualified types, aliases, and composite types retain compiler
+Unified signature analysis evaluates every known direct Go call site when a
+proposal changes parameters and reports compatible, incompatible, and genuinely
+unknown sites separately. Type expressions are resolved with Go's type checker
+in the callable declaration file's context, so builtins, local named types,
+imported qualified types, aliases, and composite types retain compiler
 semantics. Primitive and named non-struct types participate without becoming
-graph nodes. The result reports compatible, incompatible, and genuinely
-unknown call sites separately. It also reports existing concrete-type/interface
-contracts that the hypothetical parameter signature would cause to be lost. A
-lost implementation is a structural contract consequence; it does not by
-itself assert that the program will fail to compile. Parameter-change analysis
-also reports concrete types whose effective method surface changes because the
-selected method is promoted through concrete embedding. This structural fact
-does not itself imply a call-site incompatibility, lost interface contract, or
-compile failure. Structural results distinguish methods promoted onto `T`
-itself from methods visible only on `*T`.
+graph nodes. Parameter changes also run the same compiler overlay recheck as
+result changes and can report lost interface contracts and concrete types whose
+promoted method surface changes. Structural results distinguish methods
+promoted onto `T` itself from methods visible only on `*T`.
 
-Unified signature analysis covers parameter and result types, counts, order,
-and variadic status. It does not support receiver changes, generic signature
+The maintained workflow covers parameter and result types, counts, order, and
+variadic status. It does not support receiver changes, generic signature
 changes, source rewriting, test execution, or behavioral correctness. Contract
 analysis is limited to existing implementations and does not report newly
 gained contracts.

@@ -136,45 +136,6 @@ func (a *Analysis) AnalyzeSignatureChange(callable graph.SymbolRef, proposed que
 	return result, nil
 }
 
-// AnalyzeParameterChange preserves the parameter-only CLI/debug surface. It
-// carries the callable's current results into the unified analysis and omits
-// the compiler consequence section from the legacy result shape.
-func (a *Analysis) AnalyzeParameterChange(callable graph.SymbolRef, proposed query.ProposedSignature) (query.ParameterChangeImpact, error) {
-	resolved, err := a.resolveCallable(callable)
-	if err != nil {
-		return query.ParameterChangeImpact{}, err
-	}
-	if hasSignatureTypeParameters(resolved.signature) {
-		return query.ParameterChangeImpact{}, fmt.Errorf("generic callable parameter changes are not supported: %s", callable)
-	}
-	before := a.extractSignature(resolved.signature)
-	current := a.editableSignature(resolved)
-	for _, result := range current.Results {
-		proposed.Results = append(proposed.Results, query.ProposedResult{Name: result.Name, TypeExpr: result.Type.Display})
-	}
-	after, err := a.resolveProposedSignature(resolved, proposed, before.model)
-	if err != nil {
-		return query.ParameterChangeImpact{}, err
-	}
-	impact := query.ParameterChangeImpact{Callable: callable, Before: before.model, After: after.model}
-	for _, site := range a.collectCallSites(resolved.function) {
-		impact.CallSites = append(impact.CallSites, a.checkCallSite(site, after))
-	}
-	impact.Contracts = a.contractImpacts(resolved, after)
-	impact.Structural = a.structuralImpacts(resolved, after)
-	sort.Slice(impact.CallSites, func(i, j int) bool {
-		left, right := impact.CallSites[i], impact.CallSites[j]
-		if left.Caller.Ref != right.Caller.Ref {
-			return left.Caller.Ref < right.Caller.Ref
-		}
-		if left.Location.File != right.Location.File {
-			return left.Location.File < right.Location.File
-		}
-		return left.Location.Offset < right.Location.Offset
-	})
-	return impact, nil
-}
-
 func (a *Analysis) resolveCallable(ref graph.SymbolRef) (resolvedCallable, error) {
 	if a == nil || a.graph == nil || a.symbols == nil {
 		return resolvedCallable{}, fmt.Errorf("Go analysis is unavailable")

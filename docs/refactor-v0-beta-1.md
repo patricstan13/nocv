@@ -29,10 +29,10 @@ important evidence for the vocabulary review below.
 | Package | Owns today | Depends on | Depended on by | Cohesive responsibilities | Misplaced or historical responsibilities |
 |---|---|---|---|---|---|
 | `graph` | Node identity, hierarchy, locations, semantic/import edges, indexes, validation, detached access | Standard library only | `query`, `goanalyzer`, `internal/webui`, `cmd/nocv` | The graph kernel is focused and language-neutral | None found |
-| `query` | Direct navigation, import and semantic paths, package/type projections, inspections, explanations, rules, transitive impact, shared signature/impact DTOs | `graph` | `goanalyzer`, `internal/webui`, `cmd/nocv` | Graph-derived projections and read models are cohesive | `GoTypeRef`, callable/proposed signatures, and call compatibility are Go-specific and live here mainly to provide detached cross-package DTOs; `ParameterChangeImpact` is compatibility history |
-| `goanalyzer` | Go loading, graph extraction, symbol index, compiler/type state, call-site analysis, signature resolution, contracts, promotion, source overlay, compiler recheck, diagnostic comparison and attribution | `graph`, `query`, `go/packages`, compiler packages | `internal/webui`, `cmd/nocv` | These operations share one loaded Go type universe and symbol index | The package has distinct internal areas; the legacy parameter-only entry point duplicates unified orchestration. No package split is yet justified solely by size |
+| `query` | Direct navigation, import and semantic paths, package/type projections, inspections, explanations, rules, transitive impact, shared signature/impact DTOs | `graph` | `goanalyzer`, `internal/webui`, `cmd/nocv` | Graph-derived projections and read models are cohesive | `GoTypeRef`, callable/proposed signatures, and call compatibility are Go-specific and live here mainly to provide detached cross-package DTOs |
+| `goanalyzer` | Go loading, graph extraction, symbol index, compiler/type state, call-site analysis, signature resolution, contracts, promotion, source overlay, compiler recheck, diagnostic comparison and attribution | `graph`, `query`, `go/packages`, compiler packages | `internal/webui`, `cmd/nocv` | These operations share one loaded Go type universe and symbol index | The package has distinct internal areas. No package split is yet justified solely by size |
 | `internal/webui` | HTTP server, JSON presentation DTOs, embedded assets, package graph, inspector/navigation state, signature-change editor and results | `goanalyzer`, `graph`, `query` | `cmd/nocv` | It is a coherent internal adapter from analysis/read models to one UI | `app.js` carries several workflows in one mutable module; `parameter_impact.go` is a stale filename after unified signature support |
-| `cmd/nocv` | Command parsing, project loading orchestration, query invocation, text formatting, web serving, diagnostic/debug workflows | `goanalyzer`, `graph`, `query`, `internal/webui` | Executable only | It is the composition root, so high fan-out is expected | `impact-params` and its formatter preserve the old parameter-only model; command names expose overlapping meanings of dependency and impact |
+| `cmd/nocv` | Command parsing, project loading orchestration, query invocation, text formatting, web serving, diagnostic/debug workflows | `goanalyzer`, `graph`, `query`, `internal/webui` | Executable only | It is the composition root, so high fan-out is expected | Command names still expose overlapping meanings of dependency and impact |
 | `examples/impactdemo` | Small, separate Go module demonstrating call, result, contract, embedding, compiler, and dirty-baseline scenarios | Its own standard-library/local packages; no NOCV production dependency | Manual validation only | Purpose-built behavior fixture | Its README is manually maintained and can drift from analyzer behavior; that is a test-documentation risk, not a package ownership problem |
 
 `graph` remains the stable lower layer. `query` is the main architectural
@@ -86,7 +86,6 @@ the edge with exact type evidence:
 - `Analysis` returns `CallableSignature` from `CallableSignature` and
   `editableSignature`, and accepts it in signature resolution.
 - `Analysis` returns `GoTypeRef` from `goTypeRef`.
-- `Analysis` returns `ParameterChangeImpact` from `AnalyzeParameterChange`.
 - `Analysis` accepts `ProposedSignature` in both public change analyzers.
 - `Analysis` returns `SymbolSummary` from diagnostic attribution and summary
   helpers.
@@ -126,7 +125,7 @@ it does not necessarily mean HTTP-only.
 | `SymbolSummary` | `query` | inspections, analyzer impacts, CLI/web | Language-independent detached semantic/presentation summary | Legitimately shared, but analyzer-side construction duplicates query summary logic |
 | `CallableSignature` | `query` | `goanalyzer`, webui, CLI | Go-specific detached domain/presentation model | Approved to migrate toward `goanalyzer` in a later task |
 | `ProposedSignature` | `query` | `goanalyzer`, webui request conversion, CLI | Go-specific command/input model (`TypeExpr`) | Approved to migrate toward `goanalyzer`; explicitly Go syntax-aware |
-| `ParameterChangeImpact` | `query` | legacy analyzer API and `impact-params` | Go-specific historical compatibility result | Approved for removal with the legacy surface |
+| `ParameterChangeImpact` | Removed in Task 46 | None | Historical Go-specific compatibility result | Removed with the legacy parameter-only surface |
 | `SignatureChangeImpact` | `goanalyzer` | webui presentation | Go-specific aggregate analysis result | Correct today because it includes compiler recheck results |
 | `CallSiteImpact` | `query` | both analyzer entry points, CLI/web | Go-specific semantic result | Approved to migrate toward `goanalyzer`; it is compiler-backed Go behavior |
 | `ContractImpact` | `query` | analyzer, CLI/web | Mostly generic wording, but implemented with Go method sets and Go symbol semantics | Shared use is legitimate; ownership is still coupled to the Go signature model |
@@ -150,7 +149,7 @@ The concepts crossing `goanalyzer → query` fall into five groups:
 | Generic semantic concepts | `ContractImpact`, `StructuralImpact`, `MethodExposure` | Detached domain results are useful to multiple presenters, but their only current semantics are Go contracts and promotion |
 | Go signature/type concepts | `GoTypeRef`, `CallableSignature`, `ProposedSignature`, `Parameter`, `Result`, `Compatibility`, `SignatureProblem`, `CallSiteImpact` | Clearly Go-specific; they are in `query` mainly as a neutral DTO location |
 | Go compiler consequences | `CompilerImpact`, `CompilerConsequence`, baseline and diagnostic classification | Correctly remain in `goanalyzer` |
-| Historical compatibility | `ParameterChangeImpact` | Exists for `impact-params`; should not shape the beta API |
+| Historical compatibility | `ParameterChangeImpact` | Removed in Task 46 with `impact-params` and `AnalyzeParameterChange` |
 
 The current split—shared DTOs in `query`, compiler deltas in `goanalyzer`—is
 pragmatic and avoids an import cycle, but it is not the approved long-term
@@ -181,14 +180,14 @@ across packages; the exact mechanical move remains a later task.
 
 | Item | Classification | Evidence and reason |
 |---|---|---|
-| `Analysis.AnalyzeParameterChange` | Remove before beta | The approved unified workflow supersedes it; it repeats resolution, analysis, and sorting and intentionally omits compiler consequences |
-| `query.ParameterChangeImpact` | Remove before beta | Its only production purpose is the legacy CLI result shape; new surfaces use `SignatureChangeImpact` |
-| `impact-params` CLI | Remove before beta | The approved product direction does not retain a parallel parameter-only workflow |
+| `Analysis.AnalyzeParameterChange` | Removed in Task 46 | Unified `AnalyzeSignatureChange` is now the only maintained analysis entry point |
+| `query.ParameterChangeImpact` | Removed in Task 46 | Maintained consumers use `SignatureChangeImpact` |
+| `impact-params` CLI | Removed in Task 46 | The browser/API unified signature workflow is the maintained product surface |
 | `query/parameter_change.go` | Move/rename after legacy removal | Its Go-specific contents are approved to migrate toward `goanalyzer`; moving them remains a separate task |
-| `goanalyzer/parameter_change.go` | Rename/split within package after legacy removal | It owns unified signature resolution and call-site analysis as well as the legacy wrapper |
+| `goanalyzer/parameter_change.go` | Rename/split within package in a later task | It now owns unified signature resolution and call-site analysis; the legacy wrapper is gone |
 | `internal/webui/parameter_impact.go` | Rename before beta | Endpoint and content are already unified signature impact; filename is stale |
-| `cmd/nocv/parameter_impact.go` | Keep temporarily | Correctly matches `impact-params`; remove or rename together with that command |
-| Parameter-only analyzer tests | Keep intentionally, then rename where needed | They still document valid call-site, contract, promotion, constant, and variadic behavior even after the wrapper disappears |
+| `cmd/nocv/parameter_impact.go` | Removed in Task 46 | Its parser and formatter existed only for `impact-params` |
+| Parameter-change analyzer tests | Migrated in Task 46 | They exercise the unified API and retain call-site, contract, promotion, constant, variadic, and no-op behavior |
 | `hypothetical_recheck_test.go` spike helpers | Consolidate before beta | The test retains independent loading, closure, and diagnostic-delta implementations from the spike; behavior coverage is valuable but duplicate production algorithms are not |
 | `/api/signature-impact` | Keep intentionally | It is already the unified endpoint; no `/api/parameter-impact` route remains |
 
@@ -240,12 +239,12 @@ across packages; the exact mechanical move remains a later task.
 | File | Action | Reason |
 |---|---|---|
 | `query/parameter_change.go` | Relocate/rename in the approved model-migration task | Responsibility is now full Go signature DTOs and impacts, not parameter-only analysis |
-| `goanalyzer/parameter_change.go` | Split/rename within package after legacy removal | Contains signature extraction/resolution, direct call checking, and legacy/unified orchestration |
+| `goanalyzer/parameter_change.go` | Split/rename within package later | Contains unified signature extraction/resolution and direct call checking |
 | `goanalyzer/signature_change.go` | Keep name; consider internal file split | It accurately names the unified feature, but overlay and diagnostics are separate cohesive concepts |
 | `goanalyzer/contract_impact.go` | Keep | Name matches focused responsibility |
 | `goanalyzer/structural_impact.go` | Keep | Name matches focused responsibility |
 | `internal/webui/parameter_impact.go` | Rename mechanically to `signature_impact.go` | Content and endpoint are already signature-wide |
-| `cmd/nocv/parameter_impact.go` | Keep temporarily, then remove/rename with command | It accurately implements the legacy `impact-params` surface |
+| `cmd/nocv/parameter_impact.go` | Removed in Task 46 | It implemented only the removed legacy CLI surface |
 
 ## What `Analysis` represents
 
@@ -342,7 +341,6 @@ Line count was used only to find candidates; the reasons below are conceptual.
 | `addPackage`, `goanalyzer/analyzer.go` | Ordered files/docs, package/type/function nodes, identities, compiler-object index | Central extraction path must preserve many identity and documentation invariants | Keep coordinator; named helpers by declaration kind only when touched | Probable debt, not urgent |
 | `addCalls`, `goanalyzer/analyzer.go` | AST traversal, lexical function-literal ownership, object lookup, call edge/evidence creation | Closure attribution rules are embedded in traversal state | Named call-attribution traversal helper | Useful only with focused tests; defer |
 | `AnalyzeSignatureChange`, `goanalyzer/parameter_change.go` | Resolve, validate, compare, collect four impact lenses, sort | Orchestration is broad but linear and expresses product semantics | Keep as coordinator; extract shared result sorting | Mostly intentional complexity |
-| `AnalyzeParameterChange`, same file | Repeats the above without compiler impact | Duplicate workflow can diverge | Remove or delegate after CLI decision | Clear debt |
 | `resolveProposedSignature`, same file | Parse type expressions, declaration-context resolution, validate variadic shape, construct compiler/model signatures | Compiler and detached DTO construction are interleaved | Separate type-expression resolution from model assembly if ownership changes | Probable debt |
 | `checkCallSite`, same file | Argument extraction, count/ellipsis rules, compiler assignability/constants, problems DTO | Dense because Go call semantics are genuinely detailed | Keep focused helpers already present; no package split | Intentional complexity |
 | `signatureOverlay`, `signature_change.go` | Declaration lookup, range selection, file IO, render, byte splicing | Several failure modes and invariants live in one function | `findCallableDeclaration`, `signatureSourceRange`, overlay assembly | Worth extracting mechanically |
@@ -371,7 +369,7 @@ Line count was used only to find candidates; the reasons below are conceptual.
 
 | Duplication | Classification | Reason |
 |---|---|---|
-| Unified and legacy analyzer orchestration/sorting | Dangerous divergence | The legacy path already omits compiler impact and does not share the unified no-op path |
+| Unified and legacy analyzer orchestration/sorting | Resolved in Task 46 | The legacy path was removed; `AnalyzeSignatureChange` is authoritative |
 | Production overlay algorithms and Task 41 spike helpers in tests | Worth consolidating | Two implementations can make tests pass while production changes independently |
 | Package/type projected dependency builders | Harmless for now | Similar mechanics but different ownership and endpoint rules; a generic abstraction may obscure semantics |
 | `query.symbolSummary` and analyzer summary construction | Review during the approved model move | Same presentation concept is built from different source domains; `SymbolSummary` remains in `query`, so forced consolidation may create the wrong dependency |
@@ -430,7 +428,6 @@ No frontend framework or runtime choice follows from this inventory.
 | `type-deps` | Keep as diagnostic/product aid | Uses the full type projection and evidence |
 | `package-deps`, `why-package-dep` | Replace later or rename | Older call-only projection overlaps newer semantic package paths/inspection |
 | `impact` | Rename before stable user documentation | Means transitive semantic dependents, not hypothetical change impact |
-| `impact-params` | Remove in a later focused task | Sole user of the legacy parameter-only analyzer result |
 
 Formatting is centralized in `print.go` plus parameter-specific formatting.
 Explicit functions are preferable to a generic rendering framework, but the
@@ -482,7 +479,7 @@ problem.
 | Evidence-backed smell | Classification | Why |
 |---|---|---|
 | Go-specific signature/type DTOs are owned by otherwise graph-oriented `query`, creating `goanalyzer → query` for models rather than queries | Probable debt | The boundary is conceptually unclear, but detached shared DTOs are genuinely needed and no cycle results |
-| `AnalyzeParameterChange` duplicates unified orchestration and preserves a result without compiler consequences | Clear debt | It can diverge semantically and already represents a superseded product surface |
+| Legacy parameter-only orchestration | Resolved in Task 46 | The wrapper, result model, CLI, and legacy-only presentation were removed |
 | Call-only and full-semantic package dependencies share similar names | Clear debt | NOCV self-analysis returns materially different package edges depending on command/API |
 | `impact` names both transitive semantic dependents and hypothetical signature consequences | Clear debt | User-facing workflows are unrelated |
 | Successful load can silently contain compiler diagnostics and incomplete semantic facts | Probable correctness/product debt | Missing facts have no health/completeness marker; a graph result can look authoritative |
@@ -504,7 +501,7 @@ need a new feature or architecture rewrite.
 |---|---|---|
 | Must implement/document before beta | Approved meanings of `query`, `dependency`, `dependents`, and `impact` in supported surfaces | Beta should not freeze contradictory API/CLI vocabulary |
 | Must implement/document before beta | Coarse dirty/partial analysis health | Users must not infer compile cleanliness or complete semantic extraction |
-| Should fix before beta | Remove the parameter-only wrapper/model/CLI | The unified callable signature workflow is the approved replacement |
+| Completed in Task 46 | Remove the parameter-only wrapper/model/CLI | Unified callable signature analysis is now authoritative |
 | Should fix before beta | Rename stale parameter-specific files after the compatibility decision | Make current unified responsibility visible |
 | Should fix before beta | Separate overlay construction from compiler diagnostic operations within `goanalyzer` | Improves auditability of the riskiest implementation without changing behavior |
 | Should fix before beta | Replace duplicate spike algorithms with tests of production behavior | Prevent false confidence during refactor |
@@ -520,20 +517,18 @@ need a new feature or architecture rewrite.
 Every stage begins by inspecting the then-current repository and ends with a
 human review point.
 
-1. Remove the approved legacy `impact-params` workflow, analyzer wrapper, and
-   `ParameterChangeImpact` in one focused change after rechecking all callers.
-2. Rename stale parameter-specific files and tests within their existing
+1. Rename stale parameter-specific files and tests within their existing
    packages. No type moves.
-3. Extract declaration/range/overlay assembly from compiler recheck operations
+2. Extract declaration/range/overlay assembly from compiler recheck operations
    within `goanalyzer`; preserve all signature tests and public APIs.
-4. Remove duplicated Task 41 spike algorithms while retaining behavior cases.
-5. Move Go-specific signature/change DTOs from `query` toward `goanalyzer` in a
+3. Remove duplicated Task 41 spike algorithms while retaining behavior cases.
+4. Move Go-specific signature/change DTOs from `query` toward `goanalyzer` in a
    separately reviewed ownership task. Stop if that reveals pressure for a new
    shared package.
-6. Design and expose coarse partial-analysis health without per-edge confidence.
-7. Review graph/query CLI commands against the approved glossary and remove or
+5. Design and expose coarse partial-analysis health without per-edge confidence.
+6. Review graph/query CLI commands against the approved glossary and remove or
    rename only one command family at a time.
-8. Improve critical browser workflow tests, then consider internal JavaScript
+7. Improve critical browser workflow tests, then consider internal JavaScript
    module/file separation without choosing a new framework.
 
 ## Decision gates and safe mechanical candidates
@@ -543,7 +538,7 @@ human review point.
 | Move Go-specific operation DTOs from `query` toward `goanalyzer` | Approved direction; exact move still requires one scoped task and review |
 | Rename `Analysis` or introduce project/session concepts | **Human architecture decision required** |
 | Design coarse dirty/partial health as first-class public state | Approved direction; exact API design still requires human review |
-| Remove `impact-params` and its wrapper | Approved for a later focused task |
+| Remove `impact-params` and its wrapper | Completed in Task 46 |
 | Rename `impact`, `package-deps`, or dependency APIs | Terminology direction approved; exact command replacements require focused review |
 | Split `goanalyzer` into packages | **Human architecture decision required**; current evidence does not recommend it |
 | Rename `internal/webui/parameter_impact.go` | Mechanical; the terminology contract is now approved |
@@ -700,35 +695,29 @@ Current dependency-oriented names map to concepts as follows:
 | `impact` | Transitive semantic dependents and their declaration-level paths | Rename/replace with transitive dependents terminology |
 | `check-forbidden-dependency` | Semantic package dependency paths across the five semantic kinds | Qualify as semantic in API/help where ambiguity matters |
 
-`impact-params` is not included as hypothetical-impact terminology to preserve:
-the unified callable signature-change workflow supersedes it, and its removal
-is approved below.
+The removed `impact-params` command is not a supported hypothetical-impact
+term. The unified callable signature-change workflow supersedes it.
 
 ### Legacy parameter-only workflow
 
-The parallel product workflow comprising `impact-params`,
-`Analysis.AnalyzeParameterChange`, and `query.ParameterChangeImpact` does not
-survive beta. A later task is authorized to remove it after inspecting all
-then-current callers, tests, and documentation. Task 45 changes none of them.
-
-Current references that the removal task must recheck are:
+Task 46 removed the parallel product workflow comprising `impact-params`,
+`Analysis.AnalyzeParameterChange`, and `query.ParameterChangeImpact`. Parameter
+changes now use `AnalyzeSignatureChange`, including its compiler-consequence
+path. The removal covered these former references:
 
 | Location | Current role |
 |---|---|
-| `cmd/nocv/commands.go` | Declares, advertises, and dispatches `impact-params` |
-| `cmd/nocv/parameter_impact.go` | Parses parameter-only proposals, calls `AnalyzeParameterChange`, and renders the legacy result |
-| `goanalyzer/parameter_change.go` | Defines the compatibility method beside unified `AnalyzeSignatureChange` |
-| `query/parameter_change.go` | Defines `ParameterChangeImpact` beside current signature/change models |
-| `README.md` | Describes and demonstrates the compatibility/debug command |
-| `examples/impactdemo/README.md` | Contains several manual `impact-params` scenarios |
-| `cmd/nocv/parameter_impact_test.go` | Covers parsing, CLI output, contracts, and structural impact through the legacy command |
-| `goanalyzer/parameter_change_test.go` | Calls the legacy method extensively for call, contract, promotion, and validation behavior |
+| `cmd/nocv/commands.go` | Command registration, help, and dispatch removed |
+| `cmd/nocv/parameter_impact.go` | Legacy parser and formatter file removed |
+| `goanalyzer/parameter_change.go` | Compatibility method removed; unified machinery retained |
+| `query/parameter_change.go` | Compatibility result removed; other Go-specific models retained for their later ownership task |
+| `README.md` | Legacy command example and description removed |
+| `examples/impactdemo/README.md` | Scenarios rewritten for the unified inspector workflow |
+| `cmd/nocv/parameter_impact_test.go` | Removed because it tested only the deleted CLI surface |
+| `goanalyzer/parameter_change_test.go` | Valuable behavior migrated to `AnalyzeSignatureChange` |
 
-The tests contain valuable behavior coverage. Removal should migrate scenarios
-to the unified API where coverage is not already present rather than deleting
-them by filename. `internal/webui/parameter_impact.go` is not a legacy endpoint:
-despite its stale name, it implements `/api/signature-impact` and calls
-`AnalyzeSignatureChange`.
+`internal/webui/parameter_impact.go` is not a legacy endpoint: despite its stale
+name, it implements `/api/signature-impact` and calls `AnalyzeSignatureChange`.
 
 ### Go-specific types currently in `query`
 
@@ -744,7 +733,7 @@ Exact file/type movement remains a separate task.
 | `SignatureProblem`, `SignatureProblemKind` | Go call checker and CLI/web rendering | `goanalyzer` | Move with call-site impact; retains `GoTypeRef` dependency |
 | `ContractImpact`, `ContractImpactKind` | Go method-set analysis, aggregate results, CLI/web presentation | `goanalyzer` | Uses language-agnostic `query.SymbolSummary`; that import is acceptable |
 | `StructuralImpact`, `StructuralImpactKind`, `MethodExposure` | Go embedding/method-set analysis, aggregate results, CLI/web presentation | `goanalyzer` | Promotion and pointer exposure are currently Go-specific |
-| `ParameterChangeImpact` | Legacy analyzer method and CLI/tests | Remove, not move | Superseded compatibility type |
+| `ParameterChangeImpact` | Removed in Task 46 | Removed, not moved | Superseded compatibility type |
 
 `SignatureChangeImpact`, `CompilerImpact`, `CompilerConsequence`, baseline status,
 and diagnostic classification already live in `goanalyzer`, which is consistent
@@ -858,7 +847,7 @@ later need proves them useful. Existing history is not rewritten.
 8. Dependents means entities that already rely on a selected entity.
 9. Supported CLI commands represent maintained product workflows; temporary
    debug commands are disposable.
-10. The parameter-only change workflow is removed before beta in its own task.
+10. The parameter-only change workflow was removed in Task 46.
 11. Dirty/partial analysis health becomes a coarse first-class beta concept.
 12. `Analysis` keeps its current name for now.
 13. `goanalyzer` remains one package initially; internal readability comes first.
@@ -880,7 +869,6 @@ later need proves them useful. Existing history is not rewritten.
 
 The following areas are authorized for separate future tasks, one at a time:
 
-- remove the legacy parameter-only workflow;
 - rename stale parameter-specific files;
 - move Go-specific signature/change models out of `query` toward `goanalyzer`;
 - clarify dependency-oriented CLI/API names;
@@ -896,16 +884,10 @@ shared model package, cross-language interface, `Analysis` rename,
 `goanalyzer` package split, health API shape, or frontend/runtime migration
 still requires explicit human review.
 
-## Human review gate after Task 45
+## Human review gate after Task 46
 
-No package or model movement should begin until the human has reviewed this
-architecture contract, dependency terminology, impact/dependents distinction,
-legacy parameter removal direction, partial-analysis health direction, and the
-Go-specific type migration inventory. Later tasks must begin from the current
-repository state and preserve intervening human edits.
-
-**Recommended next task:** remove the legacy parameter-only workflow
-(`impact-params`, `AnalyzeParameterChange`, and `ParameterChangeImpact`) while
-migrating still-valuable tests to unified signature analysis. This is the
-smallest implementation change that removes a known divergence source and does
-not require moving models or designing a new API.
+The human should review the completed legacy removal and migrated semantic tests
+before any package/model movement, health-state implementation, overlay
+refactor, dependency terminology cleanup, or broader file restructuring begins.
+Later tasks must start from the current repository state and preserve
+intervening human edits. No next implementation task is selected automatically.
