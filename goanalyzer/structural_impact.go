@@ -5,12 +5,11 @@ import (
 	"sort"
 
 	"nocv/graph"
-	"nocv/query"
 )
 
 // structuralImpacts reports concrete named types whose value or pointer method
 // set contains the selected declaration through promotion.
-func (a *Analysis) structuralImpacts(callable resolvedCallable, proposed resolvedSignature) []query.StructuralImpact {
+func (a *Analysis) structuralImpacts(callable resolvedCallable, proposed resolvedSignature) []StructuralImpact {
 	parent, exists := a.graph.Node(callable.node.Parent)
 	if !exists || parent.Kind != graph.NodeStruct {
 		return nil
@@ -19,18 +18,18 @@ func (a *Analysis) structuralImpacts(callable resolvedCallable, proposed resolve
 		return nil
 	}
 
-	var result []query.StructuralImpact
+	var result []StructuralImpact
 	for _, candidateID := range a.embeddingCandidates(parent.ID) {
 		named := a.symbols.namedTypes[candidateID]
 		if named == nil || hasTypeParameters(named) {
 			continue
 		}
 		exposure := promotedExposure(named, callable.function)
-		if exposure == query.MethodExposureUnknown {
+		if exposure == MethodExposureUnknown {
 			continue
 		}
-		result = append(result, query.StructuralImpact{
-			Kind:         query.StructuralPromotedMethodChanged,
+		result = append(result, StructuralImpact{
+			Kind:         StructuralPromotedMethodChanged,
 			Type:         a.symbolSummary(candidateID),
 			Exposure:     exposure,
 			OriginMethod: a.symbolSummary(callable.node.ID),
@@ -67,14 +66,14 @@ func (a *Analysis) embeddingCandidates(origin graph.NodeID) []graph.NodeID {
 	return result
 }
 
-func promotedExposure(named *types.Named, origin *types.Func) query.MethodExposure {
+func promotedExposure(named *types.Named, origin *types.Func) MethodExposure {
 	if methodSetPromotes(types.NewMethodSet(named), origin) {
-		return query.MethodExposureValue
+		return MethodExposureValue
 	}
 	if methodSetPromotes(types.NewMethodSet(types.NewPointer(named)), origin) {
-		return query.MethodExposurePointerOnly
+		return MethodExposurePointerOnly
 	}
-	return query.MethodExposureUnknown
+	return MethodExposureUnknown
 }
 
 func methodSetPromotes(methodSet *types.MethodSet, origin *types.Func) bool {

@@ -9,7 +9,6 @@ import (
 
 	"nocv/goanalyzer"
 	"nocv/graph"
-	"nocv/query"
 )
 
 const impactPackage = "example.com/parameterimpact"
@@ -43,8 +42,8 @@ func TestAnalyzeSignatureChangeParameterNamedScalarAndUntypedLiteral(t *testing.
 	reverse := analyzeParameterChange(t, analysis, impactPackage+"::UseString", signature("ID"))
 	assertCompatibilityCounts(t, reverse, 1, 2, 0)
 	for _, site := range reverse.CallSites {
-		if site.Compatibility == query.CompatibilityIncompatible {
-			if len(site.Problems) != 1 || site.Problems[0].Kind != query.ProblemArgumentType ||
+		if site.Compatibility == goanalyzer.CompatibilityIncompatible {
+			if len(site.Problems) != 1 || site.Problems[0].Kind != goanalyzer.ProblemArgumentType ||
 				site.Problems[0].Argument != 1 ||
 				site.Problems[0].Expected.Display != impactPackage+".ID" {
 				t.Fatalf("unexpected reverse scalar problem: %+v", site.Problems)
@@ -59,8 +58,8 @@ func TestAnalyzeSignatureChangeParameterNamedScalarAndUntypedLiteral(t *testing.
 func TestAnalyzeSignatureChangeParameterUsesCompilerConstantRepresentability(t *testing.T) {
 	result := analyzeParameterChange(t, loadImpactAnalysis(t), impactPackage+"::UseNumber", signature("uint8"))
 	assertCompatibilityCounts(t, result, 1, 1, 0)
-	if result.CallSites[0].Compatibility != query.CompatibilityCompatible ||
-		result.CallSites[1].Compatibility != query.CompatibilityIncompatible {
+	if result.CallSites[0].Compatibility != goanalyzer.CompatibilityCompatible ||
+		result.CallSites[1].Compatibility != goanalyzer.CompatibilityIncompatible {
 		t.Fatalf("constant compatibility = %v, %v; want compatible, incompatible",
 			result.CallSites[0].Compatibility, result.CallSites[1].Compatibility)
 	}
@@ -72,8 +71,8 @@ func TestAnalyzeSignatureChangeParameterStructInterfaceAndPointerAssignability(t
 	if result.After.Parameters[0].Type.Symbol != impactPackage+"::Marker" {
 		t.Fatalf("modeled interface symbol = %q", result.After.Parameters[0].Type.Symbol)
 	}
-	if result.CallSites[0].Compatibility != query.CompatibilityIncompatible ||
-		result.CallSites[1].Compatibility != query.CompatibilityCompatible {
+	if result.CallSites[0].Compatibility != goanalyzer.CompatibilityIncompatible ||
+		result.CallSites[1].Compatibility != goanalyzer.CompatibilityCompatible {
 		t.Fatalf("value/pointer compatibility = %v, %v", result.CallSites[0].Compatibility, result.CallSites[1].Compatibility)
 	}
 
@@ -88,7 +87,7 @@ func TestAnalyzeSignatureChangeParameterCountsVariadicsAndEllipsis(t *testing.T)
 	added := analyzeParameterChange(t, analysis, impactPackage+"::UseID", signature("ID", "string"))
 	assertCompatibilityCounts(t, added, 0, 3, 0)
 	for _, site := range added.CallSites {
-		if site.Problems[0].Kind != query.ProblemArgumentCount ||
+		if site.Problems[0].Kind != goanalyzer.ProblemArgumentCount ||
 			site.Problems[0].ExpectedCount != 2 || site.Problems[0].ActualCount != 1 {
 			t.Fatalf("count problem = %+v", site.Problems)
 		}
@@ -96,14 +95,14 @@ func TestAnalyzeSignatureChangeParameterCountsVariadicsAndEllipsis(t *testing.T)
 	removed := analyzeParameterChange(t, analysis, impactPackage+"::UseID", signature())
 	assertCompatibilityCounts(t, removed, 0, 3, 0)
 	for _, site := range removed.CallSites {
-		if site.Problems[0].Kind != query.ProblemArgumentCount ||
+		if site.Problems[0].Kind != goanalyzer.ProblemArgumentCount ||
 			site.Problems[0].ExpectedCount != 0 || site.Problems[0].ActualCount != 1 {
 			t.Fatalf("removed-parameter count problem = %+v", site.Problems)
 		}
 	}
 
-	variadic := query.ProposedSignature{
-		Parameters: []query.ProposedParameter{{TypeExpr: "string"}},
+	variadic := goanalyzer.ProposedSignature{
+		Parameters: []goanalyzer.ProposedParameter{{TypeExpr: "string"}},
 		Variadic:   true,
 	}
 	unchanged := analyzeParameterChange(t, analysis, impactPackage+"::Variadic", variadic)
@@ -115,11 +114,11 @@ func TestAnalyzeSignatureChangeParameterCountsVariadicsAndEllipsis(t *testing.T)
 
 	nonVariadic := analyzeParameterChange(t, analysis, impactPackage+"::Variadic", signature("[]string"))
 	assertCompatibilityCounts(t, nonVariadic, 0, 2, 0)
-	kinds := []query.SignatureProblemKind{
+	kinds := []goanalyzer.SignatureProblemKind{
 		nonVariadic.CallSites[0].Problems[0].Kind,
 		nonVariadic.CallSites[1].Problems[0].Kind,
 	}
-	if !slices.Contains(kinds, query.ProblemArgumentCount) || !slices.Contains(kinds, query.ProblemVariadic) {
+	if !slices.Contains(kinds, goanalyzer.ProblemArgumentCount) || !slices.Contains(kinds, goanalyzer.ProblemVariadic) {
 		t.Fatalf("non-variadic problems = %v", kinds)
 	}
 }
@@ -168,7 +167,7 @@ func TestAnalyzeSignatureChangeParameterConcreteMethodContractImpact(t *testing.
 		t.Fatalf("lost interfaces = %v, want %v", got, wantInterfaces)
 	}
 	for _, impact := range result.Contracts {
-		if impact.Kind != query.ContractImplementationLost {
+		if impact.Kind != goanalyzer.ContractImplementationLost {
 			t.Errorf("contract kind = %v", impact.Kind)
 		}
 		if impact.Concrete.Ref != impactPackage+"::Service" ||
@@ -245,10 +244,10 @@ func TestAnalyzeSignatureChangeParameterDirectRecursiveAndShadowedPromotion(t *t
 		t.Fatal("promoted method was incorrectly materialized as a graph node")
 	}
 	for _, impact := range result.Structural {
-		if impact.Kind != query.StructuralPromotedMethodChanged {
+		if impact.Kind != goanalyzer.StructuralPromotedMethodChanged {
 			t.Errorf("structural kind = %v", impact.Kind)
 		}
-		if impact.Exposure != query.MethodExposureValue {
+		if impact.Exposure != goanalyzer.MethodExposureValue {
 			t.Errorf("%s exposure = %v, want value", impact.Type.Ref, impact.Exposure)
 		}
 		if impact.OriginMethod.Ref != impactPackage+"::PromotionBase::Change" {
@@ -275,12 +274,12 @@ func TestAnalyzeSignatureChangeParameterPointerAndVariadicPromotion(t *testing.T
 	pointer := analyzeParameterChange(t, analysis, impactPackage+"::PointerBase::Touch", signature("string"))
 	wantPointer := []struct {
 		ref      graph.SymbolRef
-		exposure query.MethodExposure
+		exposure goanalyzer.MethodExposure
 	}{
-		{ref: impactPackage + "::PointerEmbed", exposure: query.MethodExposureValue},
-		{ref: impactPackage + "::RecursivePointerMid", exposure: query.MethodExposurePointerOnly},
-		{ref: impactPackage + "::RecursivePointerOuter", exposure: query.MethodExposurePointerOnly},
-		{ref: impactPackage + "::ValueEmbed", exposure: query.MethodExposurePointerOnly},
+		{ref: impactPackage + "::PointerEmbed", exposure: goanalyzer.MethodExposureValue},
+		{ref: impactPackage + "::RecursivePointerMid", exposure: goanalyzer.MethodExposurePointerOnly},
+		{ref: impactPackage + "::RecursivePointerOuter", exposure: goanalyzer.MethodExposurePointerOnly},
+		{ref: impactPackage + "::ValueEmbed", exposure: goanalyzer.MethodExposurePointerOnly},
 	}
 	if len(pointer.Structural) != len(wantPointer) {
 		t.Fatalf("pointer promotion impacts = %+v, want %d", pointer.Structural, len(wantPointer))
@@ -298,7 +297,7 @@ func TestAnalyzeSignatureChangeParameterPointerAndVariadicPromotion(t *testing.T
 	if got := structuralTypes(variadic.Structural); !slices.Equal(got, wantVariadic) {
 		t.Fatalf("variadic promotion types = %v, want %v", got, wantVariadic)
 	}
-	if variadic.Structural[0].Exposure != query.MethodExposureValue {
+	if variadic.Structural[0].Exposure != goanalyzer.MethodExposureValue {
 		t.Fatalf("variadic exposure = %v, want value", variadic.Structural[0].Exposure)
 	}
 }
@@ -320,13 +319,13 @@ func TestAnalyzeSignatureChangeParameterValidationErrors(t *testing.T) {
 	tests := []struct {
 		name string
 		ref  graph.SymbolRef
-		sig  query.ProposedSignature
+		sig  goanalyzer.ProposedSignature
 		want string
 	}{
 		{name: "missing", ref: "missing", sig: signature("string"), want: "unknown symbol: missing"},
 		{name: "non callable", ref: impactPackage + "::Item", sig: signature("string"), want: "symbol is not a function or method"},
 		{name: "invalid type", ref: impactPackage + "::UseID", sig: signature("DoesNotExist"), want: "resolve proposed parameter 1 type"},
-		{name: "empty variadic", ref: impactPackage + "::UseID", sig: query.ProposedSignature{Variadic: true}, want: "requires at least one parameter"},
+		{name: "empty variadic", ref: impactPackage + "::UseID", sig: goanalyzer.ProposedSignature{Variadic: true}, want: "requires at least one parameter"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -351,15 +350,15 @@ func loadImpactAnalysis(t *testing.T) *goanalyzer.Analysis {
 	return analysis
 }
 
-func signature(typeExpressions ...string) query.ProposedSignature {
-	result := query.ProposedSignature{}
+func signature(typeExpressions ...string) goanalyzer.ProposedSignature {
+	result := goanalyzer.ProposedSignature{}
 	for _, expression := range typeExpressions {
-		result.Parameters = append(result.Parameters, query.ProposedParameter{TypeExpr: expression})
+		result.Parameters = append(result.Parameters, goanalyzer.ProposedParameter{TypeExpr: expression})
 	}
 	return result
 }
 
-func analyzeParameterChange(t *testing.T, analysis *goanalyzer.Analysis, ref graph.SymbolRef, proposed query.ProposedSignature) goanalyzer.SignatureChangeImpact {
+func analyzeParameterChange(t *testing.T, analysis *goanalyzer.Analysis, ref graph.SymbolRef, proposed goanalyzer.ProposedSignature) goanalyzer.SignatureChangeImpact {
 	t.Helper()
 	result, err := analysis.AnalyzeSignatureChange(ref, proposed)
 	if err != nil {
@@ -373,11 +372,11 @@ func assertCompatibilityCounts(t *testing.T, result goanalyzer.SignatureChangeIm
 	var gotCompatible, gotIncompatible, gotUnknown int
 	for _, site := range result.CallSites {
 		switch site.Compatibility {
-		case query.CompatibilityCompatible:
+		case goanalyzer.CompatibilityCompatible:
 			gotCompatible++
-		case query.CompatibilityIncompatible:
+		case goanalyzer.CompatibilityIncompatible:
 			gotIncompatible++
-		case query.CompatibilityUnknown:
+		case goanalyzer.CompatibilityUnknown:
 			gotUnknown++
 		}
 	}
@@ -395,7 +394,7 @@ func assertNoSignatureConsequences(t *testing.T, impact goanalyzer.SignatureChan
 	}
 }
 
-func contractInterfaces(impacts []query.ContractImpact) []graph.SymbolRef {
+func contractInterfaces(impacts []goanalyzer.ContractImpact) []graph.SymbolRef {
 	result := make([]graph.SymbolRef, 0, len(impacts))
 	for _, impact := range impacts {
 		result = append(result, impact.Interface.Ref)
@@ -403,7 +402,7 @@ func contractInterfaces(impacts []query.ContractImpact) []graph.SymbolRef {
 	return result
 }
 
-func structuralTypes(impacts []query.StructuralImpact) []graph.SymbolRef {
+func structuralTypes(impacts []goanalyzer.StructuralImpact) []graph.SymbolRef {
 	result := make([]graph.SymbolRef, 0, len(impacts))
 	for _, impact := range impacts {
 		result = append(result, impact.Type.Ref)

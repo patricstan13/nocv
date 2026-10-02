@@ -22,12 +22,12 @@ import (
 // compiler's diagnostics for one hypothetical callable signature.
 type SignatureChangeImpact struct {
 	Callable   graph.SymbolRef
-	Before     query.CallableSignature
-	After      query.CallableSignature
-	CallSites  []query.CallSiteImpact
+	Before     CallableSignature
+	After      CallableSignature
+	CallSites  []CallSiteImpact
 	Compiler   CompilerImpact
-	Contracts  []query.ContractImpact
-	Structural []query.StructuralImpact
+	Contracts  []ContractImpact
+	Structural []StructuralImpact
 }
 
 // CompilerImpact is the compiler-observed portion of a signature change. Its

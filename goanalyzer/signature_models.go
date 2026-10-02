@@ -1,9 +1,12 @@
-package query
+package goanalyzer
 
-import "nocv/graph"
+import (
+	"nocv/graph"
+	"nocv/query"
+)
 
-// CallableSignature is a detached presentation of a callable's parameters and
-// results. The receiver and type parameters are deliberately outside the
+// CallableSignature is a detached presentation of a Go callable's parameters
+// and results. The receiver and type parameters are deliberately outside the
 // hypothetical signature-change model.
 type CallableSignature struct {
 	Parameters []Parameter
@@ -39,8 +42,8 @@ type ProposedResult struct {
 	TypeExpr string
 }
 
-// ProposedSignature is the public, compiler-independent input for a
-// hypothetical callable signature.
+// ProposedSignature is the detached input for a hypothetical Go callable
+// signature.
 type ProposedSignature struct {
 	Parameters []ProposedParameter
 	Results    []ProposedResult
@@ -54,13 +57,13 @@ type GoTypeRef struct {
 	Symbol  graph.SymbolRef
 }
 
-// StructuralImpact describes a modeled type whose effective method surface is
-// changed because the selected concrete method is promoted through embedding.
+// StructuralImpact describes a modeled type whose effective Go method surface
+// changes because the selected concrete method is promoted through embedding.
 type StructuralImpact struct {
 	Kind         StructuralImpactKind
-	Type         SymbolSummary
+	Type         query.SymbolSummary
 	Exposure     MethodExposure
-	OriginMethod SymbolSummary
+	OriginMethod query.SymbolSummary
 }
 
 // MethodExposure describes whether a promoted method is visible on T itself
@@ -85,7 +88,7 @@ func (e MethodExposure) String() string {
 	}
 }
 
-// StructuralImpactKind identifies a deterministic structural consequence.
+// StructuralImpactKind identifies a deterministic Go structural consequence.
 type StructuralImpactKind uint8
 
 const (
@@ -103,16 +106,16 @@ func (k StructuralImpactKind) String() string {
 }
 
 // ContractImpact describes one existing concrete-type/interface contract that
-// the hypothetical parameter signature would invalidate.
+// a hypothetical Go signature would invalidate.
 type ContractImpact struct {
 	Kind            ContractImpactKind
-	Concrete        SymbolSummary
-	Interface       SymbolSummary
-	ConcreteMethod  SymbolSummary
-	InterfaceMethod SymbolSummary
+	Concrete        query.SymbolSummary
+	Interface       query.SymbolSummary
+	ConcreteMethod  query.SymbolSummary
+	InterfaceMethod query.SymbolSummary
 }
 
-// ContractImpactKind identifies a deterministic contract consequence.
+// ContractImpactKind identifies a deterministic Go contract consequence.
 type ContractImpactKind uint8
 
 const (
@@ -129,15 +132,15 @@ func (k ContractImpactKind) String() string {
 	}
 }
 
-// CallSiteImpact describes compatibility for one concrete call expression.
+// CallSiteImpact describes compatibility for one concrete Go call expression.
 type CallSiteImpact struct {
-	Caller        SymbolSummary
+	Caller        query.SymbolSummary
 	Location      graph.Location
 	Compatibility Compatibility
 	Problems      []SignatureProblem
 }
 
-// Compatibility is the compiler-backed compatibility state of a call site.
+// Compatibility is the compiler-backed compatibility state of a Go call site.
 type Compatibility uint8
 
 const (
@@ -159,8 +162,8 @@ func (c Compatibility) String() string {
 	}
 }
 
-// SignatureProblemKind identifies one concrete reason a call is not known to
-// be compatible.
+// SignatureProblemKind identifies one concrete reason a Go call is not known
+// to be compatible.
 type SignatureProblemKind uint8
 
 const (

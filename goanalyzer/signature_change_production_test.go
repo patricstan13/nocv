@@ -10,7 +10,6 @@ import (
 
 	"nocv/goanalyzer"
 	"nocv/graph"
-	"nocv/query"
 )
 
 func TestAnalyzeSignatureChangeResultInferenceAndAttribution(t *testing.T) {
@@ -83,7 +82,7 @@ func TestAnalyzeSignatureChangeCombinedContractAndStructural(t *testing.T) {
 	pointer := analyzeSignature(t, analysis, "example.com/parameterimpact::PointerBase::Touch", []string{"ID"}, []string{"error"}, false)
 	hasPointerOnly := false
 	for _, impact := range pointer.Structural {
-		hasPointerOnly = hasPointerOnly || impact.Exposure == query.MethodExposurePointerOnly
+		hasPointerOnly = hasPointerOnly || impact.Exposure == goanalyzer.MethodExposurePointerOnly
 	}
 	if !hasPointerOnly {
 		t.Fatalf("pointer-only result impact = %#v", pointer.Structural)
@@ -128,9 +127,9 @@ func TestAnalyzeSignatureChangeNoopAndVariadicOnly(t *testing.T) {
 	if len(noop.CallSites) != 0 || len(noop.Compiler.Consequences) != 0 || len(noop.Contracts) != 0 || len(noop.Structural) != 0 {
 		t.Fatalf("semantic no-op = %#v", noop)
 	}
-	nameOnly, err := analysis.AnalyzeSignatureChange("example.com/parameterimpact::ResultBase::Fetch", query.ProposedSignature{
-		Parameters: []query.ProposedParameter{{Name: "renamedParameter", TypeExpr: "ID"}},
-		Results:    []query.ProposedResult{{Name: "renamedResult", TypeExpr: "Item"}},
+	nameOnly, err := analysis.AnalyzeSignatureChange("example.com/parameterimpact::ResultBase::Fetch", goanalyzer.ProposedSignature{
+		Parameters: []goanalyzer.ProposedParameter{{Name: "renamedParameter", TypeExpr: "ID"}},
+		Results:    []goanalyzer.ProposedResult{{Name: "renamedResult", TypeExpr: "Item"}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -208,12 +207,12 @@ func signatureFixtureDir(t *testing.T, fixture string) string {
 
 func analyzeSignature(t *testing.T, analysis *goanalyzer.Analysis, ref graph.SymbolRef, parameters, results []string, variadic bool) goanalyzer.SignatureChangeImpact {
 	t.Helper()
-	proposal := query.ProposedSignature{Variadic: variadic}
+	proposal := goanalyzer.ProposedSignature{Variadic: variadic}
 	for _, typ := range parameters {
-		proposal.Parameters = append(proposal.Parameters, query.ProposedParameter{TypeExpr: typ})
+		proposal.Parameters = append(proposal.Parameters, goanalyzer.ProposedParameter{TypeExpr: typ})
 	}
 	for _, typ := range results {
-		proposal.Results = append(proposal.Results, query.ProposedResult{TypeExpr: typ})
+		proposal.Results = append(proposal.Results, goanalyzer.ProposedResult{TypeExpr: typ})
 	}
 	impact, err := analysis.AnalyzeSignatureChange(ref, proposal)
 	if err != nil {

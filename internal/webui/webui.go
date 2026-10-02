@@ -171,7 +171,7 @@ func handler(analysis *goanalyzer.Analysis, g *graph.Graph) http.Handler {
 			writeError(w, http.StatusNotFound, "node not found")
 			return
 		}
-		var signature *query.CallableSignature
+		var signature *goanalyzer.CallableSignature
 		if inspection.Function != nil && analysis != nil {
 			current, err := analysis.CallableSignature(id)
 			if err != nil {
@@ -252,7 +252,7 @@ func edgeID(from, to graph.SymbolRef) string {
 	return fmt.Sprintf("%d:%s>%d:%s", len(from), from, len(to), to)
 }
 
-func presentNodeInspection(g *graph.Graph, source query.NodeInspection, signature *query.CallableSignature) nodeInspection {
+func presentNodeInspection(g *graph.Graph, source query.NodeInspection, signature *goanalyzer.CallableSignature) nodeInspection {
 	result := nodeInspection{Node: presentNode(g, source.Node)}
 	if source.Package != nil {
 		result.Package = &packageInspection{

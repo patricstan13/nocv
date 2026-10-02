@@ -7,7 +7,6 @@ import (
 
 	"nocv/goanalyzer"
 	"nocv/graph"
-	"nocv/query"
 )
 
 type signatureImpactRequest struct {
@@ -113,12 +112,12 @@ func handleSignatureImpact(w http.ResponseWriter, r *http.Request, analysis *goa
 		return
 	}
 
-	proposed := query.ProposedSignature{Variadic: request.Variadic}
+	proposed := goanalyzer.ProposedSignature{Variadic: request.Variadic}
 	for _, parameter := range request.Parameters {
-		proposed.Parameters = append(proposed.Parameters, query.ProposedParameter{TypeExpr: parameter.Type})
+		proposed.Parameters = append(proposed.Parameters, goanalyzer.ProposedParameter{TypeExpr: parameter.Type})
 	}
 	for _, result := range request.Results {
-		proposed.Results = append(proposed.Results, query.ProposedResult{TypeExpr: result.Type})
+		proposed.Results = append(proposed.Results, goanalyzer.ProposedResult{TypeExpr: result.Type})
 	}
 	impact, err := analysis.AnalyzeSignatureChange(request.Callable, proposed)
 	if err != nil {
@@ -192,7 +191,7 @@ func presentSignatureImpact(source goanalyzer.SignatureChangeImpact) signatureIm
 	return result
 }
 
-func presentCallableSignature(source query.CallableSignature) callableSignature {
+func presentCallableSignature(source goanalyzer.CallableSignature) callableSignature {
 	result := callableSignature{
 		Parameters: make([]parameter, 0, len(source.Parameters)),
 		Results:    make([]parameter, 0, len(source.Results)),
@@ -207,6 +206,6 @@ func presentCallableSignature(source query.CallableSignature) callableSignature 
 	return result
 }
 
-func presentGoTypeRef(source query.GoTypeRef) goTypeRef {
+func presentGoTypeRef(source goanalyzer.GoTypeRef) goTypeRef {
 	return goTypeRef{Display: source.Display, Symbol: source.Symbol}
 }

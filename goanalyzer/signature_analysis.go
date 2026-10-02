@@ -23,7 +23,7 @@ type resolvedCallable struct {
 }
 
 type resolvedSignature struct {
-	model            query.CallableSignature
+	model            CallableSignature
 	parameterTypes   []types.Type // a variadic final parameter is stored as its element type
 	resultTypes      []types.Type
 	parameterSources []string
@@ -40,21 +40,21 @@ type actualArgument struct {
 	typeAndValue types.TypeAndValue
 }
 
-// CallableSignature returns the compiler-extracted parameter signature for a
+// CallableSignature returns the compiler-extracted callable signature for a
 // modeled function or method without exposing compiler objects. Its type
 // displays use declaration-context package qualifiers so they can be submitted
 // again as proposed Go type expressions.
-func (a *Analysis) CallableSignature(callable graph.SymbolRef) (query.CallableSignature, error) {
+func (a *Analysis) CallableSignature(callable graph.SymbolRef) (CallableSignature, error) {
 	resolved, err := a.resolveCallable(callable)
 	if err != nil {
-		return query.CallableSignature{}, err
+		return CallableSignature{}, err
 	}
 	return a.editableSignature(resolved), nil
 }
 
-func (a *Analysis) editableSignature(callable resolvedCallable) query.CallableSignature {
+func (a *Analysis) editableSignature(callable resolvedCallable) CallableSignature {
 	signature := callable.signature
-	result := query.CallableSignature{Variadic: signature.Variadic()}
+	result := CallableSignature{Variadic: signature.Variadic()}
 	for index := 0; index < signature.Params().Len(); index++ {
 		variable := signature.Params().At(index)
 		typ := variable.Type()
@@ -70,7 +70,7 @@ func (a *Analysis) editableSignature(callable resolvedCallable) query.CallableSi
 			}
 			return pkg.Name()
 		})
-		result.Parameters = append(result.Parameters, query.Parameter{Name: variable.Name(), Type: typeRef})
+		result.Parameters = append(result.Parameters, Parameter{Name: variable.Name(), Type: typeRef})
 	}
 	for index := 0; index < signature.Results().Len(); index++ {
 		variable := signature.Results().At(index)
@@ -82,7 +82,7 @@ func (a *Analysis) editableSignature(callable resolvedCallable) query.CallableSi
 			}
 			return pkg.Name()
 		})
-		result.Results = append(result.Results, query.Result{Name: variable.Name(), Type: typeRef})
+		result.Results = append(result.Results, Result{Name: variable.Name(), Type: typeRef})
 	}
 	return result
 }
@@ -90,7 +90,7 @@ func (a *Analysis) editableSignature(callable resolvedCallable) query.CallableSi
 // AnalyzeSignatureChange evaluates a hypothetical parameter/result signature.
 // Precise local consequences are combined with a compiler overlay recheck of
 // the changed package and its reverse import closure.
-func (a *Analysis) AnalyzeSignatureChange(callable graph.SymbolRef, proposed query.ProposedSignature) (SignatureChangeImpact, error) {
+func (a *Analysis) AnalyzeSignatureChange(callable graph.SymbolRef, proposed ProposedSignature) (SignatureChangeImpact, error) {
 	resolved, err := a.resolveCallable(callable)
 	if err != nil {
 		return SignatureChangeImpact{}, err
@@ -174,7 +174,7 @@ func hasSignatureTypeParameters(signature *types.Signature) bool {
 }
 
 func (a *Analysis) extractSignature(signature *types.Signature) resolvedSignature {
-	result := resolvedSignature{model: query.CallableSignature{Variadic: signature.Variadic()}}
+	result := resolvedSignature{model: CallableSignature{Variadic: signature.Variadic()}}
 	parameters := signature.Params()
 	for index := 0; index < parameters.Len(); index++ {
 		variable := parameters.At(index)
@@ -185,7 +185,7 @@ func (a *Analysis) extractSignature(signature *types.Signature) resolvedSignatur
 			}
 		}
 		result.parameterTypes = append(result.parameterTypes, typ)
-		result.model.Parameters = append(result.model.Parameters, query.Parameter{
+		result.model.Parameters = append(result.model.Parameters, Parameter{
 			Name: variable.Name(),
 			Type: a.goTypeRef(typ),
 		})
@@ -194,7 +194,7 @@ func (a *Analysis) extractSignature(signature *types.Signature) resolvedSignatur
 	for index := 0; index < results.Len(); index++ {
 		variable := results.At(index)
 		result.resultTypes = append(result.resultTypes, variable.Type())
-		result.model.Results = append(result.model.Results, query.Result{
+		result.model.Results = append(result.model.Results, Result{
 			Name: variable.Name(),
 			Type: a.goTypeRef(variable.Type()),
 		})
@@ -242,11 +242,11 @@ func signatureWithProposal(
 	)
 }
 
-func (a *Analysis) resolveProposedSignature(callable resolvedCallable, proposed query.ProposedSignature, before query.CallableSignature) (resolvedSignature, error) {
+func (a *Analysis) resolveProposedSignature(callable resolvedCallable, proposed ProposedSignature, before CallableSignature) (resolvedSignature, error) {
 	if proposed.Variadic && len(proposed.Parameters) == 0 {
 		return resolvedSignature{}, fmt.Errorf("a variadic signature requires at least one parameter")
 	}
-	result := resolvedSignature{model: query.CallableSignature{Variadic: proposed.Variadic}}
+	result := resolvedSignature{model: CallableSignature{Variadic: proposed.Variadic}}
 	for index, parameter := range proposed.Parameters {
 		if parameter.TypeExpr == "" {
 			return resolvedSignature{}, fmt.Errorf("proposed parameter %d has an empty type", index+1)
@@ -264,7 +264,7 @@ func (a *Analysis) resolveProposedSignature(callable resolvedCallable, proposed 
 		}
 		result.parameterTypes = append(result.parameterTypes, value.Type)
 		result.parameterSources = append(result.parameterSources, parameter.TypeExpr)
-		result.model.Parameters = append(result.model.Parameters, query.Parameter{Name: name, Type: a.goTypeRef(value.Type)})
+		result.model.Parameters = append(result.model.Parameters, Parameter{Name: name, Type: a.goTypeRef(value.Type)})
 	}
 	for index, proposedResult := range proposed.Results {
 		if proposedResult.TypeExpr == "" {
@@ -283,16 +283,16 @@ func (a *Analysis) resolveProposedSignature(callable resolvedCallable, proposed 
 		}
 		result.resultTypes = append(result.resultTypes, value.Type)
 		result.resultSources = append(result.resultSources, proposedResult.TypeExpr)
-		result.model.Results = append(result.model.Results, query.Result{Name: name, Type: a.goTypeRef(value.Type)})
+		result.model.Results = append(result.model.Results, Result{Name: name, Type: a.goTypeRef(value.Type)})
 	}
 	return result, nil
 }
 
-func (a *Analysis) goTypeRef(typ types.Type) query.GoTypeRef {
+func (a *Analysis) goTypeRef(typ types.Type) GoTypeRef {
 	if typ == nil {
-		return query.GoTypeRef{}
+		return GoTypeRef{}
 	}
-	result := query.GoTypeRef{Display: types.TypeString(typ, func(pkg *types.Package) string {
+	result := GoTypeRef{Display: types.TypeString(typ, func(pkg *types.Package) string {
 		return pkg.Path()
 	})}
 	if typeName := directTypeName(typ); typeName != nil {
@@ -335,55 +335,55 @@ func (a *Analysis) collectCallSites(target *types.Func) []compilerCallSite {
 	return result
 }
 
-func (a *Analysis) checkCallSite(site compilerCallSite, proposed resolvedSignature) query.CallSiteImpact {
-	result := query.CallSiteImpact{
+func (a *Analysis) checkCallSite(site compilerCallSite, proposed resolvedSignature) CallSiteImpact {
+	result := CallSiteImpact{
 		Caller:   a.symbolSummary(site.callerID),
 		Location: sourceLocation(site.pkg.Fset, site.call.Pos()),
 	}
 	arguments, known := callArguments(site.pkg, site.call)
 	if !known {
-		result.Compatibility = query.CompatibilityUnknown
-		result.Problems = []query.SignatureProblem{{Kind: query.ProblemUnknown}}
+		result.Compatibility = CompatibilityUnknown
+		result.Problems = []SignatureProblem{{Kind: ProblemUnknown}}
 		return result
 	}
 
 	if site.call.Ellipsis.IsValid() && !proposed.model.Variadic {
-		result.Compatibility = query.CompatibilityIncompatible
-		result.Problems = []query.SignatureProblem{{Kind: query.ProblemVariadic}}
+		result.Compatibility = CompatibilityIncompatible
+		result.Problems = []SignatureProblem{{Kind: ProblemVariadic}}
 		return result
 	}
 	if problem := argumentCountProblem(len(arguments), site.call.Ellipsis.IsValid(), proposed); problem != nil {
-		result.Compatibility = query.CompatibilityIncompatible
-		result.Problems = []query.SignatureProblem{*problem}
+		result.Compatibility = CompatibilityIncompatible
+		result.Problems = []SignatureProblem{*problem}
 		return result
 	}
 
-	result.Compatibility = query.CompatibilityCompatible
+	result.Compatibility = CompatibilityCompatible
 	for index, argument := range arguments {
 		expected := expectedArgumentType(index, site.call.Ellipsis.IsValid(), proposed)
 		if argument.typeAndValue.Type == nil || expected == nil {
-			result.Compatibility = query.CompatibilityUnknown
-			result.Problems = append(result.Problems, query.SignatureProblem{
-				Kind: query.ProblemUnknown, Argument: index + 1,
+			result.Compatibility = CompatibilityUnknown
+			result.Problems = append(result.Problems, SignatureProblem{
+				Kind: ProblemUnknown, Argument: index + 1,
 			})
 			continue
 		}
 		if !compilerAssignable(argument.typeAndValue, expected) {
-			result.Problems = append(result.Problems, query.SignatureProblem{
-				Kind:     query.ProblemArgumentType,
+			result.Problems = append(result.Problems, SignatureProblem{
+				Kind:     ProblemArgumentType,
 				Argument: index + 1,
 				Expected: a.goTypeRef(expected),
 				Actual:   a.goTypeRef(argument.typeAndValue.Type),
 			})
 		}
 	}
-	if result.Compatibility == query.CompatibilityUnknown {
+	if result.Compatibility == CompatibilityUnknown {
 		return result
 	}
 	if len(result.Problems) != 0 {
-		result.Compatibility = query.CompatibilityIncompatible
+		result.Compatibility = CompatibilityIncompatible
 	} else {
-		result.Compatibility = query.CompatibilityCompatible
+		result.Compatibility = CompatibilityCompatible
 	}
 	return result
 }
@@ -422,7 +422,7 @@ func expressionTypeAndValue(pkg *packages.Package, expression ast.Expr) (types.T
 	return value, exists && value.Type != nil
 }
 
-func argumentCountProblem(actual int, ellipsis bool, proposed resolvedSignature) *query.SignatureProblem {
+func argumentCountProblem(actual int, ellipsis bool, proposed resolvedSignature) *SignatureProblem {
 	expected := len(proposed.parameterTypes)
 	valid := actual == expected
 	if proposed.model.Variadic && !ellipsis {
@@ -431,8 +431,8 @@ func argumentCountProblem(actual int, ellipsis bool, proposed resolvedSignature)
 	if valid {
 		return nil
 	}
-	return &query.SignatureProblem{
-		Kind:          query.ProblemArgumentCount,
+	return &SignatureProblem{
+		Kind:          ProblemArgumentCount,
 		ExpectedCount: expected,
 		ActualCount:   actual,
 	}
