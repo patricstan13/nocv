@@ -225,7 +225,10 @@ shared package or changing the language-agnostic `query.SymbolSummary` model.
 |---|---|---|
 | `query/parameter_change.go` | Removed in Task 47 | All contents were Go-specific and moved to `goanalyzer/signature_models.go` |
 | `goanalyzer/signature_analysis.go` | Renamed in Task 47; keep cohesive | Contains unified signature extraction/resolution and direct call checking |
-| `goanalyzer/signature_change.go` | Keep name; consider internal file split | It accurately names the unified feature, but overlay and diagnostics are separate cohesive concepts |
+| `goanalyzer/signature_change.go` | Keep | It now contains the unified impact and diagnostic-status models only |
+| `goanalyzer/signature_overlay.go` | Added in Task 48 | Owns callable declaration lookup, source-range selection, signature rendering, and in-memory overlay assembly |
+| `goanalyzer/compiler_recheck.go` | Added in Task 48 | Owns the readable compiler-impact orchestration, retained-config reload, and reverse-import closure |
+| `goanalyzer/compiler_diagnostics.go` | Added in Task 48 | Owns diagnostic collection, comparison, attribution, and deterministic consequence construction |
 | `goanalyzer/contract_impact.go` | Keep | Name matches focused responsibility |
 | `goanalyzer/structural_impact.go` | Keep | Name matches focused responsibility |
 | `internal/webui/signature_impact.go` | Renamed in Task 47 | Content, filename, and endpoint are now consistently signature-wide |
@@ -299,23 +302,22 @@ completeness is unsafe.
 
 | Step | Current function/file | Responsibility and dependencies | Cohesion |
 |---|---|---|---|
-| Resolve declaration | `signatureOverlay`, `goanalyzer/signature_change.go` | Match `types.Func`, find `ast.FuncDecl`; fallback AST search for interface method `FuncType` | Correct operation but buried inside a larger source-mutation function |
-| Select source range | `signatureOverlay` | Choose parameter opening through result end using token positions | Coupled appropriately to mutation, worth a named helper for readability |
-| Render signature | `renderSourceSignature` and helpers | Preserve/reconstruct names, tuple form, variadic syntax, parameter/result type source | Cohesive source-rendering operation |
-| Create overlay | `signatureOverlay` | Read the source file, splice bytes in memory, return filename/content | Cohesive outcome; does not mutate disk |
-| Reverse-import closure | `affectedPackagePaths` | Build reverse imports from loaded packages and BFS from changed package | Cohesive and deterministic |
-| Baseline diagnostics | `collectCompilerDiagnostics` | Gather diagnostics for allowed affected packages | Cohesive |
-| Overlay load | `compilerImpact` | Call `packages.Load` with retained directory/mode and one overlay | Reasonable orchestration |
-| Overlay diagnostics | `collectCompilerDiagnostics` | Gather diagnostics from rechecked packages | Cohesive |
-| Compare diagnostics | `compareCompilerDiagnostics` and helpers | Count-sensitive exact match; same package + normalized message becomes uncertain; unmatched becomes new | Cohesive, policy-bearing operation |
-| Attribute symbols | `Analysis.attributeDiagnostic` | Parse location, find enclosing function/method AST, map/build `SymbolSummary`; leave package-level diagnostics unattributed | Cohesive but dependent on loaded AST and symbol conventions |
+| Resolve declaration | `findCallableDeclaration`, `signature_overlay.go` | Match `types.Func`, find `ast.FuncDecl`; fallback AST search for interface method `FuncType` | Focused and compiler-identity-backed |
+| Select source range | `signatureSourceRange`, `signature_overlay.go` | Choose parameter opening through result end using token positions and validate byte bounds | Focused source-mutation boundary |
+| Render signature | `renderSourceSignature` and helpers, `signature_overlay.go` | Preserve/reconstruct names, tuple form, variadic syntax, parameter/result type source | Cohesive source-rendering operation |
+| Create overlay | `buildSignatureOverlay`, `signature_overlay.go` | Read the source file, splice bytes in memory, return filename/content | Cohesive outcome; does not mutate disk |
+| Reverse-import closure | `affectedPackagePaths`, `compiler_recheck.go` | Build reverse imports from loaded packages and BFS from changed package | Cohesive and deterministic |
+| Baseline diagnostics | `collectCompilerDiagnostics`, `compiler_diagnostics.go` | Gather diagnostics for allowed affected packages | Cohesive |
+| Overlay load | `recheckPackagesWithOverlay`, `compiler_recheck.go` | Call `packages.Load` with retained directory/mode and one overlay | Distinct from source construction |
+| Overlay diagnostics | `collectCompilerDiagnostics`, `compiler_diagnostics.go` | Gather diagnostics from rechecked packages | Cohesive |
+| Compare diagnostics | `compareCompilerDiagnostics` and helpers, `compiler_diagnostics.go` | Count-sensitive exact match; same package + normalized message becomes uncertain; unmatched becomes new | Cohesive, policy-bearing operation |
+| Attribute symbols | `Analysis.attributeDiagnostic`, `compiler_diagnostics.go` | Parse location, find enclosing function/method AST, map/build `SymbolSummary`; leave package-level diagnostics unattributed | Cohesive but dependent on loaded AST and symbol conventions |
 
 These are five distinct concepts: hypothetical source mutation, compiler
 recheck, diagnostic collection, diagnostic comparison, and attribution. They
-can remain private operations in `goanalyzer`; no new framework or package is
-warranted. Separating overlay construction from diagnostic policy into
-same-package files would make invariants easier to review. `compilerImpact`
-should remain the small coordinator.
+remain private operations in `goanalyzer`; no new framework or package is
+warranted. Task 48 separated them into focused same-package files while keeping
+`compilerImpact` as the short coordinator.
 
 ## Implementation hotspots
 
@@ -328,8 +330,8 @@ Line count was used only to find candidates; the reasons below are conceptual.
 | `AnalyzeSignatureChange`, `goanalyzer/signature_analysis.go` | Resolve, validate, compare, collect four impact lenses, sort | Orchestration is broad but linear and expresses product semantics | Keep as coordinator; extract shared result sorting | Mostly intentional complexity |
 | `resolveProposedSignature`, same file | Parse type expressions, declaration-context resolution, validate variadic shape, construct compiler/model signatures | Compiler and detached DTO construction are interleaved | Separate type-expression resolution from model assembly only if readability requires it | Probable debt |
 | `checkCallSite`, same file | Argument extraction, count/ellipsis rules, compiler assignability/constants, problems DTO | Dense because Go call semantics are genuinely detailed | Keep focused helpers already present; no package split | Intentional complexity |
-| `signatureOverlay`, `signature_change.go` | Declaration lookup, range selection, file IO, render, byte splicing | Several failure modes and invariants live in one function | `findCallableDeclaration`, `signatureSourceRange`, overlay assembly | Worth extracting mechanically |
-| `compilerImpact`, same file | Scope, baseline, overlay, reload, compare, attribute, sort | Coordinator spans separate concepts but is currently readable | Move operations to focused same-package files; keep coordinator | Probable debt |
+| Signature overlay path | Declaration lookup, range selection, file IO, render, byte splicing | Task 48 gave each meaningful operation a focused helper in `signature_overlay.go` | Keep concrete and signature-specific | Resolved in Task 48 |
+| `compilerImpact`, `compiler_recheck.go` | Scope, baseline, overlay, reload, compare, attribute, sort | Reads as a short sequence of focused operations after Task 48 | Keep as coordinator | Resolved in Task 48 |
 | Contract helpers, `contract_impact.go` | Candidate selection, method-set substitution, summaries, deduplication | Domain is complex but helpers are already named | No extraction unless ownership moves | Intentional complexity |
 | Structural helpers, `structural_impact.go` | Reverse embedding traversal and `go/types` method-set proof | Small and cohesive | Keep | No debt found |
 | `packageDependencyView` / `typeDependencyView`, `query` | Projection, aggregation, evidence sorting/deduplication | Parallel structures look duplicative but encode different ownership rules | Consolidate only if behavior starts diverging | Harmless duplication |
@@ -342,10 +344,9 @@ Line count was used only to find candidates; the reasons below are conceptual.
 
 - Path DFS closures in `query` express path-local visited state next to each
   traversal. They are understandable and should stay unless reused.
-- AST callbacks in `addCalls`, `collectCallSites`, and declaration fallback in
-  `signatureOverlay` encode meaningful attribution rules. Naming the latter
-  declaration lookup would improve reviewability; mechanically extracting every
-  `ast.Inspect` callback would not.
+- AST callbacks in `addCalls`, `collectCallSites`, and `findCallableDeclaration`
+  encode meaningful attribution rules. Task 48 named the declaration operation;
+  mechanically extracting every `ast.Inspect` callback would not help.
 - Browser event callbacks are expected. The problem is workflow state shared
   across graph, inspection, and signature analysis, not the mere presence of
   closures.
@@ -468,8 +469,8 @@ problem.
 | Call-only and full-semantic package dependencies share similar names | Clear debt | NOCV self-analysis returns materially different package edges depending on command/API |
 | `impact` names both transitive semantic dependents and hypothetical signature consequences | Clear debt | User-facing workflows are unrelated |
 | Successful load can silently contain compiler diagnostics and incomplete semantic facts | Probable correctness/product debt | Missing facts have no health/completeness marker; a graph result can look authoritative |
-| Source mutation, recheck, comparison, and attribution share one file | Probable debt | Concepts have separate invariants, though current functions are mostly isolated |
-| `signatureOverlay` combines lookup, range selection, IO, rendering, and splicing | Clear readability debt | Focused extraction would make source-mutation safety easier to audit without changing architecture |
+| Source mutation, recheck, comparison, and attribution shared one file | Resolved in Task 48 | Focused same-package files now expose the distinct invariants without new abstractions |
+| Signature overlay combined lookup, range selection, IO, rendering, and splicing | Resolved in Task 48 | Concrete helpers now make source mutation auditable while preserving one-file in-memory overlays |
 | `app.js` holds graph, navigation, inspection, and signature-change workflows with shared state | Probable debt | A change in one workflow can disturb stale-request/navigation invariants; no framework migration is implied |
 | HTTP DTOs duplicate query/analyzer fields | Intentional complexity | This protects the transport boundary and compiler privacy |
 | Contract and structural analysis use `go/types` method sets and several helpers | Intentional complexity | This is the domain complexity required for correct Go behavior |
@@ -487,11 +488,11 @@ need a new feature or architecture rewrite.
 | Must implement/document before beta | Approved meanings of `query`, `dependency`, `dependents`, and `impact` in supported surfaces | Beta should not freeze contradictory API/CLI vocabulary |
 | Must implement/document before beta | Coarse dirty/partial analysis health | Users must not infer compile cleanliness or complete semantic extraction |
 | Completed in Task 46 | Remove the parameter-only wrapper/model/CLI | Unified callable signature analysis is now authoritative |
-| Should fix before beta | Rename stale parameter-specific files after the compatibility decision | Make current unified responsibility visible |
-| Should fix before beta | Separate overlay construction from compiler diagnostic operations within `goanalyzer` | Improves auditability of the riskiest implementation without changing behavior |
+| Completed in Task 47 | Rename stale parameter-specific production files | Current unified responsibility is visible |
+| Completed in Task 48 | Separate overlay construction from compiler diagnostic operations within `goanalyzer` | The riskiest implementation is now auditable without changing behavior |
 | Should fix before beta | Replace duplicate spike algorithms with tests of production behavior | Prevent false confidence during refactor |
 | Can defer after beta | Rename/reconceptualize `Analysis` | Requires lifecycle/health design; current type remains cohesive |
-| Should fix before beta | Move Go-specific signature/change models toward `goanalyzer` | This is now the approved ownership direction, but remains a separate reviewed task |
+| Completed in Task 47 | Move Go-specific signature/change models to `goanalyzer` | Current package ownership matches the approved contract |
 | Can defer after beta | Add a shared model package | No concrete responsibility currently justifies one |
 | Can defer after beta | Split `goanalyzer` into packages | No current cycle or independent state boundary justifies it |
 | Can defer after beta | Modularize `app.js` or change frontend technology | UI works; improve behavior tests before structural change |
@@ -502,13 +503,11 @@ need a new feature or architecture rewrite.
 Every stage begins by inspecting the then-current repository and ends with a
 human review point.
 
-1. Extract declaration/range/overlay assembly from compiler recheck operations
-   within `goanalyzer`; preserve all signature tests and public APIs.
-2. Remove duplicated Task 41 spike algorithms while retaining behavior cases.
-3. Design and expose coarse partial-analysis health without per-edge confidence.
-4. Review graph/query CLI commands against the approved glossary and remove or
+1. Remove duplicated Task 41 spike algorithms while retaining behavior cases.
+2. Design and expose coarse partial-analysis health without per-edge confidence.
+3. Review graph/query CLI commands against the approved glossary and remove or
    rename only one command family at a time.
-5. Improve critical browser workflow tests, then consider internal JavaScript
+4. Improve critical browser workflow tests, then consider internal JavaScript
    module/file separation without choosing a new framework.
 
 ## Decision gates and safe mechanical candidates
@@ -851,7 +850,6 @@ The following areas are authorized for separate future tasks, one at a time:
 
 - clarify dependency-oriented CLI/API names;
 - rename transitive `impact` terminology to dependents terminology;
-- separate overlay construction from compiler diagnostic operations;
 - remove duplicated Task 41 spike algorithms while preserving scenarios;
 - design coarse analysis health;
 - improve focused implementation readability; and
@@ -862,10 +860,10 @@ shared model package, cross-language interface, `Analysis` rename,
 `goanalyzer` package split, health API shape, or frontend/runtime migration
 still requires explicit human review.
 
-## Human review gate after Task 47
+## Human review gate after Task 48
 
-The human should review the completed ownership move and preserved semantic/API
-tests before any health-state implementation, overlay refactor, dependency
-terminology cleanup, or broader file restructuring begins. Later tasks must
-start from the current repository state and preserve intervening human edits.
-No next implementation task is selected automatically.
+The human should review the completed overlay/recheck file boundaries, helper
+boundaries, and preserved semantic tests before any health-state implementation,
+dependency terminology cleanup, or broader file restructuring begins. Later
+tasks must start from the current repository state and preserve intervening
+human edits. No next implementation task is selected automatically.
