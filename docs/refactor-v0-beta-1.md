@@ -883,3 +883,40 @@ definitions, reason representation, status ownership, CLI/web wording, and
 relationship to `CompilerImpact.BaselineStatus`. Later tasks must start from the
 current repository state and preserve intervening human edits. No next
 implementation task is selected automatically.
+
+## Task 52 dependency CLI review
+
+Task 52 completed a design/inventory review without changing production code,
+commands, query behavior, output, or traversal. The full command matrix and
+beta vocabulary recommendation are recorded in
+[`dependency-cli-terminology.md`](dependency-cli-terminology.md).
+
+The review confirmed four materially distinct current models: direct Go import
+edges, declaration-level semantic relationships, semantic package projection,
+and semantic type projection. It also confirmed a legacy fifth surface:
+`package-deps` and `why-package-dep` use a call-only projection rather than the
+maintained semantic package view. `direct-dependents` remains one-hop reverse
+semantic navigation, and Task 51's `transitive-dependents` remains the recursive
+reverse closure with all distinct simple declaration-level paths. Impact stays
+reserved for hypothetical-change consequences.
+
+The recommendation for human review is to keep the precise import operations
+and the direct/transitive dependent capabilities; rename terse or level-opaque
+dependency/path commands; remove the global `imports` diagnostic dump and
+legacy call-only `package-deps`; and decide whether the useful location evidence
+in `why-package-dep` should be subsumed into package inspection/future `why` or
+retained under an explicitly call-only name. No symmetric forward closure is
+proposed merely for naming symmetry.
+
+The review also records traversal readability debt separately. Five query
+algorithms currently use inline recursive `walk` closures. A future task should
+extract named query-specific traversal helpers first and consider reuse only
+after their different direction, projection, evidence, and duplicate rules are
+plain. Terminology changes must not be bundled with that refactor.
+
+## Human review gate after Task 52
+
+Before a follow-up implementation task is written, the human should review the
+command semantics matrix, the proposed beta vocabulary, removal of the global
+and call-only legacy surfaces, the fate of `why-package-dep`, and the continued
+separation between future `why` composition and hypothetical `impact` analysis.
