@@ -27,6 +27,8 @@ func TestParseInvocationRejectsMissingUnknownAndWrongArguments(t *testing.T) {
 		{name: "missing type path endpoint", args: []string{"type-paths", "./...", "from"}, want: "usage: nocv type-paths <pattern> <from-type> <to-type>"},
 		{name: "missing inspection endpoint", args: []string{"inspect-dependency", "./...", "from"}, want: "usage: nocv inspect-dependency <pattern> <from-package> <to-package>"},
 		{name: "missing node inspection symbol", args: []string{"inspect-node", "./..."}, want: "usage: nocv inspect-node <pattern> <symbol-ref>"},
+		{name: "missing transitive dependent symbol", args: []string{"transitive-dependents", "./..."}, want: "usage: nocv transitive-dependents <pattern> <symbol-ref>"},
+		{name: "removed impact command", args: []string{"impact", "./...", "symbol"}, want: `unknown command "impact"`},
 		{name: "extra tree argument", args: []string{"tree", "./...", "extra"}, want: "usage: nocv tree <pattern>"},
 	}
 	for _, test := range tests {
@@ -36,6 +38,25 @@ func TestParseInvocationRejectsMissingUnknownAndWrongArguments(t *testing.T) {
 				t.Fatalf("parseInvocation(%v) error = %v, want containing %q", test.args, err, test.want)
 			}
 		})
+	}
+}
+
+func TestCommandOverviewDistinguishesDirectAndTransitiveDependents(t *testing.T) {
+	_, err := parseInvocation(nil)
+	if err == nil {
+		t.Fatal("parseInvocation(nil) returned no help error")
+	}
+	help := err.Error()
+	for _, want := range []string{
+		"direct-dependents: show immediate reverse semantic relationships",
+		"transitive-dependents: show the recursive reverse semantic dependency closure",
+	} {
+		if !strings.Contains(help, want) {
+			t.Errorf("command overview lacks %q:\n%s", want, help)
+		}
+	}
+	if _, exists := commandSpecs["impact"]; exists {
+		t.Fatal("removed impact command remains registered")
 	}
 }
 
@@ -125,7 +146,7 @@ func TestExecuteCommandsRenderFocusedDeterministicOutput(t *testing.T) {
 		{name: "inspect-node", values: []string{string(ids.caller)}, want: []string{"Node inspection:", string(ids.caller), "Calls:", "calls -> " + string(ids.callee), "Called by:", "Accepts:", "accepts -> " + string(ids.repository), "Returns:", "returns -> " + string(ids.base), "Implements:", "implements -> " + string(ids.callee), "Implemented by:"}, unwanted: []string{"\nDependencies:", "\nDependents:"}},
 		{name: "direct-deps", values: []string{string(ids.caller)}, want: []string{string(ids.caller), "calls ->", "accepts ->"}},
 		{name: "direct-dependents", values: []string{string(ids.repository)}, want: []string{string(ids.repository), "<- implements", "<- accepts"}},
-		{name: "impact", values: []string{string(ids.callee)}, want: []string{"Impact of", string(ids.caller), "path 1:"}},
+		{name: "transitive-dependents", values: []string{string(ids.callee)}, want: []string{"Transitive dependents of", string(ids.caller), "path 1:"}},
 		{name: "paths", values: []string{string(ids.caller), string(ids.callee)}, want: []string{"Dependency paths:", "path 1:", "calls ->"}},
 		{name: "package-paths", values: []string{string(ids.packageA), string(ids.packageB)}, want: []string{"Package dependency paths:", "evidence:", "example.com/a", "example.com/b"}},
 		{name: "package-deps", want: []string{"Package call dependencies:", "example.com/a -> example.com/b"}},

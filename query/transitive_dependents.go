@@ -6,21 +6,17 @@ import (
 	"nocv/graph"
 )
 
-// ImpactResult identifies one potentially affected node and every distinct
-// simple semantic dependency path from that node to the changed node.
-type ImpactResult struct {
+// TransitiveDependent identifies one node that directly or recursively relies
+// on the selected node, together with every distinct simple dependency path.
+type TransitiveDependent struct {
 	ID    graph.SymbolRef
 	Paths []SemanticPath
 }
 
-// ImpactPath and ImpactStep retain the impact-specific API names while impact
-// and exact dependency explanation share one neutral path representation.
-type ImpactPath = SemanticPath
-type ImpactStep = SemanticStep
-
-// Impact returns all represented nodes with a semantic dependency path to id.
-// Paths are simple: no node is visited more than once within one path.
-func Impact(g *graph.Graph, id graph.SymbolRef) []ImpactResult {
+// TransitiveDependents returns every represented node with a semantic
+// dependency path to id. Paths are simple: no node is visited more than once
+// within one path.
+func TransitiveDependents(g *graph.Graph, id graph.SymbolRef) []TransitiveDependent {
 	if g == nil {
 		return nil
 	}
@@ -29,7 +25,7 @@ func Impact(g *graph.Graph, id graph.SymbolRef) []ImpactResult {
 		return nil
 	}
 
-	byID := make(map[graph.SymbolRef]*ImpactResult)
+	byID := make(map[graph.SymbolRef]*TransitiveDependent)
 	pathKeys := make(map[graph.SymbolRef]map[string]bool)
 	seen := map[graph.NodeID]bool{idNode: true}
 
@@ -67,7 +63,7 @@ func Impact(g *graph.Graph, id graph.SymbolRef) []ImpactResult {
 
 			result := byID[fromNode.Ref]
 			if result == nil {
-				result = &ImpactResult{ID: fromNode.Ref}
+				result = &TransitiveDependent{ID: fromNode.Ref}
 				byID[fromNode.Ref] = result
 			}
 			result.Paths = append(result.Paths, SemanticPath{Steps: nextPath})
@@ -79,7 +75,7 @@ func Impact(g *graph.Graph, id graph.SymbolRef) []ImpactResult {
 	}
 	walk(idNode, nil)
 
-	results := make([]ImpactResult, 0, len(byID))
+	results := make([]TransitiveDependent, 0, len(byID))
 	for _, result := range byID {
 		sort.Slice(result.Paths, func(i, j int) bool {
 			return semanticPathLess(result.Paths[i], result.Paths[j])

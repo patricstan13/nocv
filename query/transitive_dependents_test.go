@@ -11,46 +11,46 @@ import (
 	"nocv/query"
 )
 
-func TestImpactPreservesAllSimplePathsAndDeterministicOrdering(t *testing.T) {
-	g, ids := branchingImpactFixture(t)
+func TestTransitiveDependentsPreserveAllSimplePathsAndDeterministicOrdering(t *testing.T) {
+	g, ids := branchingDependentsFixture(t)
 	before := outgoingSnapshot(g)
 
-	got := query.Impact(g, ids.changed)
-	want := []query.ImpactResult{
+	got := query.TransitiveDependents(g, ids.changed)
+	want := []query.TransitiveDependent{
 		{
 			ID: ids.a,
-			Paths: []query.ImpactPath{
-				{Steps: []query.ImpactStep{{From: ids.a, To: ids.changed, Kind: graph.EdgeAccepts}}},
-				{Steps: []query.ImpactStep{{From: ids.a, To: ids.changed, Kind: graph.EdgeReturns}}},
-				{Steps: []query.ImpactStep{
+			Paths: []query.SemanticPath{
+				{Steps: []query.SemanticStep{{From: ids.a, To: ids.changed, Kind: graph.EdgeAccepts}}},
+				{Steps: []query.SemanticStep{{From: ids.a, To: ids.changed, Kind: graph.EdgeReturns}}},
+				{Steps: []query.SemanticStep{
 					{From: ids.a, To: ids.b, Kind: graph.EdgeCalls},
 					{From: ids.b, To: ids.changed, Kind: graph.EdgeAccepts},
 				}},
-				{Steps: []query.ImpactStep{
+				{Steps: []query.SemanticStep{
 					{From: ids.a, To: ids.c, Kind: graph.EdgeCalls},
 					{From: ids.c, To: ids.changed, Kind: graph.EdgeReturns},
 				}},
 			},
 		},
-		{ID: ids.b, Paths: []query.ImpactPath{{Steps: []query.ImpactStep{{From: ids.b, To: ids.changed, Kind: graph.EdgeAccepts}}}}},
-		{ID: ids.c, Paths: []query.ImpactPath{{Steps: []query.ImpactStep{{From: ids.c, To: ids.changed, Kind: graph.EdgeReturns}}}}},
+		{ID: ids.b, Paths: []query.SemanticPath{{Steps: []query.SemanticStep{{From: ids.b, To: ids.changed, Kind: graph.EdgeAccepts}}}}},
+		{ID: ids.c, Paths: []query.SemanticPath{{Steps: []query.SemanticStep{{From: ids.c, To: ids.changed, Kind: graph.EdgeReturns}}}}},
 		{
 			ID: ids.d,
-			Paths: []query.ImpactPath{
-				{Steps: []query.ImpactStep{
+			Paths: []query.SemanticPath{
+				{Steps: []query.SemanticStep{
 					{From: ids.d, To: ids.a, Kind: graph.EdgeCalls},
 					{From: ids.a, To: ids.changed, Kind: graph.EdgeAccepts},
 				}},
-				{Steps: []query.ImpactStep{
+				{Steps: []query.SemanticStep{
 					{From: ids.d, To: ids.a, Kind: graph.EdgeCalls},
 					{From: ids.a, To: ids.changed, Kind: graph.EdgeReturns},
 				}},
-				{Steps: []query.ImpactStep{
+				{Steps: []query.SemanticStep{
 					{From: ids.d, To: ids.a, Kind: graph.EdgeCalls},
 					{From: ids.a, To: ids.b, Kind: graph.EdgeCalls},
 					{From: ids.b, To: ids.changed, Kind: graph.EdgeAccepts},
 				}},
-				{Steps: []query.ImpactStep{
+				{Steps: []query.SemanticStep{
 					{From: ids.d, To: ids.a, Kind: graph.EdgeCalls},
 					{From: ids.a, To: ids.c, Kind: graph.EdgeCalls},
 					{From: ids.c, To: ids.changed, Kind: graph.EdgeReturns},
@@ -59,17 +59,17 @@ func TestImpactPreservesAllSimplePathsAndDeterministicOrdering(t *testing.T) {
 		},
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("Impact(Changed) = %#v, want %#v", got, want)
+		t.Fatalf("TransitiveDependents(Changed) = %#v, want %#v", got, want)
 	}
-	if again := query.Impact(g, ids.changed); !reflect.DeepEqual(again, want) {
-		t.Fatalf("second Impact(Changed) = %#v, want deterministic %#v", again, want)
+	if again := query.TransitiveDependents(g, ids.changed); !reflect.DeepEqual(again, want) {
+		t.Fatalf("second TransitiveDependents(Changed) = %#v, want deterministic %#v", again, want)
 	}
 	if after := outgoingSnapshot(g); !reflect.DeepEqual(after, before) {
-		t.Fatalf("impact query mutated graph edges:\nbefore: %#v\nafter:  %#v", before, after)
+		t.Fatalf("transitive dependents query mutated graph edges:\nbefore: %#v\nafter:  %#v", before, after)
 	}
 }
 
-func TestImpactTerminatesCyclesWithPathLocalState(t *testing.T) {
+func TestTransitiveDependentsTerminatesCyclesWithPathLocalState(t *testing.T) {
 	g := graph.New()
 	pkgID := graph.PackageRef("example.com/cycle")
 	a := graph.ChildRef(pkgID, "A")
@@ -96,22 +96,57 @@ func TestImpactTerminatesCyclesWithPathLocalState(t *testing.T) {
 		}
 	}
 
-	want := []query.ImpactResult{
-		{ID: a, Paths: []query.ImpactPath{{Steps: []query.ImpactStep{{From: a, To: b, Kind: graph.EdgeCalls}, {From: b, To: c, Kind: graph.EdgeCalls}}}}},
-		{ID: b, Paths: []query.ImpactPath{{Steps: []query.ImpactStep{{From: b, To: c, Kind: graph.EdgeCalls}}}}},
+	want := []query.TransitiveDependent{
+		{ID: a, Paths: []query.SemanticPath{{Steps: []query.SemanticStep{{From: a, To: b, Kind: graph.EdgeCalls}, {From: b, To: c, Kind: graph.EdgeCalls}}}}},
+		{ID: b, Paths: []query.SemanticPath{{Steps: []query.SemanticStep{{From: b, To: c, Kind: graph.EdgeCalls}}}}},
 	}
-	got := query.Impact(g, c)
+	got := query.TransitiveDependents(g, c)
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("Impact(C) = %#v, want %#v", got, want)
+		t.Fatalf("TransitiveDependents(C) = %#v, want %#v", got, want)
 	}
 	for _, result := range got {
 		for _, path := range result.Paths {
-			assertSimpleImpactPath(t, c, path)
+			assertSimpleDependentPath(t, c, path)
 		}
 	}
 }
 
-func TestImpactTraversesEveryDirectSemanticKind(t *testing.T) {
+func TestDirectAndTransitiveDependentsSpecifyTraversalDepth(t *testing.T) {
+	g := graph.New()
+	pkg := graph.PackageRef("example.com/depth")
+	a := graph.ChildRef(pkg, "A")
+	b := graph.ChildRef(pkg, "B")
+	c := graph.ChildRef(pkg, "C")
+	for _, node := range []testNode{
+		{ID: pkg, Kind: graph.NodePackage, Name: "depth"},
+		{ID: a, Kind: graph.NodeFunction, Name: "A", Parent: pkg},
+		{ID: b, Kind: graph.NodeFunction, Name: "B", Parent: pkg},
+		{ID: c, Kind: graph.NodeFunction, Name: "C", Parent: pkg},
+	} {
+		if err := addTestNode(g, node); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for offset, endpoints := range [][2]graph.SymbolRef{{b, a}, {c, b}} {
+		if err := addTestEdge(g, testEdge{
+			From: endpoints[0], To: endpoints[1], Kind: graph.EdgeCalls,
+			Evidence: []graph.Location{{File: "depth.go", Offset: offset}},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	direct := query.DirectDependents(g, a)
+	if len(direct) != 1 || direct[0].From != b {
+		t.Fatalf("DirectDependents(A) = %#v, want only B", direct)
+	}
+	transitive := query.TransitiveDependents(g, a)
+	if len(transitive) != 2 || transitive[0].ID != b || transitive[1].ID != c {
+		t.Fatalf("TransitiveDependents(A) = %#v, want B and C", transitive)
+	}
+}
+
+func TestTransitiveDependentsTraversesEveryDirectSemanticKind(t *testing.T) {
 	g := graph.New()
 	pkgID := graph.PackageRef("example.com/relationships")
 	base := graph.ChildRef(pkgID, "Base")
@@ -169,14 +204,14 @@ func TestImpactTraversesEveryDirectSemanticKind(t *testing.T) {
 		{changed: callee, from: caller, kind: graph.EdgeCalls},
 	}
 	for _, test := range tests {
-		results := query.Impact(g, test.changed)
-		if !hasOneStepImpact(results, test.from, test.changed, test.kind) {
-			t.Errorf("Impact(%q) lacks %q -%s-> %q: %#v", test.changed, test.from, test.kind, test.changed, results)
+		results := query.TransitiveDependents(g, test.changed)
+		if !hasOneStepDependent(results, test.from, test.changed, test.kind) {
+			t.Errorf("TransitiveDependents(%q) lacks %q -%s-> %q: %#v", test.changed, test.from, test.kind, test.changed, results)
 		}
 	}
 }
 
-func TestImpactExcludesStructuralAndProjectedRelationships(t *testing.T) {
+func TestTransitiveDependentsExcludesStructuralAndProjectedRelationships(t *testing.T) {
 	g := graph.New()
 	pkgA := graph.PackageRef("example.com/a")
 	pkgB := graph.PackageRef("example.com/b")
@@ -203,36 +238,36 @@ func TestImpactExcludesStructuralAndProjectedRelationships(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got := query.Impact(g, typeA); len(got) != 0 {
+	if got := query.TransitiveDependents(g, typeA); len(got) != 0 {
 		t.Fatalf("structural children affected parent: %#v", got)
 	}
-	if got := query.Impact(g, pkgB); len(got) != 0 {
+	if got := query.TransitiveDependents(g, pkgB); len(got) != 0 {
 		t.Fatalf("projected call dependency affected package: %#v", got)
 	}
-	if got := query.Impact(g, callee); len(got) != 1 || got[0].ID != caller {
-		t.Fatalf("Impact(callee) = %#v, want only concrete caller", got)
+	if got := query.TransitiveDependents(g, callee); len(got) != 1 || got[0].ID != caller {
+		t.Fatalf("TransitiveDependents(callee) = %#v, want only concrete caller", got)
 	}
 }
 
-func TestImpactHandlesNilAndMissingNodes(t *testing.T) {
-	g, ids := branchingImpactFixture(t)
-	if got := query.Impact(nil, ids.changed); len(got) != 0 {
-		t.Fatalf("Impact(nil) = %#v, want empty", got)
+func TestTransitiveDependentsHandlesNilAndMissingNodes(t *testing.T) {
+	g, ids := branchingDependentsFixture(t)
+	if got := query.TransitiveDependents(nil, ids.changed); len(got) != 0 {
+		t.Fatalf("TransitiveDependents(nil) = %#v, want empty", got)
 	}
-	if got := query.Impact(g, "missing"); len(got) != 0 {
-		t.Fatalf("Impact(missing) = %#v, want empty", got)
+	if got := query.TransitiveDependents(g, "missing"); len(got) != 0 {
+		t.Fatalf("TransitiveDependents(missing) = %#v, want empty", got)
 	}
 }
 
-func TestAnalyzerPipelineProvidesTransitiveImpactPaths(t *testing.T) {
+func TestAnalyzerPipelineProvidesTransitiveDependentPaths(t *testing.T) {
 	g, err := goanalyzer.Load(context.Background(), filepath.Join("..", "goanalyzer", "testdata", "project"), "./...")
 	if err != nil {
 		t.Fatalf("Load(): %v", err)
 	}
 
-	results := query.Impact(g, "example.com/shop/orders::Order")
+	results := query.TransitiveDependents(g, "example.com/shop/orders::Order")
 	runCreateID := graph.SymbolRef("example.com/shop/orders::RunCreate")
-	var runCreate *query.ImpactResult
+	var runCreate *query.TransitiveDependent
 	for index := range results {
 		if results[index].ID == runCreateID {
 			runCreate = &results[index]
@@ -240,25 +275,25 @@ func TestAnalyzerPipelineProvidesTransitiveImpactPaths(t *testing.T) {
 		}
 	}
 	if runCreate == nil {
-		t.Fatalf("Order impact lacks RunCreate: %#v", results)
+		t.Fatalf("Order transitive dependents lack RunCreate: %#v", results)
 	}
 	if len(runCreate.Paths) != 2 {
-		t.Fatalf("RunCreate impact paths = %#v, want call chains of lengths two and three", runCreate.Paths)
+		t.Fatalf("RunCreate transitive dependent paths = %#v, want call chains of lengths two and three", runCreate.Paths)
 	}
 	if len(runCreate.Paths[0].Steps) != 2 || len(runCreate.Paths[1].Steps) != 3 {
 		t.Fatalf("RunCreate path lengths = %d and %d, want 2 and 3", len(runCreate.Paths[0].Steps), len(runCreate.Paths[1].Steps))
 	}
 }
 
-func TestSelfAnalysisAttributesImpactClosureCall(t *testing.T) {
+func TestSelfAnalysisAttributesTransitiveDependentsClosureCall(t *testing.T) {
 	g, err := goanalyzer.Load(context.Background(), filepath.Join(".."), "./...")
 	if err != nil {
 		t.Fatalf("Load(NOCV): %v", err)
 	}
 
-	impactID := graph.SymbolRef("nocv/query::Impact")
+	dependentsID := graph.SymbolRef("nocv/query::TransitiveDependents")
 	closureTarget := graph.SymbolRef("nocv/query::semanticPathLess")
-	dependencies := query.DirectDependencies(g, impactID)
+	dependencies := query.DirectDependencies(g, dependentsID)
 	foundCall := false
 	for _, relationship := range dependencies {
 		if relationship.Kind == graph.EdgeCalls && relationship.To == closureTarget {
@@ -267,11 +302,11 @@ func TestSelfAnalysisAttributesImpactClosureCall(t *testing.T) {
 		}
 	}
 	if !foundCall {
-		t.Fatalf("Impact direct dependencies lack closure call to semanticPathLess: %#v", dependencies)
+		t.Fatalf("TransitiveDependents direct dependencies lack closure call to semanticPathLess: %#v", dependencies)
 	}
 
-	if !hasOneStepImpact(query.Impact(g, closureTarget), impactID, closureTarget, graph.EdgeCalls) {
-		t.Fatal("impact analysis does not consume Impact -> semanticPathLess closure call")
+	if !hasOneStepDependent(query.TransitiveDependents(g, closureTarget), dependentsID, closureTarget, graph.EdgeCalls) {
+		t.Fatal("transitive dependents query does not consume TransitiveDependents -> semanticPathLess closure call")
 	}
 
 	packagePaths := query.PackageDependencyPaths(g, "nocv/cmd/nocv", "nocv/query")
@@ -280,7 +315,7 @@ func TestSelfAnalysisAttributesImpactClosureCall(t *testing.T) {
 	}
 }
 
-type branchingImpactIDs struct {
+type branchingDependentsIDs struct {
 	changed graph.SymbolRef
 	a       graph.SymbolRef
 	b       graph.SymbolRef
@@ -288,19 +323,19 @@ type branchingImpactIDs struct {
 	d       graph.SymbolRef
 }
 
-func branchingImpactFixture(t *testing.T) (*graph.Graph, branchingImpactIDs) {
+func branchingDependentsFixture(t *testing.T) (*graph.Graph, branchingDependentsIDs) {
 	t.Helper()
-	ids := branchingImpactIDs{
-		changed: "example.com/impact::Changed",
-		a:       "example.com/impact::A",
-		b:       "example.com/impact::B",
-		c:       "example.com/impact::C",
-		d:       "example.com/impact::D",
+	ids := branchingDependentsIDs{
+		changed: "example.com/dependents::Changed",
+		a:       "example.com/dependents::A",
+		b:       "example.com/dependents::B",
+		c:       "example.com/dependents::C",
+		d:       "example.com/dependents::D",
 	}
 	g := graph.New()
-	pkgID := graph.PackageRef("example.com/impact")
+	pkgID := graph.PackageRef("example.com/dependents")
 	for _, node := range []testNode{
-		{ID: pkgID, Kind: graph.NodePackage, Name: "impact"},
+		{ID: pkgID, Kind: graph.NodePackage, Name: "dependents"},
 		{ID: ids.changed, Kind: graph.NodeInterface, Name: "Changed", Parent: pkgID},
 		{ID: ids.a, Kind: graph.NodeFunction, Name: "A", Parent: pkgID},
 		{ID: ids.b, Kind: graph.NodeFunction, Name: "B", Parent: pkgID},
@@ -321,7 +356,7 @@ func branchingImpactFixture(t *testing.T) (*graph.Graph, branchingImpactIDs) {
 		{From: ids.a, To: ids.changed, Kind: graph.EdgeAccepts},
 	}
 	for index := range edges {
-		edges[index].Evidence = []graph.Location{{File: "impact.go", Offset: index}}
+		edges[index].Evidence = []graph.Location{{File: "dependents.go", Offset: index}}
 		if err := addTestEdge(g, edges[index]); err != nil {
 			t.Fatal(err)
 		}
@@ -329,29 +364,29 @@ func branchingImpactFixture(t *testing.T) (*graph.Graph, branchingImpactIDs) {
 	return g, ids
 }
 
-func assertSimpleImpactPath(t *testing.T, changed graph.SymbolRef, path query.ImpactPath) {
+func assertSimpleDependentPath(t *testing.T, changed graph.SymbolRef, path query.SemanticPath) {
 	t.Helper()
 	if len(path.Steps) == 0 {
-		t.Fatal("impact path has no steps")
+		t.Fatal("transitive dependent path has no steps")
 	}
 	seen := make(map[graph.SymbolRef]bool)
 	for index, step := range path.Steps {
 		if index > 0 && path.Steps[index-1].To != step.From {
-			t.Fatalf("disconnected impact path: %#v", path)
+			t.Fatalf("disconnected transitive dependent path: %#v", path)
 		}
 		if seen[step.From] {
-			t.Fatalf("impact path repeats %q: %#v", step.From, path)
+			t.Fatalf("transitive dependent path repeats %q: %#v", step.From, path)
 		}
 		seen[step.From] = true
 	}
 	last := path.Steps[len(path.Steps)-1].To
 	if seen[last] || last != changed {
-		t.Fatalf("impact path repeats or does not end at %q: %#v", changed, path)
+		t.Fatalf("transitive dependent path repeats or does not end at %q: %#v", changed, path)
 	}
 }
 
-func hasOneStepImpact(
-	results []query.ImpactResult,
+func hasOneStepDependent(
+	results []query.TransitiveDependent,
 	from, to graph.SymbolRef,
 	kind graph.EdgeKind,
 ) bool {
@@ -360,7 +395,7 @@ func hasOneStepImpact(
 			continue
 		}
 		for _, path := range result.Paths {
-			if len(path.Steps) == 1 && path.Steps[0] == (query.ImpactStep{From: from, To: to, Kind: kind}) {
+			if len(path.Steps) == 1 && path.Steps[0] == (query.SemanticStep{From: from, To: to, Kind: kind}) {
 				return true
 			}
 		}

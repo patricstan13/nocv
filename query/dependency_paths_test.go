@@ -12,7 +12,7 @@ import (
 )
 
 func TestDependencyPathsPreserveAllBranchesKindsAndOrdering(t *testing.T) {
-	g, ids := branchingImpactFixture(t)
+	g, ids := branchingDependentsFixture(t)
 	before := outgoingSnapshot(g)
 
 	want := []query.SemanticPath{

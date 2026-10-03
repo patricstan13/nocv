@@ -179,9 +179,9 @@ func printForbiddenDependencyCheck(out io.Writer, g *graph.Graph, from, to graph
 	printPackagePathResults(out, violation.Paths)
 }
 
-func printImpact(out io.Writer, g *graph.Graph, id graph.SymbolRef) {
-	fmt.Fprintf(out, "Impact of %s:\n", id)
-	results := query.Impact(g, id)
+func printTransitiveDependents(out io.Writer, g *graph.Graph, id graph.SymbolRef) {
+	fmt.Fprintf(out, "Transitive dependents of %s:\n", id)
+	results := query.TransitiveDependents(g, id)
 	if len(results) == 0 {
 		fmt.Fprintln(out, "  (none)")
 		return

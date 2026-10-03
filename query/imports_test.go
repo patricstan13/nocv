@@ -66,8 +66,8 @@ func TestImportsRemainSeparateFromSemanticQueries(t *testing.T) {
 	if got := query.DependencyPaths(g, ids.app, ids.plugin); len(got) != 0 {
 		t.Fatalf("DependencyPaths(app, plugin) included blank import: %#v", got)
 	}
-	if got := query.Impact(g, ids.plugin); len(got) != 0 {
-		t.Fatalf("Impact(plugin) included blank import: %#v", got)
+	if got := query.TransitiveDependents(g, ids.plugin); len(got) != 0 {
+		t.Fatalf("TransitiveDependents(plugin) included blank import: %#v", got)
 	}
 	if got := query.PackageDependencyPaths(g, ids.app, ids.plugin); len(got) != 0 {
 		t.Fatalf("PackageDependencyPaths(app, plugin) included blank import: %#v", got)

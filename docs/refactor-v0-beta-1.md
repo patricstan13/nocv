@@ -32,7 +32,7 @@ important evidence for the vocabulary review below.
 | `query` | Direct navigation, import and semantic paths, package/type projections, inspections, explanations, rules, transitive dependents, symbol summaries | `graph` | `goanalyzer`, `internal/webui`, `cmd/nocv` | Graph-derived projections and read models are cohesive and language-agnostic | Task 47 removed its former Go-specific signature/change DTOs |
 | `goanalyzer` | Go loading, graph extraction, symbol index, compiler/type state, call-site analysis, signature resolution, contracts, promotion, source overlay, compiler recheck, diagnostic comparison and attribution | `graph`, `query`, `go/packages`, compiler packages | `internal/webui`, `cmd/nocv` | These operations share one loaded Go type universe and symbol index | The package has distinct internal areas. No package split is yet justified solely by size |
 | `internal/webui` | HTTP server, JSON presentation DTOs, embedded assets, package graph, inspector/navigation state, signature-change editor and results | `goanalyzer`, `graph`, `query` | `cmd/nocv` | It is a coherent internal adapter from analysis/read models to one UI | `app.js` carries several workflows in one mutable module; Task 47 renamed the stale impact file |
-| `cmd/nocv` | Command parsing, project loading orchestration, query invocation, text formatting, web serving, diagnostic/debug workflows | `goanalyzer`, `graph`, `query`, `internal/webui` | Executable only | It is the composition root, so high fan-out is expected | Command names still expose overlapping meanings of dependency and impact |
+| `cmd/nocv` | Command parsing, project loading orchestration, query invocation, text formatting, web serving, diagnostic/debug workflows | `goanalyzer`, `graph`, `query`, `internal/webui` | Executable only | It is the composition root, so high fan-out is expected | Some dependency commands still need separate terminology review; Task 51 removed the dependents/impact collision |
 | `examples/impactdemo` | Small, separate Go module demonstrating call, result, contract, embedding, compiler, and dirty-baseline scenarios | Its own standard-library/local packages; no NOCV production dependency | Manual validation only | Purpose-built behavior fixture | Its README is manually maintained and can drift from analyzer behavior; that is a test-documentation risk, not a package ownership problem |
 
 `graph` remains the stable lower layer. After Task 47, `query` contains only
@@ -192,7 +192,7 @@ shared package or changing the language-agnostic `query.SymbolSummary` model.
 | Exact | Declaration-level graph relationship/path | “More correct,” compiler identity, or package projection | Prefer `declaration-level` in user output where clearer |
 | Projection | A derived package/type view backed by exact evidence | A newly stored graph edge | Keep |
 | Inspection | Read model for one selected node/dependency | Mutation, full project analysis, or compiler validation | Keep |
-| Impact | Modeled consequence of a hypothetical change, or currently a transitive dependent query | Any dependency | Overloaded: rename the transitive `impact` command before beta or qualify both uses |
+| Impact | Modeled consequence of a hypothetical change | Existing reverse reliance or an arbitrary dependency | Enforced in Task 51; current reverse reliance uses direct/transitive dependents terminology |
 | Consequence | Compiler diagnostic attributable to the hypothetical overlay | Every structured call/contract/structural impact | Keep “compiler consequence” as a qualified term |
 | Evidence | Exact relationship/location supporting a derived statement | An inference without a graph fact | Keep |
 | Owner | Enclosing package/type used for projection | Go package ownership, receiver identity, or architectural code owner | Prefer `enclosing type/package` unless projection ownership is meant |
@@ -211,7 +211,7 @@ shared package or changing the language-agnostic `query.SymbolSummary` model.
 |---|---|---|---|---|
 | Relationship | `graph.Edge` versus `query.Relationship` | Both represent the same fact at storage/read boundaries | Keep both, document `edge` as storage and `relationship` as detached view | Documentation before beta; no rename required |
 | Dependency | `Dependencies` is call-only; package/type dependency views include five semantic kinds; imports have separate “dependency” rules | The same label selects different edge sets | `CallDependencies` for the old function/command, or retire it in favor of semantic package dependency | Yes, public CLI decision |
-| Impact | `query.Impact` is transitive semantic dependents; signature impact is hypothetical change analysis | One word names two unrelated workflows | `semantic dependents`/`dependents-paths` for the former; `signature impact` for the latter | Yes for user-facing command names |
+| Impact/dependents | Before Task 51, `query.Impact` meant transitive semantic dependents while signature impact meant hypothetical change analysis | One word named two unrelated workflows | Resolved as `TransitiveDependents`/`transitive-dependents`; impact remains hypothetical | Completed in Task 51 |
 | Direct | Direct exact edges and direct projected package/type edges | A projected direct step can summarize many exact facts | Qualify the level in names and headings | Documentation now; code rename can wait |
 | Exact | Exact semantic paths | Sounds like a confidence claim | `declaration-level` in prose; retain internal names if tests are clear | Can defer |
 | Analysis | `Analysis` stores a live loaded project; methods also return individual analyses | Value and service/session meanings collide | `LoadedProject` or `GoProject` are candidates, not decisions | Human decision; can defer if documented |
@@ -416,7 +416,7 @@ No frontend framework or runtime choice follows from this inventory.
 | `direct-deps`, `direct-dependents` | Debug-only / rename | Exact semantic navigation, but “direct” and level are under-specified |
 | `type-deps` | Keep as diagnostic/product aid | Uses the full type projection and evidence |
 | `package-deps`, `why-package-dep` | Replace later or rename | Older call-only projection overlaps newer semantic package paths/inspection |
-| `impact` | Rename before stable user documentation | Means transitive semantic dependents, not hypothetical change impact |
+| `transitive-dependents` | Keep | Recursive reverse declaration-level semantic closure; renamed from the pre-beta `impact` command in Task 51 |
 
 Formatting is centralized in `print.go` plus parameter-specific formatting.
 Explicit functions are preferable to a generic rendering framework, but the
@@ -469,7 +469,7 @@ problem.
 | Go-specific signature/type DTOs were owned by otherwise graph-oriented `query` | Resolved in Task 47 | The DTOs now live in `goanalyzer`; its remaining production dependency on `query` is the approved language-agnostic `SymbolSummary` |
 | Legacy parameter-only orchestration | Resolved in Task 46 | The wrapper, result model, CLI, and legacy-only presentation were removed |
 | Call-only and full-semantic package dependencies share similar names | Clear debt | NOCV self-analysis returns materially different package edges depending on command/API |
-| `impact` names both transitive semantic dependents and hypothetical signature consequences | Clear debt | User-facing workflows are unrelated |
+| Transitive dependents and hypothetical signature consequences formerly shared `impact` | Resolved in Task 51 | Query, CLI, output, docs, and tests now use dependents terminology for current graph state |
 | Successful load can silently contain compiler diagnostics and incomplete semantic facts | Probable correctness/product debt | Missing facts have no analysis-status marker; a graph result can look authoritative |
 | Source mutation, recheck, comparison, and attribution shared one file | Resolved in Task 48 | Focused same-package files now expose the distinct invariants without new abstractions |
 | Signature overlay combined lookup, range selection, IO, rendering, and splicing | Resolved in Task 48 | Concrete helpers now make source mutation auditable while preserving one-file in-memory overlays |
@@ -488,6 +488,7 @@ need a new feature or architecture rewrite.
 | Priority | Item | Rationale |
 |---|---|---|
 | Must implement/document before beta | Approved meanings of `query`, `dependency`, `dependents`, and `impact` in supported surfaces | Beta should not freeze contradictory API/CLI vocabulary |
+| Completed in Task 51 | Rename transitive `impact` to `transitive-dependents` | Current reverse reliance and hypothetical change consequences now have distinct names |
 | Completed in Task 50 | Coarse complete/partial analysis status | Users can distinguish known incomplete type information from a complete supported analysis |
 | Completed in Task 46 | Remove the parameter-only wrapper/model/CLI | Unified callable signature analysis is now authoritative |
 | Completed in Task 47 | Rename stale parameter-specific production files | Current unified responsibility is visible |
@@ -520,7 +521,8 @@ human review point.
 | Rename `Analysis` or introduce project/session concepts | **Human architecture decision required** |
 | Design failed/complete/partial analysis status | Designed in Task 49 and implemented in Task 50 |
 | Remove `impact-params` and its wrapper | Completed in Task 46 |
-| Rename `impact`, `package-deps`, or dependency APIs | Terminology direction approved; exact command replacements require focused review |
+| Rename transitive `impact` | Completed in Task 51 as `transitive-dependents`, including the query API |
+| Rename `package-deps` or other dependency APIs | Terminology direction approved; requires separate focused review |
 | Split `goanalyzer` into packages | **Human architecture decision required**; current evidence does not recommend it |
 | Rename `internal/webui/parameter_impact.go` | Completed in Task 47 as `signature_impact.go` |
 | Move overlay/diagnostic functions between files in the same package | Mechanical if tests remain unchanged |
@@ -650,9 +652,17 @@ compiler, contract, structural, and aggregate signature-change impact. It asks,
 “What happens if this changes?”
 
 **Dependents** are entities that already rely on a selected package, type, or
-symbol. Direct, transitive, and semantic dependents answer, “What depends on
-this?” The existing transitive command called `impact` violates this contract
-and is approved for later rename or replacement; Task 45 does not rename it.
+symbol. **Direct dependents** are immediate reverse semantic relationships.
+**Transitive dependents** are the recursively reachable reverse-reliance
+closure, with declaration-level paths. These answer, “What depends on this?”
+Task 51 enforces that distinction in the query API and CLI.
+
+The low-level capabilities remain precise: direct and transitive dependents,
+callers, implementations, dependency paths, and signature-change analysis.
+Future task-oriented questions should compose those deterministic capabilities:
+“Why?” composes current relationship/path/evidence queries, while “Impact?”
+composes concrete hypothetical-change analyses. Neither wrapper requires a new
+heuristic semantic engine or duplicate implementation path.
 
 ### Product CLI contract
 
@@ -673,7 +683,7 @@ Current dependency-oriented names map to concepts as follows:
 | `direct-deps` | Direct declaration-level semantic relationships across five semantic edge kinds | Make “semantic” and the declaration level explicit if retained |
 | `direct-dependents` | Direct reverse declaration-level semantic relationships | Meaning matches dependents; level/kinds remain implicit |
 | `type-deps` | Direct projected type relationships across semantic edge kinds | Type dependency is approved terminology |
-| `impact` | Transitive semantic dependents and their declaration-level paths | Rename/replace with transitive dependents terminology |
+| `transitive-dependents` | Recursive reverse semantic closure and its declaration-level paths | Correct dependents terminology; implemented in Task 51 |
 | `check-forbidden-dependency` | Semantic package dependency paths across the five semantic kinds | Qualify as semantic in API/help where ambiguity matters |
 
 The removed `impact-params` command is not a supported hypothetical-impact
@@ -855,7 +865,7 @@ later need proves them useful. Existing history is not rewritten.
 The following areas are authorized for separate future tasks, one at a time:
 
 - clarify dependency-oriented CLI/API names;
-- rename transitive `impact` terminology to dependents terminology;
+- review remaining dependency-oriented CLI/API names separately;
 - remove duplicated Task 41 spike algorithms while preserving scenarios;
 - implement the approved coarse analysis-status contract;
 - improve focused implementation readability; and

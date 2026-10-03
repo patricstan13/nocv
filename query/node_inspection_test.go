@@ -221,7 +221,7 @@ func TestInspectNodeIsDetachedAndDoesNotChangeExistingQueries(t *testing.T) {
 	beforePackagePaths := query.PackageDependencyPaths(g, ids.pkg, ids.otherPackage)
 	beforeTypePaths := query.TypeDependencyPaths(g, ids.service, ids.repository)
 	beforeExactPaths := query.DependencyPaths(g, ids.serviceCreate, "example.com/other::Repository::Save")
-	beforeImpact := query.Impact(g, "example.com/other::Repository::Save")
+	beforeTransitiveDependents := query.TransitiveDependents(g, "example.com/other::Repository::Save")
 	beforeDrilldown := query.InspectPackageDependency(g, beforePackagePaths[0].Steps[0])
 
 	inspection, ok := query.InspectNode(g, ids.pkg)
@@ -266,7 +266,7 @@ func TestInspectNodeIsDetachedAndDoesNotChangeExistingQueries(t *testing.T) {
 	assertDeepEqual(t, "PackageDependencyPaths", query.PackageDependencyPaths(g, ids.pkg, ids.otherPackage), beforePackagePaths)
 	assertDeepEqual(t, "TypeDependencyPaths", query.TypeDependencyPaths(g, ids.service, ids.repository), beforeTypePaths)
 	assertDeepEqual(t, "DependencyPaths", query.DependencyPaths(g, ids.serviceCreate, "example.com/other::Repository::Save"), beforeExactPaths)
-	assertDeepEqual(t, "Impact", query.Impact(g, "example.com/other::Repository::Save"), beforeImpact)
+	assertDeepEqual(t, "TransitiveDependents", query.TransitiveDependents(g, "example.com/other::Repository::Save"), beforeTransitiveDependents)
 	assertDeepEqual(t, "InspectPackageDependency", query.InspectPackageDependency(g, beforePackagePaths[0].Steps[0]), beforeDrilldown)
 
 	if _, ok := query.InspectNode(nil, ids.pkg); ok {

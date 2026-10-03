@@ -27,10 +27,10 @@ go run ./cmd/nocv package-importers ./... nocv/graph
 go run ./cmd/nocv import-cycle ./... nocv/graph nocv/cmd/nocv
 go run ./cmd/nocv check-forbidden-import ./... nocv/query nocv/graph
 go run ./cmd/nocv check-forbidden-dependency ./... nocv/cmd/nocv nocv/graph
-go run ./cmd/nocv direct-deps ./... nocv/query::Impact
+go run ./cmd/nocv direct-deps ./... nocv/query::TransitiveDependents
 go run ./cmd/nocv direct-dependents ./... nocv/query::DirectDependents
-go run ./cmd/nocv impact ./... nocv/graph::Graph
-go run ./cmd/nocv paths ./... nocv/query::Impact nocv/graph::Graph
+go run ./cmd/nocv transitive-dependents ./... nocv/graph::Graph
+go run ./cmd/nocv paths ./... nocv/query::TransitiveDependents nocv/graph::Graph
 go run ./cmd/nocv package-paths ./... nocv/cmd/nocv nocv/query
 go run ./cmd/nocv package-deps ./...
 go run ./cmd/nocv why-package-dep ./... nocv/cmd/nocv nocv/query
@@ -39,6 +39,11 @@ go run ./cmd/nocv type-paths ./goanalyzer/testdata/typeview/... example.com/type
 go run ./cmd/nocv inspect-dependency ./goanalyzer/testdata/typeview/... example.com/typeview/app example.com/typeview/repository
 go run ./cmd/nocv inspect-node ./goanalyzer/testdata/documentation/... example.com/documentation/service::Service
 ```
+
+`direct-dependents` reports immediate reverse semantic relationships.
+`transitive-dependents` follows those relationships recursively and includes
+the simple dependency paths. “Impact” is reserved for consequences of a
+hypothetical change; no generic `impact` CLI command is currently exposed.
 
 ## Graphical package explorer
 
@@ -91,7 +96,8 @@ The graph model is language-independent. Go syntax trees are used only inside
 returned. The CLI prints both the hierarchy and a simple `Calls` section.
 Every node has two deliberately separate identities: an opaque, graph-local
 `NodeID` used for storage and traversal, and a deterministic, human-readable
-`SymbolRef` used by commands and APIs (for example `nocv/query::Impact`). Node
+`SymbolRef` used by commands and APIs (for example
+`nocv/query::TransitiveDependents`). Node
 IDs start at 1 for each loaded graph and are never part of CLI or web output.
 When Go permits repeated declarations such as `init` or the blank identifier,
 their references receive deterministic source-order suffixes such as `#1` and
@@ -103,9 +109,9 @@ It also projects calls into direct package dependencies without storing another
 semantic edge kind, and can explain each direct dependency using the underlying
 call relationships and source locations. Direct semantic navigation combines
 Calls, Implements, Embeds, Accepts, and Returns while preserving each stored
-relationship kind and its evidence. Transitive impact analysis walks those
+relationship kind and its evidence. Transitive-dependent analysis walks those
 relationships in reverse and reports every distinct simple dependency path to
-each potentially affected node. Exact symbol-to-symbol dependency explanation
+each recursively dependent node. Exact symbol-to-symbol dependency explanation
 uses the same semantic policy and reports every distinct simple path in stored
 dependency direction without type or package projection. Package dependency
 paths instead traverse a derived semantic package view. A direct package

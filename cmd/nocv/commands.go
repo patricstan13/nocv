@@ -29,7 +29,7 @@ var commandSpecs = map[string]commandSpec{
 	"check-forbidden-dependency": {usage: "nocv check-forbidden-dependency <pattern> <from-package> <to-package>", extraCount: 2},
 	"direct-deps":                {usage: "nocv direct-deps <pattern> <symbol-ref>", extraCount: 1},
 	"direct-dependents":          {usage: "nocv direct-dependents <pattern> <symbol-ref>", extraCount: 1},
-	"impact":                     {usage: "nocv impact <pattern> <symbol-ref>", extraCount: 1},
+	"transitive-dependents":      {usage: "nocv transitive-dependents <pattern> <symbol-ref>", extraCount: 1},
 	"paths":                      {usage: "nocv paths <pattern> <from-symbol> <to-symbol>", extraCount: 2},
 	"package-paths":              {usage: "nocv package-paths <pattern> <from-package> <to-package>", extraCount: 2},
 	"package-deps":               {usage: "nocv package-deps <pattern>"},
@@ -48,7 +48,7 @@ type invocation struct {
 
 func parseInvocation(args []string) (invocation, error) {
 	if len(args) == 0 {
-		return invocation{}, fmt.Errorf("usage: nocv <command> <pattern> [arguments...]\ncommands: serve, tree, calls, implementations, embeddings, signatures, imports, package-imports, package-importers, import-cycle, check-forbidden-import, check-forbidden-dependency, direct-deps, direct-dependents, impact, paths, package-paths, package-deps, why-package-dep, type-deps, type-paths, inspect-dependency, inspect-node")
+		return invocation{}, fmt.Errorf("usage: nocv <command> <pattern> [arguments...]\ncommands: serve, tree, calls, implementations, embeddings, signatures, imports, package-imports, package-importers, import-cycle, check-forbidden-import, check-forbidden-dependency, direct-deps, direct-dependents, transitive-dependents, paths, package-paths, package-deps, why-package-dep, type-deps, type-paths, inspect-dependency, inspect-node\n  direct-dependents: show immediate reverse semantic relationships\n  transitive-dependents: show the recursive reverse semantic dependency closure")
 	}
 	spec, exists := commandSpecs[args[0]]
 	if !exists {
@@ -137,12 +137,12 @@ func executeCommandWithAnalysis(out io.Writer, g *graph.Graph, analysis *goanaly
 			return err
 		}
 		printDirectDependents(out, g, id)
-	case "impact":
+	case "transitive-dependents":
 		id := graph.SymbolRef(invocation.values[0])
 		if err := requireSymbol(g, id); err != nil {
 			return err
 		}
-		printImpact(out, g, id)
+		printTransitiveDependents(out, g, id)
 	case "paths":
 		from := graph.SymbolRef(invocation.values[0])
 		to := graph.SymbolRef(invocation.values[1])
