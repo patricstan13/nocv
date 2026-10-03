@@ -1039,3 +1039,24 @@ checked-in representative projects. A small `internal/testutil` helper locates
 and copies the Go project and creates the one shared partial-analysis variant;
 it is not a generic fixture framework. Go source snapshots used only as source
 overlays may remain as non-project test data near the tests that consume them.
+
+## Task 57 v0.beta.1 readiness audit
+
+Task 57 performed the documentation-only release gate recorded in
+[`docs/v0-beta-1-readiness.md`](v0-beta-1-readiness.md). It reviewed the
+post-Task-56 package boundaries, public APIs, graph and relationship semantics,
+analysis lifecycle, scoped CLI, unified signature-change pipeline, compiler
+overlay/recheck behavior, fixture ownership, documentation, repository hygiene,
+and web explorer without changing production code.
+
+Formatter, full, focused, canonical-fixture, vet, module-tidiness, and
+race-enabled checks passed after isolating the audit's temporary Go build
+caches. Manual validation covered every maintained CLI scope, Complete/Partial/
+failed loading, dependency evidence, the web status and navigation surfaces, a
+four-lens signature-change result, and self-analysis.
+
+The audit found no correctness or misleading-semantic blocker and recommends
+tagging `v0.beta.1`. Five non-blocking improvements and twelve deferred items
+are enumerated in the readiness report. This task deliberately implements none
+of them; the beta definition, classifications, limitations, and release
+recommendation remain at the human review gate.
