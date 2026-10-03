@@ -1,7 +1,7 @@
 # Analysis status and failure semantics
 
-Task 49 defines the semantic contract for analysis outcomes. It is design-only:
-no status API or behavior described here is implemented yet.
+Task 49 defined the semantic contract for analysis outcomes. Task 50 implements
+that contract in `goanalyzer`, the CLI, and the web UI.
 
 ## Decision summary
 
@@ -64,7 +64,7 @@ returns `nil, error`. The current implementation never returns a non-nil
 | Current directory or absolute-path resolution fails | Returns a wrapped error | No packages or graph | Failed |
 | `packages.Load` returns a top-level error | Returns `load Go packages` error | No reliable root package set | Failed |
 | Package list, parse, unknown, or other non-type error | `packageErrors` returns sorted messages | `go/packages` may have partial packages/AST, but NOCV discards them | Failed |
-| Pattern matches no packages | Currently returns an empty `Analysis` and empty graph | No semantic model | **Future failure**; this is not usable analysis |
+| Pattern matches no packages | Returns a concise load error | No semantic model | Failed |
 | Package has no usable syntax | Usually represented by a list/parse error and currently fails | Package metadata may exist; supported extraction cannot run truthfully | Failed |
 | Node construction violates graph identity/hierarchy invariants | Wrapped `analyze package` error | A partially built graph exists only locally and is discarded | Failed |
 | Import/call/embedding/signature edge insertion fails | Wrapped stage-specific error | A partially built graph exists only locally and is discarded | Failed |
@@ -77,8 +77,7 @@ load failures.
 
 Plain wrapped errors with the existing stage context are sufficient for beta.
 A typed load-error hierarchy would add API surface without a current consumer.
-The later implementation should add one concise wrapped error for a zero-package
-match.
+The loader returns one concise wrapped error for a zero-package match.
 
 ## Currently tolerated conditions
 
@@ -136,7 +135,7 @@ The following were observed with the current `packages.LoadSyntax`,
 kinds below are the actual package errors returned; its top-level error was nil
 unless stated otherwise.
 
-| Scenario | `go/packages` result | Current `LoadAnalysis` | Graph usefulness | Recommended outcome |
+| Scenario | `go/packages` result | Current `LoadAnalysis` | Graph usefulness | Outcome |
 |---|---|---|---|---|
 | Valid small module | One package; syntax/types/type info present; no errors | Returns graph | Package, type, function, and signature facts present | Complete |
 | Ordinary argument type error | One ill-typed package; summary plus positioned `TypeError`; syntax/types/type info present | Returns graph | Declarations, call, and signature facts were still present | Partial: incomplete type information |
@@ -146,8 +145,8 @@ unless stated otherwise.
 | Syntax error | Recovered syntax plus `ParseError`s | Returns nil and sorted error | Recovered AST is deliberately not treated as a trustworthy model | Failed |
 | One syntax-broken file plus one valid file | Both files returned, package has multiple `ParseError`s | Returns nil and sorted error | Potential partial graph is discarded | Failed |
 | Empty module loaded as `.` | Placeholder package with `ListError`: no Go files | Returns nil and error | No useful graph | Failed |
-| Empty module loaded as `./...` | Zero packages, no top-level error | Currently returns empty analysis | No useful graph | Future failure |
-| Pattern matching no packages | Zero packages, no top-level error | Currently returns empty analysis | No useful graph | Future failure |
+| Empty module loaded as `./...` | Zero packages, no top-level error | Returns nil and error | No useful graph | Failed |
+| Pattern matching no packages | Zero packages, no top-level error | Returns nil and error | No useful graph | Failed |
 | Invalid package path | Placeholder package with `ListError` | Returns nil and error | No useful graph | Failed |
 | Invalid analysis directory | Zero packages plus top-level `packages.Load` error | Returns nil and wrapped error | No useful graph | Failed |
 
@@ -207,7 +206,7 @@ conclusive: an unresolved compiler object or type may have prevented that fact
 from being created. This applies to dependencies, dependents, callers,
 implementations, embedding, and accepted/returned type relationships.
 
-## Recommended beta representation
+## Implemented beta representation
 
 An enum alone is too terse because users need to know why negative results are
 qualified. A `Complete bool` plus reasons permits confusing combinations and
@@ -218,15 +217,14 @@ separate defensively copied reason list owned by `Analysis`:
 type AnalysisStatus uint8
 
 const (
-    analysisStatusUnknown AnalysisStatus = iota // defensive zero, not a product outcome
-    AnalysisComplete
+    AnalysisComplete AnalysisStatus = iota
     AnalysisPartial
 )
 
 type AnalysisStatusReasonKind uint8
 
 const (
-    AnalysisReasonIncompleteTypeInformation AnalysisStatusReasonKind = iota + 1
+    AnalysisIncompleteTypeInformation AnalysisStatusReasonKind = iota
 )
 
 type AnalysisStatusReason struct {
@@ -243,18 +241,16 @@ One reason per affected package is enough. Do not expose diagnostic messages,
 positions, severities, or counts in the beta status API. This communicates scope
 without turning status into a compiler-diagnostics feed.
 
-Status should be computed once during loading and stored on `Analysis`. The
-inputs are currently derivable from retained packages, but storing the result
-ties it to the load attempt and leaves a clear place for later explicit
-tolerated extraction conditions. The implementation should use positioned
-`TypeError`s and `Package.IllTyped` as a conservative backstop; it should not
-count duplicate `# ` summaries as separate reasons.
+Status is computed once during loading and stored on `Analysis`. Explicit
+`TypeError`s mark their package partial, and `Package.IllTyped` is a
+conservative backstop when explicit enumeration is insufficient. Duplicate
+diagnostics and `# ` summaries do not create duplicate reasons.
 
 This is a coarse whole-analysis status with package-scoped reasons. Per-package
 status objects, per-node/edge metadata, confidence percentages, multiple
 partial severities, and a diagnostic taxonomy are unnecessary for beta.
 
-## Product integration recommendation
+## Product integration
 
 ### CLI
 
@@ -263,19 +259,19 @@ partial severities, and a diagnostic taxonomy are unnecessary for beta.
   print one concise warning to stderr before or after the result.
 - Complete: print the normal result with no additional status noise.
 
-Suggested partial wording:
+The CLI uses one concise warning on stderr and preserves useful command output
+on stdout:
 
 ```text
-NOCV produced a partial analysis; some semantic relationships may be missing
-because one or more loaded packages could not be fully type-checked.
+warning: partial analysis; incomplete type information in packages: example.com/foo
 ```
 
 ### Web UI
 
-Expose one persistent, non-alarming “Partial analysis” indicator with the same
-short explanation. Do not add a diagnostics panel. The web server owns an
-`Analysis`, so status can be exposed once in bootstrap/status data rather than
-copied into every query response.
+The web UI exposes one persistent, non-blocking “Partial analysis” indicator
+with the same short explanation. `GET /api/status` returns string status/reason
+values and affected package references. No diagnostics panel or raw compiler
+diagnostics are exposed.
 
 ### Query models
 
@@ -297,21 +293,18 @@ is known to be semantically incomplete. A later overlay load/recheck failure
 continues to return an operation error and does not retroactively change the
 base analysis status.
 
-## Minimal implementation recommendation for the next task
+## Task 50 implementation
 
-1. Fail `LoadAnalysis` explicitly when `packages.Load` returns zero root
+1. `LoadAnalysis` fails explicitly when `packages.Load` returns zero root
    packages.
 2. After fatal package-error filtering, collect one
-   `AnalysisReasonIncompleteTypeInformation` per ill-typed/type-error package.
-3. Complete every existing extraction stage exactly as today; any stage error
+   `AnalysisIncompleteTypeInformation` per ill-typed/type-error package.
+3. Complete every existing extraction stage exactly as before; any stage error
    remains a failed attempt returning nil.
-4. Store complete/partial status and sorted reasons only after construction
-   succeeds.
-5. Add read-only, defensive-copy accessors on `Analysis`.
-6. Test valid, type-error, missing-import, parse-error, no-package, and mixed
-   valid/type-broken scenarios.
-7. Handle CLI/UI presentation in separately reviewed changes if desired; do not
-   require status propagation through query DTOs.
+4. Store complete/partial status and sorted reasons on the successful analysis.
+5. Expose read-only `Status` and defensive-copy `StatusReasons` accessors.
+6. Communicate Partial at the CLI and web boundaries without status propagation
+   through graph or query DTOs.
 
 ## Deliberately deferred complexity
 
@@ -328,9 +321,7 @@ Beta does not need:
 - build-matrix analysis; or
 - analysis of test variants.
 
-## Human decisions before implementation
-
-The recommended defaults are:
+## Implemented decisions
 
 1. Treat `Package.IllTyped` as a conservative partial-status backstop in
    addition to explicit `TypeError`s.
@@ -340,5 +331,5 @@ The recommended defaults are:
    selected callable remains resolvable.
 4. Make zero matched packages a failed attempt.
 
-These four points should be approved before the implementation task. No status
-API or behavior change is part of Task 49.
+Task 50 implements all four approved decisions. Beta still has exactly one
+partial reason kind: incomplete type information.

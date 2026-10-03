@@ -21,6 +21,16 @@ type packageGraph struct {
 	Edges []packageEdge `json:"edges"`
 }
 
+type analysisStatus struct {
+	Status  string                 `json:"status"`
+	Reasons []analysisStatusReason `json:"reasons"`
+}
+
+type analysisStatusReason struct {
+	Kind    string          `json:"kind"`
+	Package graph.SymbolRef `json:"package"`
+}
+
 type packageNode struct {
 	ID    graph.SymbolRef `json:"id"`
 	Label string          `json:"label"`
@@ -139,6 +149,13 @@ func graphHandler(g *graph.Graph) http.Handler {
 
 func handler(analysis *goanalyzer.Analysis, g *graph.Graph) http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", getOnly(func(w http.ResponseWriter, _ *http.Request) {
+		if analysis == nil {
+			writeError(w, http.StatusInternalServerError, "analysis is unavailable")
+			return
+		}
+		writeJSON(w, http.StatusOK, presentAnalysisStatus(analysis))
+	}))
 	mux.HandleFunc("/api/packages", getOnly(func(w http.ResponseWriter, _ *http.Request) {
 		if g == nil {
 			writeError(w, http.StatusInternalServerError, "graph is unavailable")
@@ -226,6 +243,20 @@ func handler(analysis *goanalyzer.Analysis, g *graph.Graph) http.Handler {
 		_, _ = w.Write(contents)
 	}))
 	return mux
+}
+
+func presentAnalysisStatus(analysis *goanalyzer.Analysis) analysisStatus {
+	result := analysisStatus{
+		Status:  analysis.Status().String(),
+		Reasons: []analysisStatusReason{},
+	}
+	for _, reason := range analysis.StatusReasons() {
+		result.Reasons = append(result.Reasons, analysisStatusReason{
+			Kind:    reason.Kind.String(),
+			Package: reason.Package,
+		})
+	}
+	return result
 }
 
 func getOnly(next http.HandlerFunc) http.HandlerFunc {

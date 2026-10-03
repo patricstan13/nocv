@@ -49,6 +49,39 @@ func TestRunReturnsUsageStatusWithoutLoading(t *testing.T) {
 	}
 }
 
+func TestRunWarnsOnceForPartialAnalysisAndKeepsUsefulOutput(t *testing.T) {
+	pattern := filepath.Join("..", "..", "goanalyzer", "testdata", "status", "...")
+	var stdout, stderr bytes.Buffer
+	if status := run([]string{"tree", pattern}, &stdout, &stderr); status != 0 {
+		t.Fatalf("run partial tree status = %d, stderr = %q", status, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "brokenone [package]") || !strings.Contains(stdout.String(), "Service [struct]") {
+		t.Fatalf("partial tree output is not useful: %q", stdout.String())
+	}
+	if count := strings.Count(stderr.String(), "warning: partial analysis"); count != 1 {
+		t.Fatalf("partial warning count = %d, stderr = %q", count, stderr.String())
+	}
+	for _, packagePath := range []string{"example.com/status/brokenone", "example.com/status/brokentwo"} {
+		if !strings.Contains(stderr.String(), packagePath) {
+			t.Errorf("partial warning lacks package %q: %q", packagePath, stderr.String())
+		}
+	}
+}
+
+func TestRunDoesNotWarnForCompleteAnalysis(t *testing.T) {
+	pattern := filepath.Join("..", "..", "goanalyzer", "testdata", "project", "...")
+	var stdout, stderr bytes.Buffer
+	if status := run([]string{"tree", pattern}, &stdout, &stderr); status != 0 {
+		t.Fatalf("run complete tree status = %d, stderr = %q", status, stderr.String())
+	}
+	if strings.Contains(stderr.String(), "partial analysis") {
+		t.Fatalf("complete analysis warning = %q", stderr.String())
+	}
+	if stdout.Len() == 0 {
+		t.Fatal("complete tree output is empty")
+	}
+}
+
 func TestLocalModulePattern(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/test\n"), 0o600); err != nil {

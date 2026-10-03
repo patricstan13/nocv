@@ -33,6 +33,23 @@ func TestClientRendersServerDataAsText(t *testing.T) {
 	}
 }
 
+func TestClientShowsPersistentPartialAnalysisIndicator(t *testing.T) {
+	markup := readAsset(t, "static/index.html")
+	client := readAsset(t, "static/app.js")
+	styles := readAsset(t, "static/app.css")
+	for source, required := range map[string][]string{
+		markup: {`id="analysis-status"`, `role="status"`, `hidden`},
+		client: {`getJSON("/api/status")`, `result.status !== "partial"`, `"Partial analysis"`, `analysisStatusIndicator.hidden = false`},
+		styles: {`.analysis-status`, `.analysis-status[hidden]`},
+	} {
+		for _, fragment := range required {
+			if !strings.Contains(source, fragment) {
+				t.Errorf("status UI source lacks %q", fragment)
+			}
+		}
+	}
+}
+
 func TestClientFreezesPhysicsAndPreservesSemanticEdgeDirection(t *testing.T) {
 	client := readAsset(t, "static/app.js")
 	for _, required := range []string{
@@ -497,6 +514,46 @@ func TestPackagesAPIIsDeterministicAndExcludesImports(t *testing.T) {
 	}
 }
 
+func TestAnalysisStatusAPIReportsCompleteAndPartial(t *testing.T) {
+	tests := []struct {
+		name     string
+		analysis *goanalyzer.Analysis
+		want     analysisStatus
+	}{
+		{
+			name:     "complete",
+			analysis: parameterImpactAnalysis(t),
+			want:     analysisStatus{Status: "complete", Reasons: []analysisStatusReason{}},
+		},
+		{
+			name:     "partial",
+			analysis: statusAnalysis(t),
+			want: analysisStatus{Status: "partial", Reasons: []analysisStatusReason{
+				{Kind: "incomplete type information", Package: "example.com/status/brokenone"},
+				{Kind: "incomplete type information", Package: "example.com/status/brokentwo"},
+			}},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			response := request(t, Handler(test.analysis), http.MethodGet, "/api/status")
+			if response.Code != http.StatusOK {
+				t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+			}
+			var got analysisStatus
+			decode(t, response, &got)
+			if !reflect.DeepEqual(got, test.want) {
+				t.Fatalf("analysis status = %#v, want %#v", got, test.want)
+			}
+		})
+	}
+
+	wrongMethod := request(t, Handler(parameterImpactAnalysis(t)), http.MethodPost, "/api/status")
+	if wrongMethod.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST status = %d, want 405", wrongMethod.Code)
+	}
+}
+
 func TestPackagesAPIPreservesRefsForDuplicateLabels(t *testing.T) {
 	g := graph.New()
 	for _, node := range []webNode{
@@ -842,6 +899,16 @@ func requestBody(t *testing.T, handler http.Handler, method, path, body string) 
 func parameterImpactAnalysis(t *testing.T) *goanalyzer.Analysis {
 	t.Helper()
 	dir := filepath.Join("..", "..", "goanalyzer", "testdata", "parameterimpact")
+	analysis, err := goanalyzer.LoadAnalysis(context.Background(), dir, "./...")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return analysis
+}
+
+func statusAnalysis(t *testing.T) *goanalyzer.Analysis {
+	t.Helper()
+	dir := filepath.Join("..", "..", "goanalyzer", "testdata", "status")
 	analysis, err := goanalyzer.LoadAnalysis(context.Background(), dir, "./...")
 	if err != nil {
 		t.Fatal(err)

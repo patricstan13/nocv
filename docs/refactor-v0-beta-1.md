@@ -278,13 +278,12 @@ Today, “load succeeds” means:
 It does **not** mean the project is compile-clean. It also does not guarantee
 that every intended semantic fact was recoverable. Extraction code generally
 skips missing `TypesInfo` objects/types safely, so a dirty project can yield a
-valid but incomplete graph without an explicit marker.
+valid but incomplete graph.
 
-There is no project-wide analysis-status model. `CompilerImpact.BaselineStatus`
-only describes diagnostics in the affected reverse-import recheck scope for one
-hypothetical signature analysis. Other consumers cannot distinguish a clean
-load from a load with ignored type diagnostics, nor identify which graph facts
-may be incomplete.
+Task 50 added a project-wide complete/partial status to `Analysis`.
+`CompilerImpact.BaselineStatus` remains separate and only describes diagnostics
+in the affected reverse-import recheck scope for one hypothetical signature
+analysis.
 
 Consequences:
 
@@ -297,9 +296,9 @@ Consequences:
 Task 49 rejected `health` as misleading terminology and defined a coarse
 first-class **analysis status** contract. A load attempt fails when it cannot
 produce a usable semantic model; a returned analysis is either complete or
-partial. The design and scenario evidence are recorded in
-[`analysis-status-design.md`](analysis-status-design.md). No status API is
-implemented yet.
+partial. The design, scenario evidence, and implemented API are recorded in
+[`analysis-status-design.md`](analysis-status-design.md). Status stays outside
+the graph and query DTOs.
 
 ## Signature overlay and compiler architecture
 
@@ -489,7 +488,7 @@ need a new feature or architecture rewrite.
 | Priority | Item | Rationale |
 |---|---|---|
 | Must implement/document before beta | Approved meanings of `query`, `dependency`, `dependents`, and `impact` in supported surfaces | Beta should not freeze contradictory API/CLI vocabulary |
-| Designed in Task 49; implementation pending | Coarse complete/partial analysis status | Users must not infer complete semantic extraction from a merely successful load |
+| Completed in Task 50 | Coarse complete/partial analysis status | Users can distinguish known incomplete type information from a complete supported analysis |
 | Completed in Task 46 | Remove the parameter-only wrapper/model/CLI | Unified callable signature analysis is now authoritative |
 | Completed in Task 47 | Rename stale parameter-specific production files | Current unified responsibility is visible |
 | Completed in Task 48 | Separate overlay construction from compiler diagnostic operations within `goanalyzer` | The riskiest implementation is now auditable without changing behavior |
@@ -519,7 +518,7 @@ human review point.
 |---|---|
 | Move Go-specific operation DTOs from `query` to `goanalyzer` | Completed in Task 47 without aliases or a shared package |
 | Rename `Analysis` or introduce project/session concepts | **Human architecture decision required** |
-| Design failed/complete/partial analysis status | Completed in Task 49; implementation requires human approval of the proposed API |
+| Design failed/complete/partial analysis status | Designed in Task 49 and implemented in Task 50 |
 | Remove `impact-params` and its wrapper | Completed in Task 46 |
 | Rename `impact`, `package-deps`, or dependency APIs | Terminology direction approved; exact command replacements require focused review |
 | Split `goanalyzer` into packages | **Human architecture decision required**; current evidence does not recommend it |
@@ -530,8 +529,8 @@ human review point.
 | Remove duplicate spike helpers after mapping scenarios to production tests | Mechanical after test review |
 | Update comments/tests/docs after approved terms | Mechanical |
 
-Human-owned decisions that remain open are approval of the proposed status API shape, the
-exact replacement names for existing CLI commands, any future rename of
+Human-owned decisions that remain open are the exact replacement names for
+existing CLI commands, any future rename of
 `Analysis`, and any new package boundary. The ownership direction, terminology
 meanings, legacy removal direction, and coarse-status requirement are approved.
 
@@ -723,9 +722,10 @@ with this contract.
 
 ### Analysis status and failure semantics
 
-Task 49 is design-only and replaces the earlier `health` terminology. `Health`
-was rejected because it suggests a compiler/build-quality product. Analysis
-status qualifies only the completeness of NOCV's supported semantic model.
+Task 49 replaced the earlier `health` terminology and Task 50 implemented the
+approved design. `Health` was rejected because it suggests a compiler/build-
+quality product. Analysis status qualifies only the completeness of NOCV's
+supported semantic model.
 
 The approved conceptual outcomes are:
 
@@ -739,19 +739,20 @@ Current type-check diagnostics remain tolerated because `go/packages` supplies
 useful syntax and type state, but they can cause extraction to skip calls,
 signatures, embeddings, imports, or implementations. They therefore justify a
 coarse partial status. List/parse/load and graph-invariant errors remain failed
-attempts. Task 49 also found that a zero-package pattern currently returns an
-empty analysis; the later implementation should make that a failure.
+attempts. Zero-package patterns now fail instead of returning an empty analysis.
 
 `CompilerImpact.BaselineStatus` remains distinct: it describes the affected
 reverse-import scope of one hypothetical compiler recheck, not the completeness
 of the initially loaded analysis.
 
-The recommended beta shape is a stored whole-analysis complete/partial enum plus
-one coarse, deterministic reason per ill-typed package. It deliberately excludes
+The implemented beta shape is a stored whole-analysis complete/partial enum plus
+one coarse, deterministic reason per ill-typed or type-error package.
+`Package.IllTyped` is a conservative backstop, affected package paths are
+included, signature-impact analysis remains available on Partial when the
+callable is resolvable, and zero matched packages fail. It deliberately excludes
 diagnostic messages, confidence scores, per-package status objects, and per-edge
 metadata. See [`analysis-status-design.md`](analysis-status-design.md) for the
-load-path inventory, experiments, scenario matrix, API sketch, and product
-wording. Human approval is required before implementation.
+load-path inventory, experiments, scenario matrix, API, and product wording.
 
 ### `Analysis` and `goanalyzer` structure
 
@@ -862,13 +863,13 @@ The following areas are authorized for separate future tasks, one at a time:
 
 Authorization records direction, not permission to bundle these areas. A new
 shared model package, cross-language interface, `Analysis` rename,
-`goanalyzer` package split, analysis-status API implementation, or frontend/runtime migration
+`goanalyzer` package split, or frontend/runtime migration
 still requires explicit human review.
 
-## Human review gate after Task 49
+## Human review gate after Task 50
 
-The human should review the proposed failure boundary, complete/partial
-definitions, reason representation, status ownership, product wording, and
-relationship to `CompilerImpact.BaselineStatus` before any status implementation
-begins. Later tasks must start from the current repository state and preserve
-intervening human edits. No next implementation task is selected automatically.
+The human should review the implemented failure boundary, complete/partial
+definitions, reason representation, status ownership, CLI/web wording, and
+relationship to `CompilerImpact.BaselineStatus`. Later tasks must start from the
+current repository state and preserve intervening human edits. No next
+implementation task is selected automatically.
