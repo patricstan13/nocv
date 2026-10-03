@@ -7,20 +7,21 @@ import (
 	"testing"
 
 	"nocv/graph"
+	"nocv/internal/testutil"
 )
 
 func TestLoadDiscoversRepresentedPackageImports(t *testing.T) {
-	g, err := Load(context.Background(), filepath.Join("testdata", "imports"), "./...")
+	g, err := Load(context.Background(), testutil.GoProjectDir(t), "./imports/...")
 	if err != nil {
 		t.Fatalf("Load(): %v", err)
 	}
 
-	app := graph.SymbolRef("example.com/imports/app")
+	app := graph.SymbolRef("example.com/shop/imports/app")
 	want := map[graph.SymbolRef]int{
-		"example.com/imports/helpers":    1,
-		"example.com/imports/plugin":     1,
-		"example.com/imports/repository": 1,
-		"example.com/imports/service":    2,
+		"example.com/shop/imports/helpers":    1,
+		"example.com/shop/imports/plugin":     1,
+		"example.com/shop/imports/repository": 1,
+		"example.com/shop/imports/service":    2,
 	}
 	edges := outgoingByRef(g, app, graph.EdgeImports)
 	if len(edges) != len(want) {
@@ -44,7 +45,7 @@ func TestLoadDiscoversRepresentedPackageImports(t *testing.T) {
 
 	service := outgoingByRef(g, app, graph.EdgeImports)
 	for _, edge := range service {
-		if edge.To != "example.com/imports/service" {
+		if edge.To != "example.com/shop/imports/service" {
 			continue
 		}
 		if !strings.HasSuffix(edge.Evidence[0].File, filepath.Join("app", "a.go")) ||
@@ -60,8 +61,8 @@ func TestLoadDiscoversRepresentedPackageImports(t *testing.T) {
 		t.Fatalf("external fmt import was stored: %#v", edges)
 	}
 
-	importers := incomingByRef(g, "example.com/imports/service", graph.EdgeImports)
-	if len(importers) != 2 || importers[0].From != app || importers[1].From != "example.com/imports/worker" {
+	importers := incomingByRef(g, "example.com/shop/imports/service", graph.EdgeImports)
+	if len(importers) != 2 || importers[0].From != app || importers[1].From != "example.com/shop/imports/worker" {
 		t.Fatalf("service importers = %#v, want app and worker", importers)
 	}
 }

@@ -6,7 +6,7 @@ architecture. The semantic MVP is frozen while these decisions are reviewed.
 
 ## Scope and method
 
-The review covered the production packages, their tests, `examples/impactdemo`,
+The review covered the production packages, their tests, the former standalone impact demo,
 the current CLI and browser UI, and the retained Go compiler state. Evidence was
 collected from both Go imports and NOCV's own package, node, signature, and
 dependency queries.
@@ -33,7 +33,7 @@ important evidence for the vocabulary review below.
 | `goanalyzer` | Go loading, graph extraction, symbol index, compiler/type state, call-site analysis, signature resolution, contracts, promotion, source overlay, compiler recheck, diagnostic comparison and attribution | `graph`, `query`, `go/packages`, compiler packages | `internal/webui`, `cmd/nocv` | These operations share one loaded Go type universe and symbol index | The package has distinct internal areas. No package split is yet justified solely by size |
 | `internal/webui` | HTTP server, JSON presentation DTOs, embedded assets, package graph, inspector/navigation state, signature-change editor and results | `goanalyzer`, `graph`, `query` | `cmd/nocv` | It is a coherent internal adapter from analysis/read models to one UI | `app.js` carries several workflows in one mutable module; Task 47 renamed the stale impact file |
 | `cmd/nocv` | Command parsing, project loading orchestration, query invocation, text formatting, web serving, diagnostic/debug workflows | `goanalyzer`, `graph`, `query`, `internal/webui` | Executable only | It is the composition root, so high fan-out is expected | Some dependency commands still need separate terminology review; Task 51 removed the dependents/impact collision |
-| `examples/impactdemo` | Small, separate Go module demonstrating call, result, contract, embedding, compiler, and dirty-baseline scenarios | Its own standard-library/local packages; no NOCV production dependency | Manual validation only | Purpose-built behavior fixture | Its README is manually maintained and can drift from analyzer behavior; that is a test-documentation risk, not a package ownership problem |
+| Former standalone impact demo | Small, separate Go module demonstrating call, result, contract, embedding, compiler, and dirty-baseline scenarios | Its own standard-library/local packages; no NOCV production dependency | Manual validation only | Purpose-built behavior fixture | Removed and absorbed into the canonical Go test project in Task 56. |
 
 `graph` remains the stable lower layer. After Task 47, `query` contains only
 language-independent graph interpretation and detached symbol/read models;
@@ -86,7 +86,7 @@ summary helpers return it. This is no longer a Go-model ownership leak.
 
 Answers from self-analysis:
 
-- Everything except `examples/impactdemo` depends directly or transitively on
+- Everything except the former standalone impact demo depends directly or transitively on
   `graph`; `graph` has no production dependency and no outgoing semantic edge.
 - `goanalyzer` depends on `query` for shared detached signature, call-site,
   contract, structural, and symbol-summary models—not for executing graph
@@ -375,7 +375,7 @@ Line count was used only to find candidates; the reasons below are conceptual.
 | `internal/webui` HTTP tests | Exercise real endpoint validation/presentation | Behavior-oriented and valuable |
 | `internal/webui` asset tests | Assert exact source strings and helper names in `app.js` | Brittle implementation tests used in lieu of a JS harness; replace selected critical flows with DOM/behavior tests before splitting the file, not all at once |
 | CLI tests | Assert exit behavior and deterministic human output | Presentation coupling is appropriate; update deliberately when vocabulary changes |
-| `impactdemo` | Human-readable end-to-end scenarios across packages | Keep as manual semantic check; prevent README from becoming the only assertion for a scenario |
+| Canonical fixture impact packages | Human-readable end-to-end scenarios across packages | Keep as manual semantic checks backed by maintained tests. |
 
 ## Frontend and HTTP inventory
 
@@ -563,7 +563,7 @@ says otherwise:
   shadowing, ambiguity, and duplicate suppression;
 - no source mutation and no accumulated state across repeated analyses;
 - web stale-response protection and navigation reuse;
-- the expected `examples/impactdemo` scenarios.
+- the expected canonical Go fixture impact scenarios.
 
 ## Default validation policy for this branch
 
@@ -571,7 +571,7 @@ For each small refactor:
 
 1. run targeted tests for the files/package changed;
 2. run `go test -count=1 ./...` from the root module;
-3. run an `examples/impactdemo` sanity scenario when signature semantics,
+3. run a canonical Go fixture impact scenario when signature semantics,
    overlays, contracts, promotion, or diagnostics are touched;
 4. run NOCV self-analysis when imports, package boundaries, model ownership, or
    dependency terminology changes;
@@ -703,7 +703,7 @@ path. The removal covered these former references:
 | `goanalyzer/signature_analysis.go` | Compatibility method removed in Task 46; unified machinery retained and renamed in Task 47 |
 | `query/parameter_change.go` | Compatibility result removed in Task 46; the remaining Go-specific models moved and the file was removed in Task 47 |
 | `README.md` | Legacy command example and description removed |
-| `examples/impactdemo/README.md` | Scenarios rewritten for the unified inspector workflow |
+| Canonical Go fixture impact scenarios | Scenarios migrated into `testdata/go/project/impact` in Task 56 |
 | `cmd/nocv/parameter_impact_test.go` | Removed because it tested only the deleted CLI surface |
 | `goanalyzer/parameter_change_test.go` | Valuable behavior migrated to `AnalyzeSignatureChange` |
 
@@ -1014,3 +1014,28 @@ first, and consider a shared traversal primitive only if comparison of the
 extracted implementations later demonstrates a real common abstraction that
 makes each query easier to understand rather than merely reducing repeated
 lines.
+
+## Task 56 Go test fixture ownership
+
+Task 56 consolidated the repository's valid checked-in Go fixtures into one
+representative project at `testdata/go/project`. The project retains the
+existing `example.com/shop` module identity for the most widely asserted
+packages and namespaces specialized documentation, identity, import,
+signature-impact, compiler-overlay, and type-projection scenarios within that
+same valid module. The former standalone impact demo was test and development
+infrastructure rather than independent product documentation, so its maintained
+scenarios moved into the canonical project and the duplicate module was
+removed.
+
+Checked-in representative fixtures are owned at the product/language level,
+while tests remain beside the implementation packages they verify. NOCV has
+one checked-in representative project per supported language; today that means
+the concrete `testdata/go` structure only, with no speculative language
+registry or empty future-language directories.
+
+Narrow malformed, partial, dirty-baseline, and compiler-error states may be
+generated or derived in individual tests rather than becoming additional
+checked-in representative projects. A small `internal/testutil` helper locates
+and copies the Go project and creates the one shared partial-analysis variant;
+it is not a generic fixture framework. Go source snapshots used only as source
+overlays may remain as non-project test data near the tests that consume them.

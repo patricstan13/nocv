@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"nocv/graph"
+	"nocv/internal/testutil"
 )
 
 func TestParseInvocationRejectsMissingUnknownAndWrongArguments(t *testing.T) {
@@ -126,18 +127,18 @@ func TestRunReturnsUsageStatusWithoutLoading(t *testing.T) {
 }
 
 func TestRunWarnsOnceForPartialAnalysisAndKeepsUsefulOutput(t *testing.T) {
-	pattern := filepath.Join("..", "..", "goanalyzer", "testdata", "status", "...")
+	pattern := filepath.Join(testutil.PartialGoProject(t), "...")
 	var stdout, stderr bytes.Buffer
-	if status := run([]string{"node", "inspect", pattern, "example.com/status/brokenone::Service"}, &stdout, &stderr); status != 0 {
+	if status := run([]string{"node", "inspect", pattern, "example.com/shop/status/brokenone::Service"}, &stdout, &stderr); status != 0 {
 		t.Fatalf("run partial node inspect status = %d, stderr = %q", status, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "Node inspection:") || !strings.Contains(stdout.String(), "example.com/status/brokenone::Service") {
+	if !strings.Contains(stdout.String(), "Node inspection:") || !strings.Contains(stdout.String(), "example.com/shop/status/brokenone::Service") {
 		t.Fatalf("partial node output is not useful: %q", stdout.String())
 	}
 	if count := strings.Count(stderr.String(), "warning: partial analysis"); count != 1 {
 		t.Fatalf("partial warning count = %d, stderr = %q", count, stderr.String())
 	}
-	for _, packagePath := range []string{"example.com/status/brokenone", "example.com/status/brokentwo"} {
+	for _, packagePath := range []string{"example.com/shop/status/brokenone", "example.com/shop/status/brokentwo"} {
 		if !strings.Contains(stderr.String(), packagePath) {
 			t.Errorf("partial warning lacks package %q: %q", packagePath, stderr.String())
 		}
@@ -145,7 +146,7 @@ func TestRunWarnsOnceForPartialAnalysisAndKeepsUsefulOutput(t *testing.T) {
 }
 
 func TestRunDoesNotWarnForCompleteAnalysis(t *testing.T) {
-	pattern := filepath.Join("..", "..", "goanalyzer", "testdata", "project", "...")
+	pattern := filepath.Join(testutil.GoProjectDir(t), "...")
 	var stdout, stderr bytes.Buffer
 	if status := run([]string{"tree", pattern}, &stdout, &stderr); status != 0 {
 		t.Fatalf("run complete tree status = %d, stderr = %q", status, stderr.String())

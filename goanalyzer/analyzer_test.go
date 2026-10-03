@@ -2,15 +2,15 @@ package goanalyzer
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"nocv/graph"
+	"nocv/internal/testutil"
 )
 
 func TestLoadDiscoversStructuralHierarchy(t *testing.T) {
-	g, err := Load(context.Background(), filepath.Join("testdata", "project"), "./...")
+	g, err := Load(context.Background(), testutil.GoProjectDir(t), "./app", "./inventory", "./logging", "./orders", "./repository", "./service")
 	if err != nil {
 		t.Fatalf("Load(): %v", err)
 	}
@@ -190,7 +190,7 @@ func TestLoadDiscoversStructuralHierarchy(t *testing.T) {
 }
 
 func TestLoadDiscoversCalls(t *testing.T) {
-	g, err := Load(context.Background(), filepath.Join("testdata", "project"), "./...")
+	g, err := Load(context.Background(), testutil.GoProjectDir(t), "./app", "./inventory", "./logging", "./orders", "./repository", "./service")
 	if err != nil {
 		t.Fatalf("Load(): %v", err)
 	}
@@ -285,7 +285,7 @@ func TestLoadDiscoversCalls(t *testing.T) {
 }
 
 func TestLoadDiscoversInterfaceImplementations(t *testing.T) {
-	g, err := Load(context.Background(), filepath.Join("testdata", "project"), "./...")
+	g, err := Load(context.Background(), testutil.GoProjectDir(t), "./app", "./inventory", "./logging", "./orders", "./repository", "./service")
 	if err != nil {
 		t.Fatalf("Load(): %v", err)
 	}
@@ -348,7 +348,7 @@ func TestLoadDiscoversInterfaceImplementations(t *testing.T) {
 }
 
 func TestLoadDiscoversEmbeddings(t *testing.T) {
-	g, err := Load(context.Background(), filepath.Join("testdata", "project"), "./...")
+	g, err := Load(context.Background(), testutil.GoProjectDir(t), "./app", "./inventory", "./logging", "./orders", "./repository", "./service")
 	if err != nil {
 		t.Fatalf("Load(): %v", err)
 	}
@@ -424,7 +424,7 @@ func TestLoadDiscoversEmbeddings(t *testing.T) {
 }
 
 func TestLoadDiscoversSignatureRelationships(t *testing.T) {
-	g, err := Load(context.Background(), filepath.Join("testdata", "project"), "./...")
+	g, err := Load(context.Background(), testutil.GoProjectDir(t), "./app", "./inventory", "./logging", "./orders", "./repository", "./service")
 	if err != nil {
 		t.Fatalf("Load(): %v", err)
 	}
@@ -498,7 +498,7 @@ func TestLoadDiscoversSignatureRelationships(t *testing.T) {
 }
 
 func TestLoadProducesDeterministicIDs(t *testing.T) {
-	dir := filepath.Join("testdata", "project")
+	dir := testutil.GoProjectDir(t)
 	first, err := Load(context.Background(), dir, "./...")
 	if err != nil {
 		t.Fatalf("first Load(): %v", err)

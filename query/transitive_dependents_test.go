@@ -8,6 +8,7 @@ import (
 
 	"nocv/goanalyzer"
 	"nocv/graph"
+	"nocv/internal/testutil"
 	"nocv/query"
 )
 
@@ -260,7 +261,7 @@ func TestTransitiveDependentsHandlesNilAndMissingNodes(t *testing.T) {
 }
 
 func TestAnalyzerPipelineProvidesTransitiveDependentPaths(t *testing.T) {
-	g, err := goanalyzer.Load(context.Background(), filepath.Join("..", "goanalyzer", "testdata", "project"), "./...")
+	g, err := goanalyzer.Load(context.Background(), testutil.GoProjectDir(t), "./orders", "./logging")
 	if err != nil {
 		t.Fatalf("Load(): %v", err)
 	}

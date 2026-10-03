@@ -1,6 +1,6 @@
 .PHONY: fmt fmt-check test
 
-GO_FILES := $(shell git ls-files '*.go' | grep -v '^goanalyzer/testdata/statussyntax/')
+GO_FILES := $(shell git ls-files '*.go')
 
 fmt:
 	gofmt -w $(GO_FILES)

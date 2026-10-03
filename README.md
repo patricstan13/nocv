@@ -21,16 +21,16 @@ go run ./cmd/nocv node dependencies ./... nocv/query::TransitiveDependents
 go run ./cmd/nocv node dependents ./... nocv/query::DirectDependents
 go run ./cmd/nocv node transitive-dependents ./... nocv/graph::Graph
 go run ./cmd/nocv node dependency-paths ./... nocv/query::TransitiveDependents nocv/graph::Graph
-go run ./cmd/nocv node inspect ./goanalyzer/testdata/documentation/... example.com/documentation/service::Service
+go run ./cmd/nocv node inspect ./testdata/go/project/... example.com/shop/documentation/service::Service
 go run ./cmd/nocv go package imports ./... nocv/query
 go run ./cmd/nocv go package importers ./... nocv/graph
 go run ./cmd/nocv go package dependency-paths ./... nocv/cmd/nocv nocv/query
-go run ./cmd/nocv go package inspect-dependency ./goanalyzer/testdata/typeview/... example.com/typeview/app example.com/typeview/repository
+go run ./cmd/nocv go package inspect-dependency ./testdata/go/project/... example.com/shop/typeview/app example.com/shop/typeview/repository
 go run ./cmd/nocv go package check-forbidden-import ./... nocv/query nocv/graph
 go run ./cmd/nocv go package check-forbidden-dependency ./... nocv/cmd/nocv nocv/graph
 go run ./cmd/nocv go package check-import-cycle ./... nocv/graph nocv/cmd/nocv
-go run ./cmd/nocv go type dependencies ./goanalyzer/testdata/typeview/... example.com/typeview/service::Service
-go run ./cmd/nocv go type dependency-paths ./goanalyzer/testdata/typeview/... example.com/typeview/service::Service example.com/typeview/store::Store
+go run ./cmd/nocv go type dependencies ./testdata/go/project/... example.com/shop/typeview/service::Service
+go run ./cmd/nocv go type dependency-paths ./testdata/go/project/... example.com/shop/typeview/service::Service example.com/shop/typeview/store::Store
 ```
 
 `node` commands operate on exact represented graph entities and stored semantic

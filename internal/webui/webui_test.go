@@ -8,13 +8,13 @@ import (
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
 	"nocv/goanalyzer"
 	"nocv/graph"
+	"nocv/internal/testutil"
 )
 
 func TestClientRendersServerDataAsText(t *testing.T) {
@@ -529,8 +529,8 @@ func TestAnalysisStatusAPIReportsCompleteAndPartial(t *testing.T) {
 			name:     "partial",
 			analysis: statusAnalysis(t),
 			want: analysisStatus{Status: "partial", Reasons: []analysisStatusReason{
-				{Kind: "incomplete type information", Package: "example.com/status/brokenone"},
-				{Kind: "incomplete type information", Package: "example.com/status/brokentwo"},
+				{Kind: "incomplete type information", Package: "example.com/shop/status/brokenone"},
+				{Kind: "incomplete type information", Package: "example.com/shop/status/brokentwo"},
 			}},
 		},
 	}
@@ -682,7 +682,7 @@ func TestAnalysisBackedNodeAPIIncludesCallableSignature(t *testing.T) {
 	analysis := parameterImpactAnalysis(t)
 	handler := Handler(analysis)
 
-	response := request(t, handler, http.MethodGet, "/api/node?id=example.com%2Fparameterimpact%3A%3AVariadic")
+	response := request(t, handler, http.MethodGet, "/api/node?id=example.com%2Fshop%2Fparameterimpact%3A%3AVariadic")
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
@@ -696,7 +696,7 @@ func TestAnalysisBackedNodeAPIIncludesCallableSignature(t *testing.T) {
 		t.Fatalf("signature = %#v, want variadic string", signature)
 	}
 
-	resultMethod := request(t, handler, http.MethodGet, "/api/node?id=example.com%2Fparameterimpact%3A%3AResultBase%3A%3AFetch")
+	resultMethod := request(t, handler, http.MethodGet, "/api/node?id=example.com%2Fshop%2Fparameterimpact%3A%3AResultBase%3A%3AFetch")
 	var resultMethodInspection nodeInspection
 	decode(t, resultMethod, &resultMethodInspection)
 	if resultMethod.Code != http.StatusOK || resultMethodInspection.Function == nil || resultMethodInspection.Function.Signature == nil ||
@@ -704,7 +704,7 @@ func TestAnalysisBackedNodeAPIIncludesCallableSignature(t *testing.T) {
 		t.Fatalf("result signature response = status %d, result %#v", resultMethod.Code, resultMethodInspection)
 	}
 
-	qualified := request(t, handler, http.MethodGet, "/api/node?id=example.com%2Fparameterimpact%3A%3ACallsMethod")
+	qualified := request(t, handler, http.MethodGet, "/api/node?id=example.com%2Fshop%2Fparameterimpact%3A%3ACallsMethod")
 	var qualifiedResult nodeInspection
 	decode(t, qualified, &qualifiedResult)
 	if qualified.Code != http.StatusOK || qualifiedResult.Function == nil || qualifiedResult.Function.Signature == nil {
@@ -715,7 +715,7 @@ func TestAnalysisBackedNodeAPIIncludesCallableSignature(t *testing.T) {
 		t.Fatalf("editable qualified signature = %#v, want package-local Go expressions", parameters)
 	}
 
-	interfaceMethod := request(t, handler, http.MethodGet, "/api/node?id=example.com%2Fparameterimpact%3A%3AStore%3A%3ASave")
+	interfaceMethod := request(t, handler, http.MethodGet, "/api/node?id=example.com%2Fshop%2Fparameterimpact%3A%3AStore%3A%3ASave")
 	var interfaceResult nodeInspection
 	decode(t, interfaceMethod, &interfaceResult)
 	if interfaceMethod.Code != http.StatusOK || interfaceResult.Function == nil || interfaceResult.Function.Signature == nil {
@@ -734,7 +734,7 @@ func TestSignatureImpactAPIUsesAnalysisReadModel(t *testing.T) {
 	}{
 		{
 			name: "call sites and contracts",
-			body: `{"callable":"example.com/parameterimpact::Service::Save","parameters":[{"type":"string"}],"variadic":false}`,
+			body: `{"callable":"example.com/shop/parameterimpact::Service::Save","parameters":[{"type":"string"}],"variadic":false}`,
 			assertions: func(t *testing.T, result signatureImpact) {
 				if len(result.CallSites) == 0 || len(result.Contracts) == 0 {
 					t.Fatalf("impact lacks call sites or contracts: %#v", result)
@@ -746,7 +746,7 @@ func TestSignatureImpactAPIUsesAnalysisReadModel(t *testing.T) {
 		},
 		{
 			name: "structural exposure",
-			body: `{"callable":"example.com/parameterimpact::PromotionBase::Change","parameters":[{"type":"string"}]}`,
+			body: `{"callable":"example.com/shop/parameterimpact::PromotionBase::Change","parameters":[{"type":"string"}]}`,
 			assertions: func(t *testing.T, result signatureImpact) {
 				if len(result.Structural) == 0 {
 					t.Fatalf("impact lacks structural consequences: %#v", result)
@@ -758,7 +758,7 @@ func TestSignatureImpactAPIUsesAnalysisReadModel(t *testing.T) {
 		},
 		{
 			name: "results and compiler consequences",
-			body: `{"callable":"example.com/parameterimpact::ResultBase::Fetch","parameters":[{"type":"ID"}],"results":[{"type":"*Item"}]}`,
+			body: `{"callable":"example.com/shop/parameterimpact::ResultBase::Fetch","parameters":[{"type":"ID"}],"results":[{"type":"*Item"}]}`,
 			assertions: func(t *testing.T, result signatureImpact) {
 				if len(result.After.Results) != 1 || result.After.Results[0].Type.Display == "" || len(result.Compiler.AffectedPackages) == 0 || len(result.Compiler.Consequences) == 0 {
 					t.Fatalf("result impact presentation = %#v", result)
@@ -767,7 +767,7 @@ func TestSignatureImpactAPIUsesAnalysisReadModel(t *testing.T) {
 		},
 		{
 			name: "variadic",
-			body: `{"callable":"example.com/parameterimpact::Variadic","parameters":[{"type":"string"}],"variadic":true}`,
+			body: `{"callable":"example.com/shop/parameterimpact::Variadic","parameters":[{"type":"string"}],"variadic":true}`,
 			assertions: func(t *testing.T, result signatureImpact) {
 				if !result.After.Variadic || len(result.CallSites) != 0 || len(result.Compiler.Consequences) != 0 {
 					t.Fatalf("variadic impact = %#v", result)
@@ -796,9 +796,9 @@ func TestSignatureImpactAPIErrorsAreConcise(t *testing.T) {
 		body string
 		want string
 	}{
-		{name: "invalid symbol", body: `{"callable":"example.com/parameterimpact::Missing","parameters":[]}`, want: "unknown symbol"},
-		{name: "invalid type", body: `{"callable":"example.com/parameterimpact::UseID","parameters":[{"type":"DoesNotExist"}]}`, want: "resolve proposed parameter 1 type"},
-		{name: "invalid result type", body: `{"callable":"example.com/parameterimpact::UseID","parameters":[{"type":"ID"}],"results":[{"type":"DoesNotExist"}]}`, want: "resolve proposed result 1 type"},
+		{name: "invalid symbol", body: `{"callable":"example.com/shop/parameterimpact::Missing","parameters":[]}`, want: "unknown symbol"},
+		{name: "invalid type", body: `{"callable":"example.com/shop/parameterimpact::UseID","parameters":[{"type":"DoesNotExist"}]}`, want: "resolve proposed parameter 1 type"},
+		{name: "invalid result type", body: `{"callable":"example.com/shop/parameterimpact::UseID","parameters":[{"type":"ID"}],"results":[{"type":"DoesNotExist"}]}`, want: "resolve proposed result 1 type"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -898,8 +898,7 @@ func requestBody(t *testing.T, handler http.Handler, method, path, body string) 
 
 func parameterImpactAnalysis(t *testing.T) *goanalyzer.Analysis {
 	t.Helper()
-	dir := filepath.Join("..", "..", "goanalyzer", "testdata", "parameterimpact")
-	analysis, err := goanalyzer.LoadAnalysis(context.Background(), dir, "./...")
+	analysis, err := goanalyzer.LoadAnalysis(context.Background(), testutil.GoProjectDir(t), "./parameterimpact")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -908,8 +907,7 @@ func parameterImpactAnalysis(t *testing.T) *goanalyzer.Analysis {
 
 func statusAnalysis(t *testing.T) *goanalyzer.Analysis {
 	t.Helper()
-	dir := filepath.Join("..", "..", "goanalyzer", "testdata", "status")
-	analysis, err := goanalyzer.LoadAnalysis(context.Background(), dir, "./...")
+	analysis, err := goanalyzer.LoadAnalysis(context.Background(), testutil.PartialGoProject(t), "./status/...")
 	if err != nil {
 		t.Fatal(err)
 	}

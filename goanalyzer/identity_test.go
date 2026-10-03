@@ -2,24 +2,24 @@ package goanalyzer
 
 import (
 	"context"
-	"path/filepath"
 	"reflect"
 	"testing"
 
 	"nocv/graph"
+	"nocv/internal/testutil"
 	"nocv/query"
 )
 
 func TestLoadAssignsDistinctRefsAndCallsToRepeatedInitFunctions(t *testing.T) {
-	g, err := Load(context.Background(), filepath.Join("testdata", "identity"), "./repeated")
+	g, err := Load(context.Background(), testutil.GoProjectDir(t), "./identity/repeated")
 	if err != nil {
 		t.Fatalf("Load(): %v", err)
 	}
 
-	init1 := graph.SymbolRef("example.com/identity/repeated::init#1")
-	init2 := graph.SymbolRef("example.com/identity/repeated::init#2")
-	one := graph.SymbolRef("example.com/identity/repeated::one")
-	two := graph.SymbolRef("example.com/identity/repeated::two")
+	init1 := graph.SymbolRef("example.com/shop/identity/repeated::init#1")
+	init2 := graph.SymbolRef("example.com/shop/identity/repeated::init#2")
+	one := graph.SymbolRef("example.com/shop/identity/repeated::one")
+	two := graph.SymbolRef("example.com/shop/identity/repeated::two")
 	first, firstExists := g.NodeByRef(init1)
 	second, secondExists := g.NodeByRef(init2)
 	if !firstExists || !secondExists {
@@ -37,16 +37,16 @@ func TestLoadAssignsDistinctRefsAndCallsToRepeatedInitFunctions(t *testing.T) {
 }
 
 func TestLoadAssignsDistinctRefsToBlankDeclarations(t *testing.T) {
-	g, err := Load(context.Background(), filepath.Join("testdata", "identity"), "./blank")
+	g, err := Load(context.Background(), testutil.GoProjectDir(t), "./identity/blank")
 	if err != nil {
 		t.Fatalf("Load(): %v", err)
 	}
 
 	want := []graph.SymbolRef{
-		"example.com/identity/blank::_#1",
-		"example.com/identity/blank::_#2",
-		"example.com/identity/blank::_#3",
-		"example.com/identity/blank::_#4",
+		"example.com/shop/identity/blank::_#1",
+		"example.com/shop/identity/blank::_#2",
+		"example.com/shop/identity/blank::_#3",
+		"example.com/shop/identity/blank::_#4",
 	}
 	ids := make(map[graph.NodeID]bool)
 	for _, ref := range want {
@@ -63,15 +63,15 @@ func TestLoadAssignsDistinctRefsToBlankDeclarations(t *testing.T) {
 }
 
 func TestLoadPreservesNormalSymbolRefs(t *testing.T) {
-	g, err := Load(context.Background(), filepath.Join("testdata", "typeview"), "./...")
+	g, err := Load(context.Background(), testutil.GoProjectDir(t), "./typeview/...")
 	if err != nil {
 		t.Fatalf("Load(): %v", err)
 	}
 	for _, ref := range []graph.SymbolRef{
-		"example.com/typeview/app",
-		"example.com/typeview/service::Service",
-		"example.com/typeview/service::Service::Create",
-		"example.com/typeview/app::Run",
+		"example.com/shop/typeview/app",
+		"example.com/shop/typeview/service::Service",
+		"example.com/shop/typeview/service::Service::Create",
+		"example.com/shop/typeview/app::Run",
 	} {
 		if _, exists := g.NodeByRef(ref); !exists {
 			t.Errorf("normal symbol ref changed: %q", ref)

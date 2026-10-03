@@ -1,3 +1,0 @@
-package statussyntax
-
-func Broken( {

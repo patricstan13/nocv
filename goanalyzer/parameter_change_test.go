@@ -2,16 +2,16 @@ package goanalyzer_test
 
 import (
 	"context"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"nocv/goanalyzer"
 	"nocv/graph"
+	"nocv/internal/testutil"
 )
 
-const impactPackage = "example.com/parameterimpact"
+const impactPackage = "example.com/shop/parameterimpact"
 
 func TestAnalyzeSignatureChangeParameterNamedScalarAndUntypedLiteral(t *testing.T) {
 	analysis := loadImpactAnalysis(t)
@@ -339,11 +339,7 @@ func TestAnalyzeSignatureChangeParameterValidationErrors(t *testing.T) {
 
 func loadImpactAnalysis(t *testing.T) *goanalyzer.Analysis {
 	t.Helper()
-	dir, err := filepath.Abs("testdata/parameterimpact")
-	if err != nil {
-		t.Fatal(err)
-	}
-	analysis, err := goanalyzer.LoadAnalysis(context.Background(), dir, "./...")
+	analysis, err := goanalyzer.LoadAnalysis(context.Background(), testutil.GoProjectDir(t), "./parameterimpact")
 	if err != nil {
 		t.Fatal(err)
 	}

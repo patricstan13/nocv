@@ -5,11 +5,11 @@ import (
 	"context"
 	"errors"
 	"net"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"nocv/goanalyzer"
+	"nocv/internal/testutil"
 )
 
 func TestListenForExplorerUsesLoopbackAndEphemeralPort(t *testing.T) {
@@ -34,8 +34,8 @@ func TestListenForExplorerUsesLoopbackAndEphemeralPort(t *testing.T) {
 func TestServeListenerRetainsAnalysisAndEntersHTTPServer(t *testing.T) {
 	analysis, err := goanalyzer.LoadAnalysis(
 		context.Background(),
-		filepath.Join("..", "..", "goanalyzer", "testdata", "parameterimpact"),
-		"./...",
+		testutil.GoProjectDir(t),
+		"./parameterimpact",
 	)
 	if err != nil {
 		t.Fatal(err)
