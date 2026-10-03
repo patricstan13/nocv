@@ -920,3 +920,43 @@ Before a follow-up implementation task is written, the human should review the
 command semantics matrix, the proposed beta vocabulary, removal of the global
 and call-only legacy surfaces, the fate of `why-package-dep`, and the continued
 separation between future `why` composition and hypothetical `impact` analysis.
+
+## Task 53 beta CLI namespace design
+
+Task 53 completed a design-only scoped namespace review. The recommended beta
+hierarchy and complete migration map are recorded in
+[`cli-namespace-design.md`](cli-namespace-design.md). No production code,
+command, query API, graph semantic, output, or traversal changed.
+
+The proposed product boundary is explicit: `node` operates on exact represented
+graph entities and stored relationships regardless of analyzer origin, while a
+literal `go` scope owns operations whose meaning requires current Go package,
+import, struct/interface, method-ownership, or projection rules. This does not
+introduce a language interface or require internal packages to mirror CLI
+namespaces.
+
+Under `node`, immediate relationships are the default: `dependencies` and
+`dependents` are one-hop, while recursive reverse reliance remains
+`transitive-dependents`. Exact paths and single-node inspection become
+`node dependency-paths` and `node inspect`. Under `go`, maintained package and
+type operations use concise scope-aware names. Package/type inspection aliases
+and reverse commands are not added solely for symmetry.
+
+Task 53 supersedes Task 52's proposed flat renames without rewriting that
+historical record. The already-approved removal of global `imports`, legacy
+call-only `package-deps`, and public `why-package-dep` remains. The new design
+also recommends removing the global `tree`, `calls`, `implementations`,
+`embeddings`, and incomplete `signatures` diagnostic dumps, subject to human
+approval.
+
+Future `why` and `impact` remain top-level question-oriented wrappers:
+explanation composition and hypothetical-change consequences respectively.
+Neither is implemented or assigned an argument grammar here. Inline recursive
+query traversals remain separate readability debt.
+
+## Human review gate after Task 53
+
+Before Task 54 is written, the human should approve the `node` and literal `go`
+boundaries, immediate-by-default naming, exact package/type command set,
+omission of redundant inspection/dependent commands, expanded debug-command
+removals, and top-level placement of future `why` and `impact`.

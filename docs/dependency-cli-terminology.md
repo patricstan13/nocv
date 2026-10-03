@@ -350,3 +350,18 @@ Human decisions required before implementation:
    mirror `transitive-dependents`.
 
 No implementation should begin until this review gate is resolved.
+
+## Task 53 scoped-namespace follow-up
+
+Task 53 preserves every semantic finding in this document but supersedes the
+flat beta-name recommendation with a scoped hierarchy. The proposed mappings
+are now `node dependencies`, `node dependency-paths`,
+`go package dependency-paths`, `go type dependency-paths`, and
+`go package inspect-dependency`, rather than repeating node/package/type context
+inside flat command names.
+
+The approved Task 52 removals remain unchanged: the global `imports` dump and
+legacy call-only `package-deps` are removed, and public `why-package-dep` is
+retired while its useful call-location evidence is preserved in maintained
+package explanation. The full namespace rationale and migration map are in
+[`cli-namespace-design.md`](cli-namespace-design.md).
