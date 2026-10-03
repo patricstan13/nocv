@@ -399,3 +399,46 @@ Product decisions requiring human approval:
    grammars.
 
 No hierarchy implementation should begin before this review gate is resolved.
+
+## Task 54 implementation
+
+Task 54 implemented the scoped hierarchy with explicit parser and dispatch
+helpers. The final top level is `serve`, `tree`, `node`, and `go`; the human
+review intentionally retained `tree` as a structural-orientation command even
+though Task 53 had listed its removal for consideration.
+
+The implemented scopes are:
+
+```text
+node
+    dependencies
+    dependents
+    transitive-dependents
+    dependency-paths
+    inspect
+
+go package
+    imports
+    importers
+    dependency-paths
+    inspect-dependency
+    check-forbidden-import
+    check-forbidden-dependency
+    check-import-cycle
+
+go type
+    dependencies
+    dependency-paths
+```
+
+All old flat aliases and the global `calls`, `implementations`, `embeddings`,
+`signatures`, and `imports` dumps were removed. The legacy call-only
+`package-deps` and `why-package-dep` commands were removed together with their
+now-unused `query.Dependencies`, `query.Dependency`, and `query.WhyDependsOn`
+API. Maintained package dependency evidence already retains exact relationship
+locations, so no semantic evidence storage was lost.
+
+Scoped help is available at the top, `node`, `go`, `go package`, and `go type`
+levels. The implementation uses concrete parsing and focused dispatch helpers;
+it adds no command framework, language registry, or internal package hierarchy.
+Graph/query traversal and all maintained query semantics remain unchanged.

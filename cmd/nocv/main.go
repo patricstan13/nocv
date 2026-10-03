@@ -23,6 +23,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
+	if invocation.help != "" {
+		fmt.Fprintln(stdout, invocation.help)
+		return 0
+	}
 
 	var analysisStart time.Time
 	if invocation.name == "serve" {

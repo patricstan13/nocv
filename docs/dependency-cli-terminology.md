@@ -365,3 +365,19 @@ legacy call-only `package-deps` are removed, and public `why-package-dep` is
 retired while its useful call-location evidence is preserved in maintained
 package explanation. The full namespace rationale and migration map are in
 [`cli-namespace-design.md`](cli-namespace-design.md).
+
+## Task 54 implementation result
+
+Task 54 implemented the scoped names and removed the flat command surface. The
+supported dependency operations now live under `node`, `go package`, and
+`go type`; `serve` and the intentionally retained `tree` remain top-level.
+
+The global `imports` dump, call-only `package-deps`, public
+`why-package-dep`, and global relationship dumps were removed. Because no
+maintained consumer remained, the historical call-only query model and APIs
+were also removed. This does not affect `PackageDependency`, `TypeDependency`,
+their path queries, or exact relationship location evidence.
+
+The earlier tables remain as the historical inventory that justified the
+migration. They describe the former command names and should not be read as the
+current CLI help surface.

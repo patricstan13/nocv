@@ -74,8 +74,9 @@ The same pattern works with focused commands:
 
 ```bash
 go run ./cmd/nocv tree ./examples/impactdemo/...
-go run ./cmd/nocv implementations ./examples/impactdemo/...
-go run ./cmd/nocv embeddings ./examples/impactdemo/...
+go run ./cmd/nocv node inspect ./examples/impactdemo/... example.com/impactdemo/service::Service
+go run ./cmd/nocv node dependencies ./examples/impactdemo/... example.com/impactdemo/service::Service
+go run ./cmd/nocv go package dependency-paths ./examples/impactdemo/... example.com/impactdemo/api example.com/impactdemo/domain
 ```
 
 Compile the example independently with:

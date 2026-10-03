@@ -960,3 +960,29 @@ Before Task 54 is written, the human should approve the `node` and literal `go`
 boundaries, immediate-by-default naming, exact package/type command set,
 omission of redundant inspection/dependent commands, expanded debug-command
 removals, and top-level placement of future `why` and `impact`.
+
+## Task 54 scoped CLI implementation
+
+Task 54 implemented the approved product boundary. The supported top level is
+now `serve`, `tree`, `node`, and `go`. `tree` was explicitly retained by human
+decision for structural orientation. Exact graph operations are under `node`;
+Go package/import and type-projection operations are under literal `go package`
+and `go type` scopes.
+
+The flat command aliases were removed without compatibility shims. The global
+`calls`, `implementations`, `embeddings`, `signatures`, and `imports` diagnostic
+dumps were removed, as were legacy call-only `package-deps` and
+`why-package-dep`. Their sole backing production API—`query.Dependencies`,
+`query.Dependency`, and `query.WhyDependsOn`—was removed after verifying that no
+maintained consumer remained. Modern package dependency relationships still
+retain exact evidence and locations.
+
+The dispatcher now consists of a short top-level switch plus focused node, Go
+package, and Go type parsing/dispatch helpers. Help is available at every scope
+and uses node/package/type refs rather than internal identifier type names. No
+command registry, CLI framework, language abstraction, new source package, or
+query traversal refactor was introduced.
+
+Future `why` and `impact` remain reserved and unimplemented. Task 54 stops at
+the namespace review gate; traversal readability, tree design, future wrappers,
+and frontend work remain separate tasks.

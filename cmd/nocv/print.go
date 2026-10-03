@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"sort"
 	"strings"
 
 	"nocv/graph"
@@ -32,53 +31,6 @@ func printChildren(out io.Writer, g *graph.Graph, parent graph.NodeID, indent st
 		}
 		fmt.Fprintf(out, "%s%s%s [%s]\n", indent, branch, node.Name, node.Kind)
 		printChildren(out, g, node.ID, nextIndent)
-	}
-}
-
-func printEdges(out io.Writer, g *graph.Graph, heading string, kind graph.EdgeKind) {
-	fmt.Fprintf(out, "%s:\n", heading)
-	printed := false
-	for _, node := range g.Nodes() {
-		edges := sortedOutgoing(g, node.ID, kind)
-		if len(edges) == 0 {
-			continue
-		}
-		printed = true
-		fmt.Fprintln(out, node.Ref)
-		for _, edge := range edges {
-			target, _ := g.Node(edge.To)
-			if kind == graph.EdgeCalls {
-				fmt.Fprintf(out, "  calls -> %s (%d call site(s))\n", target.Ref, len(edge.Evidence))
-			} else {
-				fmt.Fprintf(out, "  %s -> %s\n", edge.Kind, target.Ref)
-			}
-		}
-	}
-	if !printed {
-		fmt.Fprintln(out, "  (none)")
-	}
-}
-
-func printSignatures(out io.Writer, g *graph.Graph) {
-	fmt.Fprintln(out, "Signatures:")
-	printed := false
-	for _, node := range g.Nodes() {
-		if node.Kind != graph.NodeFunction {
-			continue
-		}
-		edges := sortedOutgoing(g, node.ID, graph.EdgeAccepts, graph.EdgeReturns)
-		if len(edges) == 0 {
-			continue
-		}
-		printed = true
-		fmt.Fprintln(out, node.Ref)
-		for _, edge := range edges {
-			target, _ := g.Node(edge.To)
-			fmt.Fprintf(out, "  %s -> %s\n", edge.Kind, target.Ref)
-		}
-	}
-	if !printed {
-		fmt.Fprintln(out, "  (none)")
 	}
 }
 
@@ -462,32 +414,4 @@ func printSymbolRelationshipsForNode(out io.Writer, heading string, relationship
 			fmt.Fprintf(out, "  %s -> %s\n", relationship.Kind, relationship.To.Ref)
 		}
 	}
-}
-
-func printPackageDependencyExplanation(out io.Writer, g *graph.Graph, from, to graph.SymbolRef) {
-	fmt.Fprintf(out, "Package call dependency explanation: %s -> %s\n", from, to)
-	explanation, exists := query.WhyDependsOn(g, from, to)
-	if !exists {
-		fmt.Fprintln(out, "  (none)")
-		return
-	}
-	for _, evidence := range explanation.Evidence {
-		fmt.Fprintf(out, "  %s calls -> %s\n", evidence.From, evidence.To)
-		for _, location := range evidence.Locations {
-			fmt.Fprintf(out, "    at %s:%d\n", location.File, location.Offset)
-		}
-	}
-}
-
-func sortedOutgoing(g *graph.Graph, id graph.NodeID, kinds ...graph.EdgeKind) []*graph.Edge {
-	edges := g.Outgoing(id, kinds...)
-	sort.Slice(edges, func(i, j int) bool {
-		if edges[i].Kind != edges[j].Kind {
-			return edges[i].Kind < edges[j].Kind
-		}
-		left, _ := g.Node(edges[i].To)
-		right, _ := g.Node(edges[j].To)
-		return left.Ref < right.Ref
-	})
-	return edges
 }

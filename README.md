@@ -17,33 +17,31 @@ struct and interface embedding relationships.
 ```sh
 go run ./cmd/nocv serve ./...
 go run ./cmd/nocv tree ./...
-go run ./cmd/nocv calls ./...
-go run ./cmd/nocv implementations ./...
-go run ./cmd/nocv embeddings ./...
-go run ./cmd/nocv signatures ./...
-go run ./cmd/nocv imports ./...
-go run ./cmd/nocv package-imports ./... nocv/query
-go run ./cmd/nocv package-importers ./... nocv/graph
-go run ./cmd/nocv import-cycle ./... nocv/graph nocv/cmd/nocv
-go run ./cmd/nocv check-forbidden-import ./... nocv/query nocv/graph
-go run ./cmd/nocv check-forbidden-dependency ./... nocv/cmd/nocv nocv/graph
-go run ./cmd/nocv direct-deps ./... nocv/query::TransitiveDependents
-go run ./cmd/nocv direct-dependents ./... nocv/query::DirectDependents
-go run ./cmd/nocv transitive-dependents ./... nocv/graph::Graph
-go run ./cmd/nocv paths ./... nocv/query::TransitiveDependents nocv/graph::Graph
-go run ./cmd/nocv package-paths ./... nocv/cmd/nocv nocv/query
-go run ./cmd/nocv package-deps ./...
-go run ./cmd/nocv why-package-dep ./... nocv/cmd/nocv nocv/query
-go run ./cmd/nocv type-deps ./goanalyzer/testdata/typeview/... example.com/typeview/service::Service
-go run ./cmd/nocv type-paths ./goanalyzer/testdata/typeview/... example.com/typeview/service::Service example.com/typeview/store::Store
-go run ./cmd/nocv inspect-dependency ./goanalyzer/testdata/typeview/... example.com/typeview/app example.com/typeview/repository
-go run ./cmd/nocv inspect-node ./goanalyzer/testdata/documentation/... example.com/documentation/service::Service
+go run ./cmd/nocv node dependencies ./... nocv/query::TransitiveDependents
+go run ./cmd/nocv node dependents ./... nocv/query::DirectDependents
+go run ./cmd/nocv node transitive-dependents ./... nocv/graph::Graph
+go run ./cmd/nocv node dependency-paths ./... nocv/query::TransitiveDependents nocv/graph::Graph
+go run ./cmd/nocv node inspect ./goanalyzer/testdata/documentation/... example.com/documentation/service::Service
+go run ./cmd/nocv go package imports ./... nocv/query
+go run ./cmd/nocv go package importers ./... nocv/graph
+go run ./cmd/nocv go package dependency-paths ./... nocv/cmd/nocv nocv/query
+go run ./cmd/nocv go package inspect-dependency ./goanalyzer/testdata/typeview/... example.com/typeview/app example.com/typeview/repository
+go run ./cmd/nocv go package check-forbidden-import ./... nocv/query nocv/graph
+go run ./cmd/nocv go package check-forbidden-dependency ./... nocv/cmd/nocv nocv/graph
+go run ./cmd/nocv go package check-import-cycle ./... nocv/graph nocv/cmd/nocv
+go run ./cmd/nocv go type dependencies ./goanalyzer/testdata/typeview/... example.com/typeview/service::Service
+go run ./cmd/nocv go type dependency-paths ./goanalyzer/testdata/typeview/... example.com/typeview/service::Service example.com/typeview/store::Store
 ```
 
-`direct-dependents` reports immediate reverse semantic relationships.
-`transitive-dependents` follows those relationships recursively and includes
-the simple dependency paths. “Impact” is reserved for consequences of a
-hypothetical change; no generic `impact` CLI command is currently exposed.
+`node` commands operate on exact represented graph entities and stored semantic
+relationships. `node dependencies` and `node dependents` are immediate;
+`node transitive-dependents` follows reverse relationships recursively and
+includes simple dependency paths. `go package` and `go type` contain operations
+whose meaning depends on Go packages, imports, structs, interfaces, and method
+ownership. Run `nocv node --help`, `nocv go package --help`, or
+`nocv go type --help` for the scoped command lists. “Impact” remains reserved
+for consequences of a hypothetical change; no generic `impact` command is
+currently exposed.
 
 ## Graphical package explorer
 
@@ -126,11 +124,11 @@ a semantic fact belong to represented types; package-level functions do not
 participate. Package dependency queries independently derive relationships from
 semantic facts crossing package boundaries.
 
-`inspect-dependency` shows each package dependency hop, the type-level
+`go package inspect-dependency` shows each package dependency hop, the type-level
 relationships that explain that hop, and any remaining exact semantic facts
 that have no type-level representation.
 
-`inspect-node` shows declaration metadata and documentation, structural
+`node inspect` shows declaration metadata and documentation, structural
 children, direct semantic relationships, and relevant package/type projections
 for one graph node.
 
@@ -157,16 +155,16 @@ dependencies (`Calls`, `Implements`, `Embeds`, `Accepts`, and `Returns`) and
 from derived package dependency paths. External packages are not represented
 unless they are part of the analyzed package set.
 
-`import-cycle` checks whether a proposed direct package import would close an
+`go package check-import-cycle` checks whether a proposed direct package import would close an
 existing import path and therefore create a cycle.
 
-`check-forbidden-import` checks whether one exact package directly imports
+`go package check-forbidden-import` checks whether one exact package directly imports
 another forbidden package. It does not evaluate transitive imports or semantic
 dependency paths.
 
-`check-forbidden-dependency` checks whether one exact package has any projected
+`go package check-forbidden-dependency` checks whether one exact package has any projected
 semantic dependency path to another exact package. It is distinct from
-`check-forbidden-import`, which checks only a direct Go import.
+`go package check-forbidden-import`, which checks only a direct Go import.
 
 Query and workflow features that benefit from manual validation should expose
 a focused CLI command instead of adding unconditional demonstration output.
