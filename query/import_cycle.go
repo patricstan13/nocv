@@ -44,42 +44,52 @@ func importPaths(g *graph.Graph, from, to graph.SymbolRef) []ImportPath {
 	if !fromExists || !toExists {
 		return nil
 	}
-	var paths []ImportPath
-	pathKeys := make(map[string]bool)
-	seen := map[graph.NodeID]bool{fromID: true}
-
-	var walk func(graph.NodeID, []graph.SymbolRef)
-	walk = func(current graph.NodeID, packages []graph.SymbolRef) {
-		for _, edge := range g.Outgoing(current, graph.EdgeImports) {
-			next := edge.To
-			if seen[next] {
-				continue
-			}
-			nextNode, exists := g.Node(next)
-			if !exists || nextNode.Kind != graph.NodePackage {
-				continue
-			}
-			nextPackages := append(append([]graph.SymbolRef(nil), packages...), nextNode.Ref)
-			if next == toID {
-				key := importPathKey(nextPackages)
-				if !pathKeys[key] {
-					pathKeys[key] = true
-					paths = append(paths, ImportPath{Packages: nextPackages})
-				}
-				continue
-			}
-
-			seen[next] = true
-			walk(next, nextPackages)
-			delete(seen, next)
-		}
+	traversal := importPathTraversal{
+		graph:    g,
+		target:   toID,
+		seen:     map[graph.NodeID]bool{fromID: true},
+		pathKeys: make(map[string]bool),
 	}
-	walk(fromID, []graph.SymbolRef{from})
+	walkImportPaths(&traversal, fromID, []graph.SymbolRef{from})
 
-	sort.Slice(paths, func(i, j int) bool {
-		return importPathLess(paths[i].Packages, paths[j].Packages)
+	sort.Slice(traversal.paths, func(i, j int) bool {
+		return importPathLess(traversal.paths[i].Packages, traversal.paths[j].Packages)
 	})
-	return paths
+	return traversal.paths
+}
+
+type importPathTraversal struct {
+	graph    *graph.Graph
+	target   graph.NodeID
+	seen     map[graph.NodeID]bool
+	pathKeys map[string]bool
+	paths    []ImportPath
+}
+
+func walkImportPaths(traversal *importPathTraversal, current graph.NodeID, packages []graph.SymbolRef) {
+	for _, edge := range traversal.graph.Outgoing(current, graph.EdgeImports) {
+		next := edge.To
+		if traversal.seen[next] {
+			continue
+		}
+		nextNode, exists := traversal.graph.Node(next)
+		if !exists || nextNode.Kind != graph.NodePackage {
+			continue
+		}
+		nextPackages := append(append([]graph.SymbolRef(nil), packages...), nextNode.Ref)
+		if next == traversal.target {
+			key := importPathKey(nextPackages)
+			if !traversal.pathKeys[key] {
+				traversal.pathKeys[key] = true
+				traversal.paths = append(traversal.paths, ImportPath{Packages: nextPackages})
+			}
+			continue
+		}
+
+		traversal.seen[next] = true
+		walkImportPaths(traversal, next, nextPackages)
+		delete(traversal.seen, next)
+	}
 }
 
 func importPathLess(left, right []graph.SymbolRef) bool {

@@ -986,3 +986,31 @@ query traversal refactor was introduced.
 Future `why` and `impact` remain reserved and unimplemented. Task 54 stops at
 the namespace review gate; traversal readability, tree design, future wrappers,
 and frontend work remain separate tasks.
+
+## Task 55 query traversal readability
+
+Task 55 replaced the five production inline recursive closures in `query` with
+named, query-specific helpers: `walkDependencyPaths`,
+`walkPackageDependencyPaths`, `walkTypeDependencyPaths`,
+`walkTransitiveDependents`, and `walkImportPaths`. The public query functions
+now contain endpoint validation, traversal setup, and result sorting, while the
+named helpers contain the recursive mechanics. Small private state structs keep
+the coupled graph, target, path-local visited state, duplicate keys, and results
+together without expanding the public API.
+
+The inventory showed common mechanics—depth-first recursion, path-local cycle
+guards restored after each branch, copied path slices, terminal duplicate
+suppression, and deterministic sorting—but materially different semantics.
+Declaration paths traverse the five semantic relationships and identify paths
+by exact step sequence. Package and type paths traverse separate projections,
+carry aggregated exact evidence, and identify paths by their projected symbol
+sequence. Transitive dependents traverse in reverse and group every distinct
+path by dependent. Import-cycle checks traverse only package import edges in
+the proposed target-to-source direction.
+
+No generic walker, callback framework, interface, or generic type was added.
+The explicit policy remains: introduce named query-specific traversal helpers
+first, and consider a shared traversal primitive only if comparison of the
+extracted implementations later demonstrates a real common abstraction that
+makes each query easier to understand rather than merely reducing repeated
+lines.

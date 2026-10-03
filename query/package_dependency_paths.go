@@ -74,43 +74,60 @@ func PackageDependencyPaths(g *graph.Graph, from, to graph.SymbolRef) []PackageD
 	view := packageDependencyView(g)
 	fromID, _ := g.Resolve(from)
 	toID, _ := g.Resolve(to)
-	var paths []PackageDependencyPath
-	pathKeys := make(map[string]bool)
-	seen := map[graph.NodeID]bool{fromID: true}
-
-	var walk func(graph.NodeID, []graph.SymbolRef, []PackageDependency)
-	walk = func(current graph.NodeID, packages []graph.SymbolRef, steps []PackageDependency) {
-		for _, dependency := range view[current] {
-			next := dependency.to
-			if seen[next] {
-				continue
-			}
-			nextNode, exists := g.Node(next)
-			if !exists {
-				continue
-			}
-			nextPackages := append(append([]graph.SymbolRef(nil), packages...), nextNode.Ref)
-			nextSteps := appendPackageDependency(steps, dependency.dependency)
-			if next == toID {
-				key := packageSequenceKey(nextPackages)
-				if !pathKeys[key] {
-					pathKeys[key] = true
-					paths = append(paths, PackageDependencyPath{Packages: nextPackages, Steps: nextSteps})
-				}
-				continue
-			}
-
-			seen[next] = true
-			walk(next, nextPackages, nextSteps)
-			delete(seen, next)
-		}
+	traversal := packageDependencyPathTraversal{
+		graph:    g,
+		view:     view,
+		target:   toID,
+		seen:     map[graph.NodeID]bool{fromID: true},
+		pathKeys: make(map[string]bool),
 	}
-	walk(fromID, []graph.SymbolRef{from}, nil)
+	walkPackageDependencyPaths(&traversal, fromID, []graph.SymbolRef{from}, nil)
 
-	sort.Slice(paths, func(i, j int) bool {
-		return packageSequenceLess(paths[i].Packages, paths[j].Packages)
+	sort.Slice(traversal.paths, func(i, j int) bool {
+		return packageSequenceLess(traversal.paths[i].Packages, traversal.paths[j].Packages)
 	})
-	return paths
+	return traversal.paths
+}
+
+type packageDependencyPathTraversal struct {
+	graph    *graph.Graph
+	view     map[graph.NodeID][]packageDependency
+	target   graph.NodeID
+	seen     map[graph.NodeID]bool
+	pathKeys map[string]bool
+	paths    []PackageDependencyPath
+}
+
+func walkPackageDependencyPaths(
+	traversal *packageDependencyPathTraversal,
+	current graph.NodeID,
+	packages []graph.SymbolRef,
+	steps []PackageDependency,
+) {
+	for _, dependency := range traversal.view[current] {
+		next := dependency.to
+		if traversal.seen[next] {
+			continue
+		}
+		nextNode, exists := traversal.graph.Node(next)
+		if !exists {
+			continue
+		}
+		nextPackages := append(append([]graph.SymbolRef(nil), packages...), nextNode.Ref)
+		nextSteps := appendPackageDependency(steps, dependency.dependency)
+		if next == traversal.target {
+			key := packageSequenceKey(nextPackages)
+			if !traversal.pathKeys[key] {
+				traversal.pathKeys[key] = true
+				traversal.paths = append(traversal.paths, PackageDependencyPath{Packages: nextPackages, Steps: nextSteps})
+			}
+			continue
+		}
+
+		traversal.seen[next] = true
+		walkPackageDependencyPaths(traversal, next, nextPackages, nextSteps)
+		delete(traversal.seen, next)
+	}
 }
 
 func packageDependencyView(g *graph.Graph) map[graph.NodeID][]packageDependency {
