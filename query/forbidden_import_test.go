@@ -2,12 +2,12 @@ package query_test
 
 import (
 	"context"
-	"path/filepath"
 	"reflect"
 	"testing"
 
 	"nocv/goanalyzer"
 	"nocv/graph"
+	"nocv/internal/testutil"
 	"nocv/query"
 )
 
@@ -91,23 +91,23 @@ func TestCheckForbiddenPackageImportValidatesExactPackagesAndSelfEdge(t *testing
 }
 
 func TestCheckForbiddenPackageImportUsesAnalyzerImportFacts(t *testing.T) {
-	g, err := goanalyzer.Load(context.Background(), filepath.Join("..", "goanalyzer", "testdata", "imports"), "./...")
+	g, err := goanalyzer.Load(context.Background(), testutil.GoProjectDir(t), "./imports/...")
 	if err != nil {
 		t.Fatalf("Load(): %v", err)
 	}
 
-	app := graph.SymbolRef("example.com/imports/app")
+	app := graph.SymbolRef("example.com/shop/imports/app")
 	for _, target := range []graph.SymbolRef{
-		"example.com/imports/plugin",     // blank import
-		"example.com/imports/repository", // aliased import
-		"example.com/imports/helpers",    // dot import
+		"example.com/shop/imports/plugin",     // blank import
+		"example.com/shop/imports/repository", // aliased import
+		"example.com/shop/imports/helpers",    // dot import
 	} {
 		violation, exists := query.CheckForbiddenPackageImport(g, app, target)
 		if !exists || len(violation.Evidence) != 1 {
 			t.Errorf("analyzer import %q -> %q = (%#v, %v), want one-evidence violation", app, target, violation, exists)
 		}
 	}
-	service, exists := query.CheckForbiddenPackageImport(g, app, "example.com/imports/service")
+	service, exists := query.CheckForbiddenPackageImport(g, app, "example.com/shop/imports/service")
 	if !exists || len(service.Evidence) != 2 {
 		t.Fatalf("repeated service import = (%#v, %v), want one violation with two evidence locations", service, exists)
 	}

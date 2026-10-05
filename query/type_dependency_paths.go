@@ -73,43 +73,60 @@ func TypeDependencyPaths(g *graph.Graph, from, to graph.SymbolRef) []TypeDepende
 	view := typeDependencyView(g)
 	fromID, _ := g.Resolve(from)
 	toID, _ := g.Resolve(to)
-	var paths []TypeDependencyPath
-	pathKeys := make(map[string]bool)
-	seen := map[graph.NodeID]bool{fromID: true}
-
-	var walk func(graph.NodeID, []graph.SymbolRef, []TypeDependency)
-	walk = func(current graph.NodeID, types []graph.SymbolRef, steps []TypeDependency) {
-		for _, dependency := range view[current] {
-			next := dependency.to
-			if seen[next] {
-				continue
-			}
-			nextNode, exists := g.Node(next)
-			if !exists {
-				continue
-			}
-			nextTypes := append(append([]graph.SymbolRef(nil), types...), nextNode.Ref)
-			nextSteps := appendTypeDependency(steps, dependency.dependency)
-			if next == toID {
-				key := typeSequenceKey(nextTypes)
-				if !pathKeys[key] {
-					pathKeys[key] = true
-					paths = append(paths, TypeDependencyPath{Types: nextTypes, Steps: nextSteps})
-				}
-				continue
-			}
-
-			seen[next] = true
-			walk(next, nextTypes, nextSteps)
-			delete(seen, next)
-		}
+	traversal := typeDependencyPathTraversal{
+		graph:    g,
+		view:     view,
+		target:   toID,
+		seen:     map[graph.NodeID]bool{fromID: true},
+		pathKeys: make(map[string]bool),
 	}
-	walk(fromID, []graph.SymbolRef{from}, nil)
+	walkTypeDependencyPaths(&traversal, fromID, []graph.SymbolRef{from}, nil)
 
-	sort.Slice(paths, func(i, j int) bool {
-		return typeSequenceLess(paths[i].Types, paths[j].Types)
+	sort.Slice(traversal.paths, func(i, j int) bool {
+		return typeSequenceLess(traversal.paths[i].Types, traversal.paths[j].Types)
 	})
-	return paths
+	return traversal.paths
+}
+
+type typeDependencyPathTraversal struct {
+	graph    *graph.Graph
+	view     map[graph.NodeID][]typeDependency
+	target   graph.NodeID
+	seen     map[graph.NodeID]bool
+	pathKeys map[string]bool
+	paths    []TypeDependencyPath
+}
+
+func walkTypeDependencyPaths(
+	traversal *typeDependencyPathTraversal,
+	current graph.NodeID,
+	types []graph.SymbolRef,
+	steps []TypeDependency,
+) {
+	for _, dependency := range traversal.view[current] {
+		next := dependency.to
+		if traversal.seen[next] {
+			continue
+		}
+		nextNode, exists := traversal.graph.Node(next)
+		if !exists {
+			continue
+		}
+		nextTypes := append(append([]graph.SymbolRef(nil), types...), nextNode.Ref)
+		nextSteps := appendTypeDependency(steps, dependency.dependency)
+		if next == traversal.target {
+			key := typeSequenceKey(nextTypes)
+			if !traversal.pathKeys[key] {
+				traversal.pathKeys[key] = true
+				traversal.paths = append(traversal.paths, TypeDependencyPath{Types: nextTypes, Steps: nextSteps})
+			}
+			continue
+		}
+
+		traversal.seen[next] = true
+		walkTypeDependencyPaths(traversal, next, nextTypes, nextSteps)
+		delete(traversal.seen, next)
+	}
 }
 
 func typeDependencyView(g *graph.Graph) map[graph.NodeID][]typeDependency {

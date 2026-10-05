@@ -2,12 +2,12 @@ package query_test
 
 import (
 	"context"
-	"path/filepath"
 	"reflect"
 	"testing"
 
 	"nocv/goanalyzer"
 	"nocv/graph"
+	"nocv/internal/testutil"
 	"nocv/query"
 )
 
@@ -140,25 +140,25 @@ func TestTypeDependencyPathsTraverseDisconnectedMethodsAndPreserveRoutes(t *test
 }
 
 func TestAnalyzerPipelineProjectsTypeView(t *testing.T) {
-	g, err := goanalyzer.Load(context.Background(), filepath.Join("..", "goanalyzer", "testdata", "typeview"), "./...")
+	g, err := goanalyzer.Load(context.Background(), testutil.GoProjectDir(t), "./typeview/...")
 	if err != nil {
 		t.Fatalf("Load(): %v", err)
 	}
 
-	service := graph.SymbolRef("example.com/typeview/service::Service")
-	repository := graph.SymbolRef("example.com/typeview/repository::Repository")
-	store := graph.SymbolRef("example.com/typeview/store::Store")
-	create := graph.SymbolRef("example.com/typeview/service::Service::Create")
-	save := graph.SymbolRef("example.com/typeview/repository::Repository::Save")
-	put := graph.SymbolRef("example.com/typeview/store::Store::Put")
-	run := graph.SymbolRef("example.com/typeview/app::Run")
+	service := graph.SymbolRef("example.com/shop/typeview/service::Service")
+	repository := graph.SymbolRef("example.com/shop/typeview/repository::Repository")
+	store := graph.SymbolRef("example.com/shop/typeview/store::Store")
+	create := graph.SymbolRef("example.com/shop/typeview/service::Service::Create")
+	save := graph.SymbolRef("example.com/shop/typeview/repository::Repository::Save")
+	put := graph.SymbolRef("example.com/shop/typeview/store::Store::Put")
+	run := graph.SymbolRef("example.com/shop/typeview/app::Run")
 
 	dependencies := query.DirectTypeDependencies(g, service)
 	if len(dependencies) != 1 || dependencies[0].To != repository || len(dependencies[0].Evidence) != 3 {
 		t.Fatalf("analyzer Service type dependencies = %#v, want one Repository edge with three facts", dependencies)
 	}
 	for _, evidence := range dependencies[0].Evidence {
-		if evidence.From == "example.com/typeview/service::Service::Internal" {
+		if evidence.From == "example.com/shop/typeview/service::Service::Internal" {
 			t.Errorf("internal same-type call leaked into analyzer type evidence: %#v", evidence)
 		}
 	}
@@ -175,7 +175,7 @@ func TestAnalyzerPipelineProjectsTypeView(t *testing.T) {
 	if exact := query.DependencyPaths(g, create, save); len(exact) != 1 || len(exact[0].Steps) != 1 {
 		t.Fatalf("exact Create -> Save fact changed: %#v", exact)
 	}
-	packagePaths := query.PackageDependencyPaths(g, "example.com/typeview/service", "example.com/typeview/repository")
+	packagePaths := query.PackageDependencyPaths(g, "example.com/shop/typeview/service", "example.com/shop/typeview/repository")
 	if len(packagePaths) != 1 {
 		t.Fatalf("package projection lacks service -> repository: %#v", packagePaths)
 	}

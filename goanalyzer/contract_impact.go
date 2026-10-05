@@ -9,13 +9,13 @@ import (
 	"nocv/query"
 )
 
-func (a *Analysis) contractImpacts(callable resolvedCallable, proposed resolvedSignature) []query.ContractImpact {
+func (a *Analysis) contractImpacts(callable resolvedCallable, proposed resolvedSignature) []ContractImpact {
 	parent, exists := a.graph.Node(callable.node.Parent)
 	if !exists {
 		return nil
 	}
 
-	var impacts []query.ContractImpact
+	var impacts []ContractImpact
 	switch parent.Kind {
 	case graph.NodeStruct:
 		impacts = a.contractsForConcreteMethod(callable, proposed)
@@ -45,8 +45,8 @@ func (a *Analysis) contractImpacts(callable resolvedCallable, proposed resolvedS
 // contractsForConcreteMethod starts with current type-level implementation
 // edges from the method's owning struct. Compiler method-set lookup then proves
 // that the selected declaration supplies a method required by that contract.
-func (a *Analysis) contractsForConcreteMethod(callable resolvedCallable, proposed resolvedSignature) []query.ContractImpact {
-	var result []query.ContractImpact
+func (a *Analysis) contractsForConcreteMethod(callable resolvedCallable, proposed resolvedSignature) []ContractImpact {
+	var result []ContractImpact
 	concreteID := callable.node.Parent
 	concreteNamed := a.symbols.namedTypes[concreteID]
 	if concreteNamed == nil {
@@ -71,8 +71,8 @@ func (a *Analysis) contractsForConcreteMethod(callable resolvedCallable, propose
 			if hypotheticalMethodImplements(callable, proposed, interfaceMethod, implementation) {
 				continue
 			}
-			result = append(result, query.ContractImpact{
-				Kind:            query.ContractImplementationLost,
+			result = append(result, ContractImpact{
+				Kind:            ContractImplementationLost,
 				Concrete:        a.symbolSummary(concreteID),
 				Interface:       a.symbolSummary(edge.To),
 				ConcreteMethod:  a.symbolSummary(callable.node.ID),
@@ -88,8 +88,8 @@ func (a *Analysis) contractsForConcreteMethod(callable resolvedCallable, propose
 // A temporary flattened interface substitutes only the proposed method
 // signature, and go/types rechecks satisfaction against the unchanged concrete
 // method set.
-func (a *Analysis) contractsForInterfaceMethod(callable resolvedCallable, proposed resolvedSignature) []query.ContractImpact {
-	var result []query.ContractImpact
+func (a *Analysis) contractsForInterfaceMethod(callable resolvedCallable, proposed resolvedSignature) []ContractImpact {
+	var result []ContractImpact
 	for _, concrete := range a.graph.Nodes() {
 		if concrete.Kind != graph.NodeStruct {
 			continue
@@ -116,8 +116,8 @@ func (a *Analysis) contractsForInterfaceMethod(callable resolvedCallable, propos
 			if selection := types.NewMethodSet(implementation).Lookup(callable.function.Pkg(), callable.function.Name()); selection != nil {
 				concreteMethod = a.symbolSummaryForObject(selection.Obj())
 			}
-			result = append(result, query.ContractImpact{
-				Kind:            query.ContractImplementationLost,
+			result = append(result, ContractImpact{
+				Kind:            ContractImplementationLost,
 				Concrete:        a.symbolSummary(concrete.ID),
 				Interface:       a.symbolSummary(edge.To),
 				ConcreteMethod:  concreteMethod,
@@ -214,13 +214,13 @@ func (a *Analysis) symbolSummaryForObject(object types.Object) query.SymbolSumma
 	return a.symbolSummary(id)
 }
 
-func uniqueContractImpacts(impacts []query.ContractImpact) []query.ContractImpact {
+func uniqueContractImpacts(impacts []ContractImpact) []ContractImpact {
 	type key struct {
 		concrete graph.SymbolRef
 		iface    graph.SymbolRef
 	}
 	seen := make(map[key]bool, len(impacts))
-	result := make([]query.ContractImpact, 0, len(impacts))
+	result := make([]ContractImpact, 0, len(impacts))
 	for _, impact := range impacts {
 		key := key{
 			concrete: impact.Concrete.Ref,

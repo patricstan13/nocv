@@ -1,0 +1,17 @@
+package broken
+
+import (
+	"example.com/shop/hypothetical/results/model"
+	"example.com/shop/hypothetical/results/repo"
+)
+
+
+var existing int = "existing"
+var added int = false
+
+func consumeUser(model.User) {}
+
+func Example() {
+	u, _ := repo.Find()
+	consumeUser(u)
+}

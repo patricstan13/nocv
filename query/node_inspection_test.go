@@ -2,12 +2,12 @@ package query_test
 
 import (
 	"context"
-	"path/filepath"
 	"reflect"
 	"testing"
 
 	"nocv/goanalyzer"
 	"nocv/graph"
+	"nocv/internal/testutil"
 	"nocv/query"
 )
 
@@ -151,11 +151,11 @@ func TestInspectNodeTypeAndFunctionUseProjectedAndExactSemantics(t *testing.T) {
 }
 
 func TestInspectNodeIntegratesDocumentationAndAnalyzerSemantics(t *testing.T) {
-	documentationGraph, err := goanalyzer.Load(context.Background(), filepath.Join("..", "goanalyzer", "testdata", "documentation"), "./...")
+	documentationGraph, err := goanalyzer.Load(context.Background(), testutil.GoProjectDir(t), "./documentation/...")
 	if err != nil {
 		t.Fatalf("load documentation fixture: %v", err)
 	}
-	const documentationPackage = graph.SymbolRef("example.com/documentation/service")
+	const documentationPackage = graph.SymbolRef("example.com/shop/documentation/service")
 
 	packageInspection, ok := query.InspectNode(documentationGraph, documentationPackage)
 	if !ok || packageInspection.Package == nil || packageInspection.Node.Documentation == "" {
@@ -181,11 +181,11 @@ func TestInspectNodeIntegratesDocumentationAndAnalyzerSemantics(t *testing.T) {
 		t.Fatalf("documented Run inspection = %#v, %v", run, ok)
 	}
 
-	typeGraph, err := goanalyzer.Load(context.Background(), filepath.Join("..", "goanalyzer", "testdata", "typeview"), "./...")
+	typeGraph, err := goanalyzer.Load(context.Background(), testutil.GoProjectDir(t), "./typeview/...")
 	if err != nil {
 		t.Fatalf("load typeview fixture: %v", err)
 	}
-	packageView, ok := query.InspectNode(typeGraph, "example.com/typeview/service")
+	packageView, ok := query.InspectNode(typeGraph, "example.com/shop/typeview/service")
 	if !ok || packageView.Package == nil || len(packageView.Package.Dependencies) != 1 || len(packageView.Package.Dependents) != 1 ||
 		len(packageView.Package.Imports) != 1 || len(packageView.Package.Importers) != 1 {
 		t.Fatalf("typeview package inspection = %#v, %v", packageView, ok)
@@ -193,14 +193,14 @@ func TestInspectNodeIntegratesDocumentationAndAnalyzerSemantics(t *testing.T) {
 	if packageView.Node.Location != (graph.Location{}) {
 		t.Errorf("typeview package inspection has declaration location %#v", packageView.Node.Location)
 	}
-	typeView, ok := query.InspectNode(typeGraph, "example.com/typeview/service::Service")
+	typeView, ok := query.InspectNode(typeGraph, "example.com/shop/typeview/service::Service")
 	if !ok || typeView.Type == nil || len(typeView.Type.Methods) != 3 || len(typeView.Type.Dependencies) != 1 {
 		t.Fatalf("typeview Service inspection = %#v, %v", typeView, ok)
 	}
 	if typeView.Node.Location.File == "" {
 		t.Errorf("typeview Service inspection lost declaration location: %#v", typeView.Node.Location)
 	}
-	functionView, ok := query.InspectNode(typeGraph, "example.com/typeview/service::Service::Create")
+	functionView, ok := query.InspectNode(typeGraph, "example.com/shop/typeview/service::Service::Create")
 	if !ok || functionView.Function == nil || len(functionView.Function.Calls) != 1 || len(functionView.Function.Accepts) != 1 || len(functionView.Function.CalledBy) != 1 {
 		t.Fatalf("typeview Service.Create inspection = %#v, %v", functionView, ok)
 	}
@@ -221,7 +221,7 @@ func TestInspectNodeIsDetachedAndDoesNotChangeExistingQueries(t *testing.T) {
 	beforePackagePaths := query.PackageDependencyPaths(g, ids.pkg, ids.otherPackage)
 	beforeTypePaths := query.TypeDependencyPaths(g, ids.service, ids.repository)
 	beforeExactPaths := query.DependencyPaths(g, ids.serviceCreate, "example.com/other::Repository::Save")
-	beforeImpact := query.Impact(g, "example.com/other::Repository::Save")
+	beforeTransitiveDependents := query.TransitiveDependents(g, "example.com/other::Repository::Save")
 	beforeDrilldown := query.InspectPackageDependency(g, beforePackagePaths[0].Steps[0])
 
 	inspection, ok := query.InspectNode(g, ids.pkg)
@@ -266,7 +266,7 @@ func TestInspectNodeIsDetachedAndDoesNotChangeExistingQueries(t *testing.T) {
 	assertDeepEqual(t, "PackageDependencyPaths", query.PackageDependencyPaths(g, ids.pkg, ids.otherPackage), beforePackagePaths)
 	assertDeepEqual(t, "TypeDependencyPaths", query.TypeDependencyPaths(g, ids.service, ids.repository), beforeTypePaths)
 	assertDeepEqual(t, "DependencyPaths", query.DependencyPaths(g, ids.serviceCreate, "example.com/other::Repository::Save"), beforeExactPaths)
-	assertDeepEqual(t, "Impact", query.Impact(g, "example.com/other::Repository::Save"), beforeImpact)
+	assertDeepEqual(t, "TransitiveDependents", query.TransitiveDependents(g, "example.com/other::Repository::Save"), beforeTransitiveDependents)
 	assertDeepEqual(t, "InspectPackageDependency", query.InspectPackageDependency(g, beforePackagePaths[0].Steps[0]), beforeDrilldown)
 
 	if _, ok := query.InspectNode(nil, ids.pkg); ok {

@@ -23,6 +23,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
+	if invocation.help != "" {
+		fmt.Fprintln(stdout, invocation.help)
+		return 0
+	}
 
 	var analysisStart time.Time
 	if invocation.name == "serve" {
@@ -37,11 +41,23 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "nocv:", err)
 		return 1
 	}
+	writeAnalysisStatusWarning(stderr, analysis)
 	if err := executeCommandWithAnalysis(stdout, analysis.Graph(), analysis, invocation); err != nil {
 		fmt.Fprintln(stderr, "nocv:", err)
 		return 1
 	}
 	return 0
+}
+
+func writeAnalysisStatusWarning(stderr io.Writer, analysis *goanalyzer.Analysis) {
+	if analysis.Status() != goanalyzer.AnalysisPartial {
+		return
+	}
+	packages := make([]string, 0, len(analysis.StatusReasons()))
+	for _, reason := range analysis.StatusReasons() {
+		packages = append(packages, string(reason.Package))
+	}
+	fmt.Fprintf(stderr, "warning: partial analysis; incomplete type information in packages: %s\n", strings.Join(packages, ", "))
 }
 
 func load(pattern string) (*graph.Graph, error) {

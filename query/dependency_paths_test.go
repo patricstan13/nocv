@@ -2,17 +2,17 @@ package query_test
 
 import (
 	"context"
-	"path/filepath"
 	"reflect"
 	"testing"
 
 	"nocv/goanalyzer"
 	"nocv/graph"
+	"nocv/internal/testutil"
 	"nocv/query"
 )
 
 func TestDependencyPathsPreserveAllBranchesKindsAndOrdering(t *testing.T) {
-	g, ids := branchingImpactFixture(t)
+	g, ids := branchingDependentsFixture(t)
 	before := outgoingSnapshot(g)
 
 	want := []query.SemanticPath{
@@ -199,7 +199,7 @@ func TestDependencyPathsRejectInvalidEndpointsAndProjection(t *testing.T) {
 }
 
 func TestAnalyzerPipelineExplainsRunCreateToOrder(t *testing.T) {
-	g, err := goanalyzer.Load(context.Background(), filepath.Join("..", "goanalyzer", "testdata", "project"), "./...")
+	g, err := goanalyzer.Load(context.Background(), testutil.GoProjectDir(t), "./app", "./logging", "./orders", "./repository", "./service")
 	if err != nil {
 		t.Fatalf("Load(): %v", err)
 	}

@@ -3,28 +3,28 @@ package main
 import (
 	"bytes"
 	"context"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
 	"nocv/goanalyzer"
 	"nocv/graph"
+	"nocv/internal/testutil"
 	"nocv/query"
 )
 
 func TestDependencyInspectionDrillsThroughMixedTransitiveFixture(t *testing.T) {
-	g, err := goanalyzer.Load(context.Background(), filepath.Join("..", "..", "goanalyzer", "testdata", "typeview"), "./...")
+	g, err := goanalyzer.Load(context.Background(), testutil.GoProjectDir(t), "./typeview/...")
 	if err != nil {
 		t.Fatalf("Load(): %v", err)
 	}
-	app := graph.SymbolRef("example.com/typeview/app")
-	repository := graph.SymbolRef("example.com/typeview/repository")
-	serviceType := graph.SymbolRef("example.com/typeview/service::Service")
+	app := graph.SymbolRef("example.com/shop/typeview/app")
+	repository := graph.SymbolRef("example.com/shop/typeview/repository")
+	serviceType := graph.SymbolRef("example.com/shop/typeview/service::Service")
 
 	beforePackages := query.PackageDependencyPaths(g, app, repository)
 	beforeTypes := query.DirectTypeDependencies(g, serviceType)
-	beforeExact := query.DirectDependencies(g, "example.com/typeview/service::Service::Create")
+	beforeExact := query.DirectDependencies(g, "example.com/shop/typeview/service::Service::Create")
 
 	var first bytes.Buffer
 	printDependencyInspection(&first, g, app, repository)
@@ -33,10 +33,10 @@ func TestDependencyInspectionDrillsThroughMixedTransitiveFixture(t *testing.T) {
 		"Dependency inspection:",
 		"PACKAGE PATH 1",
 		"PACKAGE PATH 2",
-		"example.com/typeview/app -> example.com/typeview/service",
-		"example.com/typeview/service -> example.com/typeview/repository",
-		"example.com/typeview/app::Run calls -> example.com/typeview/service::Service::Create",
-		"example.com/typeview/service::Service -> example.com/typeview/repository::Repository",
+		"example.com/shop/typeview/app -> example.com/shop/typeview/service",
+		"example.com/shop/typeview/service -> example.com/shop/typeview/repository",
+		"example.com/shop/typeview/app::Run calls -> example.com/shop/typeview/service::Service::Create",
+		"example.com/shop/typeview/service::Service -> example.com/shop/typeview/repository::Repository",
 		"TYPE",
 		"EXACT ONLY",
 	} {
@@ -44,11 +44,11 @@ func TestDependencyInspectionDrillsThroughMixedTransitiveFixture(t *testing.T) {
 			t.Errorf("inspection output lacks %q:\n%s", want, output)
 		}
 	}
-	packageOnly := "example.com/typeview/app::Run calls -> example.com/typeview/service::Service::Create"
+	packageOnly := "example.com/shop/typeview/app::Run calls -> example.com/shop/typeview/service::Service::Create"
 	if count := strings.Count(output, packageOnly); count != 1 {
 		t.Errorf("package-function evidence rendered %d times, want only package evidence once:\n%s", count, output)
 	}
-	typeBacked := "example.com/typeview/service::Service::Create calls -> example.com/typeview/repository::Repository::Save"
+	typeBacked := "example.com/shop/typeview/service::Service::Create calls -> example.com/shop/typeview/repository::Repository::Save"
 	if count := strings.Count(output, typeBacked); count != 1 {
 		t.Errorf("type-backed evidence rendered %d times, want one classified occurrence:\n%s", count, output)
 	}
@@ -67,7 +67,7 @@ func TestDependencyInspectionDrillsThroughMixedTransitiveFixture(t *testing.T) {
 	if after := query.DirectTypeDependencies(g, serviceType); !reflect.DeepEqual(after, beforeTypes) {
 		t.Fatalf("type dependencies changed after inspection: %#v", after)
 	}
-	if after := query.DirectDependencies(g, "example.com/typeview/service::Service::Create"); !reflect.DeepEqual(after, beforeExact) {
+	if after := query.DirectDependencies(g, "example.com/shop/typeview/service::Service::Create"); !reflect.DeepEqual(after, beforeExact) {
 		t.Fatalf("exact dependencies changed after inspection: %#v", after)
 	}
 }
@@ -125,13 +125,13 @@ func TestDependencyInspectionStopsWhenNoPackageDependencyExists(t *testing.T) {
 }
 
 func TestNodeInspectionOmitsPackageLocationButKeepsDeclarationLocations(t *testing.T) {
-	g, err := goanalyzer.Load(context.Background(), filepath.Join("..", "..", "goanalyzer", "testdata", "typeview"), "./...")
+	g, err := goanalyzer.Load(context.Background(), testutil.GoProjectDir(t), "./typeview/...")
 	if err != nil {
 		t.Fatalf("Load(): %v", err)
 	}
 
 	var packageOutput bytes.Buffer
-	printNodeInspection(&packageOutput, g, "example.com/typeview/service")
+	printNodeInspection(&packageOutput, g, "example.com/shop/typeview/service")
 	if !strings.Contains(packageOutput.String(), "Kind:\n  package") {
 		t.Fatalf("package inspection lacks package kind:\n%s", packageOutput.String())
 	}
@@ -140,8 +140,8 @@ func TestNodeInspectionOmitsPackageLocationButKeepsDeclarationLocations(t *testi
 	}
 
 	for _, id := range []graph.SymbolRef{
-		"example.com/typeview/service::Service",
-		"example.com/typeview/service::Service::Create",
+		"example.com/shop/typeview/service::Service",
+		"example.com/shop/typeview/service::Service::Create",
 	} {
 		var declarationOutput bytes.Buffer
 		printNodeInspection(&declarationOutput, g, id)

@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"golang.org/x/tools/go/packages"
+
+	"nocv/internal/testutil"
 )
 
 const hypotheticalLoadMode = packages.NeedName |
@@ -41,7 +43,7 @@ type packageLoad struct {
 
 func TestOverlayResultChangeAllowsValidInferredPointer(t *testing.T) {
 	dir := resultFixtureDir(t)
-	patterns := []string{"example.com/hypothetical/repo", "example.com/hypothetical/valid"}
+	patterns := []string{"example.com/shop/hypothetical/results/repo", "example.com/shop/hypothetical/results/valid"}
 	baseline := loadForSpike(t, dir, patterns, nil)
 	requireNoDiagnostics(t, "baseline", baseline.Diagnostics)
 
@@ -54,7 +56,7 @@ func TestOverlayResultChangeAllowsValidInferredPointer(t *testing.T) {
 
 func TestOverlayResultChangeFindsDownstreamInferredTypeFailures(t *testing.T) {
 	dir := resultFixtureDir(t)
-	patterns := []string{"example.com/hypothetical/repo", "example.com/hypothetical/failure"}
+	patterns := []string{"example.com/shop/hypothetical/results/repo", "example.com/shop/hypothetical/results/failure"}
 	baseline := loadForSpike(t, dir, patterns, nil)
 	requireNoDiagnostics(t, "baseline", baseline.Diagnostics)
 
@@ -63,13 +65,13 @@ func TestOverlayResultChangeFindsDownstreamInferredTypeFailures(t *testing.T) {
 	if len(delta) < 4 {
 		t.Fatalf("new diagnostics = %d, want downstream inference, assignment, forwarding, and tuple failures:\n%s", len(delta), formatDiagnostics(delta))
 	}
-	assertDiagnosticPackages(t, delta, "example.com/hypothetical/failure")
+	assertDiagnosticPackages(t, delta, "example.com/shop/hypothetical/results/failure")
 	assertDiagnosticContains(t, delta, "cannot use")
 }
 
 func TestOverlayResultChangeAllowsCompatibleForwarding(t *testing.T) {
 	dir := resultFixtureDir(t)
-	patterns := []string{"example.com/hypothetical/repo", "example.com/hypothetical/compatibleforward"}
+	patterns := []string{"example.com/shop/hypothetical/results/repo", "example.com/shop/hypothetical/results/compatibleforward"}
 	baseline := loadForSpike(t, dir, patterns, nil)
 	requireNoDiagnostics(t, "baseline", baseline.Diagnostics)
 
@@ -94,7 +96,7 @@ func TestOverlayResultChangeFindsResultShapeFailures(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			patterns := []string{"example.com/hypothetical/repo", "example.com/hypothetical/" + test.consumer}
+			patterns := []string{"example.com/shop/hypothetical/results/repo", "example.com/shop/hypothetical/results/" + test.consumer}
 			baseline := loadForSpike(t, dir, patterns, nil)
 			requireNoDiagnostics(t, "baseline", baseline.Diagnostics)
 			changed := loadForSpike(t, dir, patterns, resultOverlay(t, dir, test.mutation))
@@ -102,7 +104,7 @@ func TestOverlayResultChangeFindsResultShapeFailures(t *testing.T) {
 			if len(delta) != test.want {
 				t.Fatalf("overlay produced %d new diagnostics, want %d:\n%s", len(delta), test.want, formatDiagnostics(delta))
 			}
-			assertDiagnosticPackages(t, delta, "example.com/hypothetical/"+test.consumer)
+			assertDiagnosticPackages(t, delta, "example.com/shop/hypothetical/results/"+test.consumer)
 		})
 	}
 }
@@ -110,7 +112,7 @@ func TestOverlayResultChangeFindsResultShapeFailures(t *testing.T) {
 func TestOverlayResultChangeUsesCompilerForArgumentsAndInterfaces(t *testing.T) {
 	dir := resultFixtureDir(t)
 
-	argumentPatterns := []string{"example.com/hypothetical/repo", "example.com/hypothetical/argument"}
+	argumentPatterns := []string{"example.com/shop/hypothetical/results/repo", "example.com/shop/hypothetical/results/argument"}
 	argumentBaseline := loadForSpike(t, dir, argumentPatterns, nil)
 	requireNoDiagnostics(t, "argument baseline", argumentBaseline.Diagnostics)
 	argumentChanged := loadForSpike(t, dir, argumentPatterns, resultOverlay(t, dir, "single_pointer.go.txt"))
@@ -119,7 +121,7 @@ func TestOverlayResultChangeUsesCompilerForArgumentsAndInterfaces(t *testing.T) 
 		t.Fatalf("argument delta = %d, want only the concrete User consumer to fail:\n%s", len(argumentDelta), formatDiagnostics(argumentDelta))
 	}
 
-	interfacePatterns := []string{"example.com/hypothetical/repo", "example.com/hypothetical/interfaces"}
+	interfacePatterns := []string{"example.com/shop/hypothetical/results/repo", "example.com/shop/hypothetical/results/interfaces"}
 	interfaceBaseline := loadForSpike(t, dir, interfacePatterns, nil)
 	requireNoDiagnostics(t, "interface baseline", interfaceBaseline.Diagnostics)
 	stillAssignable := loadForSpike(t, dir, interfacePatterns, resultOverlay(t, dir, "single_pointer.go.txt"))
@@ -136,9 +138,9 @@ func TestOverlayResultChangeUsesCompilerForArgumentsAndInterfaces(t *testing.T) 
 func TestOverlayResultChangeStopsAtFirstCascadingBoundary(t *testing.T) {
 	dir := resultFixtureDir(t)
 	patterns := []string{
-		"example.com/hypothetical/repo",
-		"example.com/hypothetical/cascade/service",
-		"example.com/hypothetical/cascade/api",
+		"example.com/shop/hypothetical/results/repo",
+		"example.com/shop/hypothetical/results/cascade/service",
+		"example.com/shop/hypothetical/results/cascade/api",
 	}
 	baseline := loadForSpike(t, dir, patterns, nil)
 	requireNoDiagnostics(t, "baseline", baseline.Diagnostics)
@@ -147,12 +149,12 @@ func TestOverlayResultChangeStopsAtFirstCascadingBoundary(t *testing.T) {
 	if len(delta) == 0 {
 		t.Fatal("overlay produced no forwarding diagnostic")
 	}
-	assertDiagnosticPackages(t, delta, "example.com/hypothetical/cascade/service")
+	assertDiagnosticPackages(t, delta, "example.com/shop/hypothetical/results/cascade/service")
 }
 
 func TestDiagnosticDeltaIgnoresBaselineErrors(t *testing.T) {
-	dir := resultFixtureDir(t)
-	patterns := []string{"example.com/hypothetical/repo", "example.com/hypothetical/broken"}
+	dir := dirtyResultFixtureDir(t)
+	patterns := []string{"example.com/shop/hypothetical/results/repo", "example.com/shop/hypothetical/results/broken"}
 	baseline := loadForSpike(t, dir, patterns, nil)
 	if len(baseline.Diagnostics) != 1 {
 		t.Fatalf("baseline diagnostics = %d, want the deliberate existing error:\n%s", len(baseline.Diagnostics), formatDiagnostics(baseline.Diagnostics))
@@ -167,15 +169,15 @@ func TestDiagnosticDeltaIgnoresBaselineErrors(t *testing.T) {
 }
 
 func TestDiagnosticIdentityMovesWithSourcePositions(t *testing.T) {
-	dir := resultFixtureDir(t)
-	patterns := []string{"example.com/hypothetical/broken"}
+	dir := dirtyResultFixtureDir(t)
+	patterns := []string{"example.com/shop/hypothetical/results/broken"}
 	baseline := loadForSpike(t, dir, patterns, nil)
 	if len(baseline.Diagnostics) != 1 {
 		t.Fatalf("baseline diagnostics = %d, want 1", len(baseline.Diagnostics))
 	}
 
-	mutation := readFixture(t, filepath.Join(dir, "mutations", "broken_shift.go.txt"))
-	target := absolutePath(t, filepath.Join(dir, "broken", "broken.go"))
+	mutation := readFixture(t, filepath.Join(dir, "overlays", "results", "broken_shift.go.txt"))
+	target := absolutePath(t, filepath.Join(dir, "hypothetical", "results", "broken", "broken.go"))
 	changed := loadForSpike(t, dir, patterns, map[string][]byte{target: mutation})
 	exact := diagnosticDelta(baseline.Diagnostics, changed.Diagnostics)
 	messageOnly := diagnosticMessageDelta(baseline.Diagnostics, changed.Diagnostics)
@@ -187,38 +189,37 @@ func TestDiagnosticIdentityMovesWithSourcePositions(t *testing.T) {
 }
 
 func TestAffectedPackagesUsesReverseImportClosure(t *testing.T) {
-	dir := absolutePath(t, filepath.Join("testdata", "hypothetical", "closure"))
-	loaded := loadForSpike(t, dir, []string{"./..."}, nil)
+	dir := testutil.GoProjectDir(t)
+	loaded := loadForSpike(t, dir, []string{"./hypothetical/closure/..."}, nil)
 	requireNoDiagnostics(t, "closure fixture", loaded.Diagnostics)
 
-	got := affectedPackagePaths(loaded.Packages, "example.com/closure/repo")
+	got := affectedPackagePaths(loaded.Packages, "example.com/shop/hypothetical/closure/repo")
 	want := []string{
-		"example.com/closure/api",
-		"example.com/closure/repo",
-		"example.com/closure/service",
-		"example.com/closure/worker",
+		"example.com/shop/hypothetical/closure/api",
+		"example.com/shop/hypothetical/closure/repo",
+		"example.com/shop/hypothetical/closure/service",
+		"example.com/shop/hypothetical/closure/worker",
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("affected packages = %v, want %v", got, want)
 	}
-	if slices.Contains(got, "example.com/closure/unrelated") {
+	if slices.Contains(got, "example.com/shop/hypothetical/closure/unrelated") {
 		t.Fatal("unrelated package entered reverse import closure")
 	}
 	t.Logf("overlay reload patterns: %s", strings.Join(got, ", "))
 }
 
-func TestOverlayRecheckImpactdemoTimings(t *testing.T) {
-	root := absolutePath(t, "..")
-	dir := filepath.Join(root, "examples", "impactdemo")
-	targetFile := filepath.Join(dir, "repository", "repository.go")
+func TestOverlayRecheckCanonicalProjectTimings(t *testing.T) {
+	dir := testutil.GoProjectDir(t)
+	targetFile := filepath.Join(dir, "impact", "repository", "repository.go")
 	runRealProjectTiming(
 		t,
-		"impactdemo",
+		"canonical project",
 		dir,
-		"example.com/impactdemo/repository",
+		"example.com/shop/impact/repository",
 		targetFile,
-		readFixture(t, filepath.Join("testdata", "hypothetical", "real", "impactdemo_repository_pointer.go.txt")),
-		readFixture(t, filepath.Join("testdata", "hypothetical", "real", "impactdemo_repository_bool.go.txt")),
+		readFixture(t, filepath.Join(dir, "overlays", "impact", "repository_pointer.go.txt")),
+		readFixture(t, filepath.Join(dir, "overlays", "impact", "repository_bool.go.txt")),
 	)
 }
 
@@ -231,8 +232,8 @@ func TestOverlayRecheckNOCVTimings(t *testing.T) {
 		dir,
 		"nocv/query",
 		targetFile,
-		readFixture(t, filepath.Join("testdata", "hypothetical", "real", "nocv_imports_any.go.txt")),
-		readFixture(t, filepath.Join("testdata", "hypothetical", "real", "nocv_imports_pointer_slice.go.txt")),
+		readFixture(t, filepath.Join("testdata", "overlays", "nocv", "imports_any.go.txt")),
+		readFixture(t, filepath.Join("testdata", "overlays", "nocv", "imports_pointer_slice.go.txt")),
 	)
 }
 
@@ -398,13 +399,18 @@ func affectedPackagePaths(pkgs []*packages.Package, target string) []string {
 
 func resultFixtureDir(t *testing.T) string {
 	t.Helper()
-	return absolutePath(t, filepath.Join("testdata", "hypothetical", "results"))
+	return testutil.GoProjectDir(t)
+}
+
+func dirtyResultFixtureDir(t *testing.T) string {
+	t.Helper()
+	return signatureFixtureDir(t, "dirty-results")
 }
 
 func resultOverlay(t *testing.T, dir, mutation string) map[string][]byte {
 	t.Helper()
-	target := absolutePath(t, filepath.Join(dir, "repo", "find.go"))
-	return map[string][]byte{target: readFixture(t, filepath.Join(dir, "mutations", mutation))}
+	target := absolutePath(t, filepath.Join(dir, "hypothetical", "results", "repo", "find.go"))
+	return map[string][]byte{target: readFixture(t, filepath.Join(dir, "overlays", "results", mutation))}
 }
 
 func readFixture(t *testing.T, path string) []byte {

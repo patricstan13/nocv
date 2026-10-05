@@ -21,6 +21,16 @@ type packageGraph struct {
 	Edges []packageEdge `json:"edges"`
 }
 
+type analysisStatus struct {
+	Status  string                 `json:"status"`
+	Reasons []analysisStatusReason `json:"reasons"`
+}
+
+type analysisStatusReason struct {
+	Kind    string          `json:"kind"`
+	Package graph.SymbolRef `json:"package"`
+}
+
 type packageNode struct {
 	ID    graph.SymbolRef `json:"id"`
 	Label string          `json:"label"`
@@ -139,6 +149,13 @@ func graphHandler(g *graph.Graph) http.Handler {
 
 func handler(analysis *goanalyzer.Analysis, g *graph.Graph) http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", getOnly(func(w http.ResponseWriter, _ *http.Request) {
+		if analysis == nil {
+			writeError(w, http.StatusInternalServerError, "analysis is unavailable")
+			return
+		}
+		writeJSON(w, http.StatusOK, presentAnalysisStatus(analysis))
+	}))
 	mux.HandleFunc("/api/packages", getOnly(func(w http.ResponseWriter, _ *http.Request) {
 		if g == nil {
 			writeError(w, http.StatusInternalServerError, "graph is unavailable")
@@ -171,7 +188,7 @@ func handler(analysis *goanalyzer.Analysis, g *graph.Graph) http.Handler {
 			writeError(w, http.StatusNotFound, "node not found")
 			return
 		}
-		var signature *query.CallableSignature
+		var signature *goanalyzer.CallableSignature
 		if inspection.Function != nil && analysis != nil {
 			current, err := analysis.CallableSignature(id)
 			if err != nil {
@@ -228,6 +245,20 @@ func handler(analysis *goanalyzer.Analysis, g *graph.Graph) http.Handler {
 	return mux
 }
 
+func presentAnalysisStatus(analysis *goanalyzer.Analysis) analysisStatus {
+	result := analysisStatus{
+		Status:  analysis.Status().String(),
+		Reasons: []analysisStatusReason{},
+	}
+	for _, reason := range analysis.StatusReasons() {
+		result.Reasons = append(result.Reasons, analysisStatusReason{
+			Kind:    reason.Kind.String(),
+			Package: reason.Package,
+		})
+	}
+	return result
+}
+
 func getOnly(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -252,7 +283,7 @@ func edgeID(from, to graph.SymbolRef) string {
 	return fmt.Sprintf("%d:%s>%d:%s", len(from), from, len(to), to)
 }
 
-func presentNodeInspection(g *graph.Graph, source query.NodeInspection, signature *query.CallableSignature) nodeInspection {
+func presentNodeInspection(g *graph.Graph, source query.NodeInspection, signature *goanalyzer.CallableSignature) nodeInspection {
 	result := nodeInspection{Node: presentNode(g, source.Node)}
 	if source.Package != nil {
 		result.Package = &packageInspection{

@@ -21,47 +21,57 @@ func DependencyPaths(g *graph.Graph, from, to graph.SymbolRef) []SemanticPath {
 		return nil
 	}
 
-	var paths []SemanticPath
-	pathKeys := make(map[string]bool)
-	seen := map[graph.NodeID]bool{fromID: true}
-
-	var walk func(graph.NodeID, []SemanticStep)
-	walk = func(current graph.NodeID, steps []SemanticStep) {
-		for _, edge := range g.Outgoing(current, directDependencyKinds...) {
-			next := edge.To
-			if seen[next] {
-				continue
-			}
-			fromNode, fromExists := g.Node(edge.From)
-			toNode, toExists := g.Node(edge.To)
-			if !fromExists || !toExists {
-				continue
-			}
-
-			nextSteps := append([]SemanticStep(nil), steps...)
-			nextSteps = append(nextSteps, SemanticStep{
-				From: fromNode.Ref,
-				To:   toNode.Ref,
-				Kind: edge.Kind,
-			})
-			if next == toID {
-				key := semanticPathKey(nextSteps)
-				if !pathKeys[key] {
-					pathKeys[key] = true
-					paths = append(paths, SemanticPath{Steps: nextSteps})
-				}
-				continue
-			}
-
-			seen[next] = true
-			walk(next, nextSteps)
-			delete(seen, next)
-		}
+	traversal := dependencyPathTraversal{
+		graph:    g,
+		target:   toID,
+		seen:     map[graph.NodeID]bool{fromID: true},
+		pathKeys: make(map[string]bool),
 	}
-	walk(fromID, nil)
+	walkDependencyPaths(&traversal, fromID, nil)
 
-	sort.Slice(paths, func(i, j int) bool {
-		return semanticPathLess(paths[i], paths[j])
+	sort.Slice(traversal.paths, func(i, j int) bool {
+		return semanticPathLess(traversal.paths[i], traversal.paths[j])
 	})
-	return paths
+	return traversal.paths
+}
+
+type dependencyPathTraversal struct {
+	graph    *graph.Graph
+	target   graph.NodeID
+	seen     map[graph.NodeID]bool
+	pathKeys map[string]bool
+	paths    []SemanticPath
+}
+
+func walkDependencyPaths(traversal *dependencyPathTraversal, current graph.NodeID, steps []SemanticStep) {
+	for _, edge := range traversal.graph.Outgoing(current, directDependencyKinds...) {
+		next := edge.To
+		if traversal.seen[next] {
+			continue
+		}
+		fromNode, fromExists := traversal.graph.Node(edge.From)
+		toNode, toExists := traversal.graph.Node(edge.To)
+		if !fromExists || !toExists {
+			continue
+		}
+
+		nextSteps := append([]SemanticStep(nil), steps...)
+		nextSteps = append(nextSteps, SemanticStep{
+			From: fromNode.Ref,
+			To:   toNode.Ref,
+			Kind: edge.Kind,
+		})
+		if next == traversal.target {
+			key := semanticPathKey(nextSteps)
+			if !traversal.pathKeys[key] {
+				traversal.pathKeys[key] = true
+				traversal.paths = append(traversal.paths, SemanticPath{Steps: nextSteps})
+			}
+			continue
+		}
+
+		traversal.seen[next] = true
+		walkDependencyPaths(traversal, next, nextSteps)
+		delete(traversal.seen, next)
+	}
 }

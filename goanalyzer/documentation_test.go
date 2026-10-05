@@ -2,21 +2,21 @@ package goanalyzer
 
 import (
 	"context"
-	"path/filepath"
 	"reflect"
 	"testing"
 
 	"nocv/graph"
+	"nocv/internal/testutil"
 )
 
 func TestLoadAttachesDeclarationDocumentation(t *testing.T) {
-	dir := filepath.Join("testdata", "documentation")
-	g, err := Load(context.Background(), dir, "./...")
+	dir := testutil.GoProjectDir(t)
+	g, err := Load(context.Background(), dir, "./documentation/...")
 	if err != nil {
 		t.Fatalf("Load(): %v", err)
 	}
 
-	const pkg = graph.SymbolRef("example.com/documentation/service")
+	const pkg = graph.SymbolRef("example.com/shop/documentation/service")
 	want := map[graph.SymbolRef]struct {
 		kind          graph.NodeKind
 		parent        graph.SymbolRef
@@ -117,7 +117,7 @@ func TestLoadAttachesDeclarationDocumentation(t *testing.T) {
 	assertDocumentationEdge(t, g, pkg+"::PostgresRepository", pkg+"::Repository", graph.EdgeImplements)
 	assertDocumentationEdge(t, g, pkg+"::PostgresRepository::Save", pkg+"::Repository::Save", graph.EdgeImplements)
 
-	again, err := Load(context.Background(), dir, "./...")
+	again, err := Load(context.Background(), dir, "./documentation/...")
 	if err != nil {
 		t.Fatalf("second Load(): %v", err)
 	}

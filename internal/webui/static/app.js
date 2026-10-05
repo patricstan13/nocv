@@ -2,6 +2,7 @@
   "use strict";
 
   const inspector = document.getElementById("inspector");
+  const analysisStatusIndicator = document.getElementById("analysis-status");
   const networkElement = document.getElementById("network");
   const typeNetworkElement = document.getElementById("type-network");
   const typeContext = document.getElementById("type-context");
@@ -1025,6 +1026,17 @@
       element("p", error.message, "error"),
     ]);
   }
+
+  function renderAnalysisStatus(result) {
+    if (result.status !== "partial") return;
+    const affectedPackages = (result.reasons || []).map((reason) => reason.package);
+    analysisStatusIndicator.textContent = "Partial analysis";
+    analysisStatusIndicator.title = "Some semantic relationships may be missing because type information was incomplete" +
+      (affectedPackages.length > 0 ? " in: " + affectedPackages.join(", ") : ".");
+    analysisStatusIndicator.hidden = false;
+  }
+
+  getJSON("/api/status").then(renderAnalysisStatus).catch(() => {});
 
   getJSON("/api/packages").then((data) => {
     const packageNodes = data.nodes.slice();

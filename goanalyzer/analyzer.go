@@ -22,11 +22,13 @@ import (
 // language-specific queries. Compiler objects never enter the graph or query
 // read models.
 type Analysis struct {
-	graph    *graph.Graph
-	packages []*packages.Package
-	symbols  *symbolIndex
-	loadDir  string
-	loadMode packages.LoadMode
+	graph         *graph.Graph
+	packages      []*packages.Package
+	symbols       *symbolIndex
+	loadDir       string
+	loadMode      packages.LoadMode
+	status        AnalysisStatus
+	statusReasons []AnalysisStatusReason
 }
 
 // Graph returns the language-independent graph produced by this analysis.
@@ -76,8 +78,16 @@ func LoadAnalysis(ctx context.Context, dir string, patterns ...string) (*Analysi
 	if err != nil {
 		return nil, fmt.Errorf("load Go packages: %w", err)
 	}
+	if len(pkgs) == 0 {
+		return nil, fmt.Errorf("load Go packages: no packages matched %q", strings.Join(patterns, ", "))
+	}
 	if err := packageErrors(pkgs); err != nil {
 		return nil, err
+	}
+	statusReasons := analysisStatusReasons(pkgs)
+	status := AnalysisComplete
+	if len(statusReasons) > 0 {
+		status = AnalysisPartial
 	}
 
 	sort.Slice(pkgs, func(i, j int) bool { return pkgs[i].PkgPath < pkgs[j].PkgPath })
@@ -111,7 +121,15 @@ func LoadAnalysis(ctx context.Context, dir string, patterns ...string) (*Analysi
 	if err := addImplementations(g, symbols); err != nil {
 		return nil, fmt.Errorf("analyze interface implementations: %w", err)
 	}
-	return &Analysis{graph: g, packages: pkgs, symbols: symbols, loadDir: loadDir, loadMode: loadMode}, nil
+	return &Analysis{
+		graph:         g,
+		packages:      pkgs,
+		symbols:       symbols,
+		loadDir:       loadDir,
+		loadMode:      loadMode,
+		status:        status,
+		statusReasons: statusReasons,
+	}, nil
 }
 
 func addImports(g *graph.Graph, pkg *packages.Package) error {

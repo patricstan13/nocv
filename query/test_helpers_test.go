@@ -53,3 +53,13 @@ func addTestEdge(g *graph.Graph, edge testEdge) error {
 		Evidence: append([]graph.Location(nil), edge.Evidence...),
 	})
 }
+
+func outgoingSnapshot(g *graph.Graph) map[graph.SymbolRef][]*graph.Edge {
+	snapshot := make(map[graph.SymbolRef][]*graph.Edge)
+	for _, node := range g.Nodes() {
+		if edges := g.Outgoing(node.ID); len(edges) > 0 {
+			snapshot[node.Ref] = edges
+		}
+	}
+	return snapshot
+}
