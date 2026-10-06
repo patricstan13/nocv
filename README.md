@@ -98,7 +98,7 @@ and interface methods. Each node has:
 - a deterministic textual reference used by the CLI and web API, such as
   `nocv/query::DirectDependencies`.
 
-It records six relationship kinds:
+It records seven relationship kinds:
 
 | Relationship | Meaning |
 |---|---|
@@ -107,9 +107,10 @@ It records six relationship kinds:
 | `Embeds` | a represented struct or interface embeds another represented type |
 | `Accepts` | a callable directly accepts a represented type |
 | `Returns` | a callable directly returns a represented type |
+| `FieldType` | a named, non-embedded struct field contains a represented type |
 | `Imports` | one represented Go package directly imports another |
 
-The first five relationships form NOCV's semantic dependency view. `Imports`
+The first six relationships form NOCV's semantic dependency view. `Imports`
 is deliberately separate: source imports and semantic reliance answer different
 questions.
 
@@ -143,7 +144,7 @@ nocv
         └── dependency-paths
 ```
 
-`node` operates on exact graph entities and the five semantic relationships.
+`node` operates on exact graph entities and the six semantic relationships.
 Unqualified dependencies and dependents are immediate; transitive traversal is
 named explicitly. `go package` and `go type` contain operations whose meaning
 depends on Go imports, package boundaries, and struct/interface method

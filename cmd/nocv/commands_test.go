@@ -81,9 +81,9 @@ func TestScopedHelpIsDiscoverableWithoutLoading(t *testing.T) {
 		want []string
 	}{
 		{args: []string{"--help"}, want: []string{"serve <pattern>", "tree <pattern>", "node ...", "go ..."}},
-		{args: []string{"node", "--help"}, want: []string{"represented graph entity", "dependencies and dependents are immediate", "transitive-dependents", "dependency-paths", "inspect"}},
+		{args: []string{"node", "--help"}, want: []string{"represented graph entity", "dependencies and dependents are immediate", "FieldType", "transitive-dependents", "dependency-paths", "inspect"}},
 		{args: []string{"go", "--help"}, want: []string{"Go-specific semantic operations", "package", "type"}},
-		{args: []string{"go", "package", "--help"}, want: []string{"direct Go import relationships", "imports are not included", "inspect-dependency", "check-import-cycle"}},
+		{args: []string{"go", "package", "--help"}, want: []string{"direct Go import relationships", "FieldType", "imports are not included", "inspect-dependency", "check-import-cycle"}},
 		{args: []string{"go", "type", "--help"}, want: []string{"structs, interfaces", "Package functions do not participate", "dependency-paths"}},
 	}
 	for _, test := range tests {

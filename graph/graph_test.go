@@ -138,6 +138,8 @@ func TestEdgesValidateKindsAggregateEvidenceAndCopyResults(t *testing.T) {
 		{From: childIface, To: iface, Kind: EdgeEmbeds, Evidence: evidence},
 		{From: function, To: structure, Kind: EdgeAccepts, Evidence: evidence},
 		{From: function, To: iface, Kind: EdgeReturns, Evidence: evidence},
+		{From: structure, To: base, Kind: EdgeFieldType, Evidence: evidence},
+		{From: structure, To: iface, Kind: EdgeFieldType, Evidence: evidence},
 		{From: pkg, To: otherPkg, Kind: EdgeImports, Evidence: evidence},
 	}
 	for _, edge := range valid {
@@ -167,6 +169,10 @@ func TestEdgesValidateKindsAggregateEvidenceAndCopyResults(t *testing.T) {
 		{From: structure, To: iface, Kind: EdgeEmbeds, Evidence: evidence},
 		{From: structure, To: iface, Kind: EdgeAccepts, Evidence: evidence},
 		{From: function, To: callee, Kind: EdgeReturns, Evidence: evidence},
+		{From: function, To: structure, Kind: EdgeFieldType, Evidence: evidence},
+		{From: iface, To: structure, Kind: EdgeFieldType, Evidence: evidence},
+		{From: pkg, To: structure, Kind: EdgeFieldType, Evidence: evidence},
+		{From: structure, To: function, Kind: EdgeFieldType, Evidence: evidence},
 		{From: function, To: otherPkg, Kind: EdgeImports, Evidence: evidence},
 		{From: pkg, To: otherPkg, Kind: EdgeKind(99), Evidence: evidence},
 	}

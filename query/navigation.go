@@ -21,6 +21,7 @@ var directDependencyKinds = []graph.EdgeKind{
 	graph.EdgeEmbeds,
 	graph.EdgeAccepts,
 	graph.EdgeReturns,
+	graph.EdgeFieldType,
 }
 
 // DirectDependencies returns supported semantic relationships leaving id.

@@ -69,6 +69,7 @@ const (
 	EdgeEmbeds
 	EdgeAccepts
 	EdgeReturns
+	EdgeFieldType
 	EdgeImports
 )
 
@@ -85,6 +86,8 @@ func (k EdgeKind) String() string {
 		return "accepts"
 	case EdgeReturns:
 		return "returns"
+	case EdgeFieldType:
+		return "field type"
 	case EdgeImports:
 		return "imports"
 	default:
@@ -304,6 +307,16 @@ func (g *Graph) AddEdge(edge Edge) error {
 			return fmt.Errorf(
 				"%s edge %d -> %d must connect function -> struct or function -> interface",
 				edge.Kind,
+				edge.From,
+				edge.To,
+			)
+		}
+
+	case EdgeFieldType:
+		validTarget := to.Kind == NodeStruct || to.Kind == NodeInterface
+		if from.Kind != NodeStruct || !validTarget {
+			return fmt.Errorf(
+				"field type edge %d -> %d must connect struct -> struct or struct -> interface",
 				edge.From,
 				edge.To,
 			)

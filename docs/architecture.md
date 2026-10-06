@@ -98,11 +98,14 @@ The stored semantic relationships are:
 - `Embeds`
 - `Accepts`
 - `Returns`
+- `FieldType`
 
 `Imports` is stored separately because a direct Go import and a semantic
 dependency are different facts.
 
-Exact node navigation uses the five semantic kinds. A semantic package
+`FieldType` connects a represented struct to represented structs or interfaces
+that occur in a named, non-embedded field's declared type. Exact node
+navigation uses the six semantic kinds. A semantic package
 dependency exists when one of those relationships crosses a represented
 package boundary. A type dependency exists when both endpoints have represented
 struct/interface owners; methods map to their owner, package functions are

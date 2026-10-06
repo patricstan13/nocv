@@ -114,6 +114,11 @@ func LoadAnalysis(ctx context.Context, dir string, patterns ...string) (*Analysi
 		}
 	}
 	for _, pkg := range pkgs {
+		if err := addFieldRelationships(g, pkg, symbols); err != nil {
+			return nil, fmt.Errorf("analyze field types in package %s: %w", pkg.PkgPath, err)
+		}
+	}
+	for _, pkg := range pkgs {
 		if err := addSignatureRelationships(g, pkg, symbols); err != nil {
 			return nil, fmt.Errorf("analyze signatures in package %s: %w", pkg.PkgPath, err)
 		}

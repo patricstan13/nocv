@@ -22,7 +22,7 @@ const nodeHelp = `usage: nocv node <command> [arguments...]
 
 a node is a represented graph entity addressed by its textual reference.
 dependencies and dependents are immediate semantic relationships.
-semantic navigation includes Calls, Implements, Embeds, Accepts, and Returns.
+semantic navigation includes Calls, Implements, Embeds, Accepts, Returns, and FieldType.
 
 commands:
   dependencies <pattern> <node-ref>
@@ -42,7 +42,7 @@ scopes:
 const goPackageHelp = `usage: nocv go package <command> [arguments...]
 
 imports and importers are direct Go import relationships.
-dependency operations use semantic Calls, Implements, Embeds, Accepts, and Returns;
+dependency operations use semantic Calls, Implements, Embeds, Accepts, Returns, and FieldType;
 imports are not included in semantic package dependencies.
 
 commands:
