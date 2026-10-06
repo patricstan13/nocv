@@ -783,11 +783,15 @@ func addImplementations(g *graph.Graph, symbols *symbolIndex) error {
 			if !implements {
 				continue
 			}
+			certainty, err := implementationCertainty(concreteType, interfaceType)
+			if err != nil {
+				return err
+			}
 			if err := g.AddEdge(graph.Edge{
 				From:      structNode.ID,
 				To:        interfaceNode.ID,
 				Kind:      graph.EdgeImplements,
-				Certainty: graph.RelationshipConfirmed,
+				Certainty: certainty,
 				Evidence:  []graph.Location{structNode.Location},
 			}); err != nil {
 				return err

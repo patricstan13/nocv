@@ -8,6 +8,8 @@ import (
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -571,6 +573,39 @@ func TestRelationshipCertaintyIsExplicitInAPIModels(t *testing.T) {
 		len(node.Type.DirectDependencies) != 1 ||
 		node.Type.DirectDependencies[0].Certainty != "uncertain" {
 		t.Fatalf("node inspection lost certainty: %#v", node)
+	}
+}
+
+func TestAnalyzerProducedUncertainImplementationReachesAPI(t *testing.T) {
+	dir := t.TempDir()
+	for name, contents := range map[string]string{
+		"go.mod": "module example.com/webcertainty\n\ngo 1.22\n",
+		"certainty.go": `package webcertainty
+
+type Contract interface { Required() }
+type MissingAlias = MissingDependency
+type Candidate struct { MissingAlias }
+`,
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(contents), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	analysis, err := goanalyzer.LoadAnalysis(context.Background(), dir, ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response := request(t, Handler(analysis), http.MethodGet, "/api/node?id=example.com%2Fwebcertainty::Candidate")
+	if response.Code != http.StatusOK {
+		t.Fatalf("node status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var node nodeInspection
+	decode(t, response, &node)
+	if node.Type == nil || len(node.Type.DirectDependencies) != 1 ||
+		node.Type.DirectDependencies[0].Kind != "implements" ||
+		node.Type.DirectDependencies[0].Certainty != "uncertain" {
+		t.Fatalf("analyzer-produced implementation response = %#v", node)
 	}
 }
 
