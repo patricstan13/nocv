@@ -160,10 +160,11 @@ func addImports(g *graph.Graph, pkg *packages.Package) error {
 				continue
 			}
 			if err := g.AddEdge(graph.Edge{
-				From:     from,
-				To:       to,
-				Kind:     graph.EdgeImports,
-				Evidence: []graph.Location{sourceLocation(pkg.Fset, spec.Pos())},
+				From:      from,
+				To:        to,
+				Kind:      graph.EdgeImports,
+				Certainty: graph.RelationshipConfirmed,
+				Evidence:  []graph.Location{sourceLocation(pkg.Fset, spec.Pos())},
 			}); err != nil {
 				return err
 			}
@@ -541,10 +542,11 @@ func addLexicalCalls(
 			return true
 		}
 		visitErr = g.AddEdge(graph.Edge{
-			From:     callerID,
-			To:       calleeID,
-			Kind:     graph.EdgeCalls,
-			Evidence: []graph.Location{sourceLocation(pkg.Fset, call.Pos())},
+			From:      callerID,
+			To:        calleeID,
+			Kind:      graph.EdgeCalls,
+			Certainty: graph.RelationshipConfirmed,
+			Evidence:  []graph.Location{sourceLocation(pkg.Fset, call.Pos())},
 		})
 		return visitErr == nil
 	})
@@ -618,10 +620,11 @@ func addEmbeddedFields(
 			continue
 		}
 		if err := g.AddEdge(graph.Edge{
-			From:     sourceID,
-			To:       targetID,
-			Kind:     graph.EdgeEmbeds,
-			Evidence: []graph.Location{sourceLocation(pkg.Fset, field.Type.Pos())},
+			From:      sourceID,
+			To:        targetID,
+			Kind:      graph.EdgeEmbeds,
+			Certainty: graph.RelationshipConfirmed,
+			Evidence:  []graph.Location{sourceLocation(pkg.Fset, field.Type.Pos())},
 		}); err != nil {
 			return err
 		}
@@ -719,10 +722,11 @@ func addSignatureFieldRelationships(
 			continue
 		}
 		if err := g.AddEdge(graph.Edge{
-			From:     functionID,
-			To:       targetID,
-			Kind:     kind,
-			Evidence: []graph.Location{sourceLocation(pkg.Fset, field.Type.Pos())},
+			From:      functionID,
+			To:        targetID,
+			Kind:      kind,
+			Certainty: graph.RelationshipConfirmed,
+			Evidence:  []graph.Location{sourceLocation(pkg.Fset, field.Type.Pos())},
 		}); err != nil {
 			return err
 		}
@@ -780,10 +784,11 @@ func addImplementations(g *graph.Graph, symbols *symbolIndex) error {
 				continue
 			}
 			if err := g.AddEdge(graph.Edge{
-				From:     structNode.ID,
-				To:       interfaceNode.ID,
-				Kind:     graph.EdgeImplements,
-				Evidence: []graph.Location{structNode.Location},
+				From:      structNode.ID,
+				To:        interfaceNode.ID,
+				Kind:      graph.EdgeImplements,
+				Certainty: graph.RelationshipConfirmed,
+				Evidence:  []graph.Location{structNode.Location},
 			}); err != nil {
 				return err
 			}
@@ -834,10 +839,11 @@ func addMethodImplementations(
 		}
 		concreteMethod, _ := g.Node(concreteMethodID)
 		if err := g.AddEdge(graph.Edge{
-			From:     concreteMethodID,
-			To:       interfaceMethodID,
-			Kind:     graph.EdgeImplements,
-			Evidence: []graph.Location{concreteMethod.Location},
+			From:      concreteMethodID,
+			To:        interfaceMethodID,
+			Kind:      graph.EdgeImplements,
+			Certainty: graph.RelationshipConfirmed,
+			Evidence:  []graph.Location{concreteMethod.Location},
 		}); err != nil {
 			return err
 		}

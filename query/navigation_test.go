@@ -16,10 +16,10 @@ func TestDirectDependenciesPreserveKindsEvidenceAndOrder(t *testing.T) {
 	before := outgoingSnapshot(g)
 
 	want := []query.Relationship{
-		{From: ids.create, To: ids.next, Kind: graph.EdgeCalls, Evidence: []graph.Location{{File: "project.go", Offset: 50}}},
-		{From: ids.create, To: ids.order, Kind: graph.EdgeAccepts, Evidence: []graph.Location{{File: "project.go", Offset: 30}, {File: "project.go", Offset: 31}}},
-		{From: ids.create, To: ids.repository, Kind: graph.EdgeAccepts, Evidence: []graph.Location{{File: "project.go", Offset: 20}}},
-		{From: ids.create, To: ids.repository, Kind: graph.EdgeReturns, Evidence: []graph.Location{{File: "project.go", Offset: 10}}},
+		{From: ids.create, To: ids.next, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "project.go", Offset: 50}}},
+		{From: ids.create, To: ids.order, Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "project.go", Offset: 30}, {File: "project.go", Offset: 31}}},
+		{From: ids.create, To: ids.repository, Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "project.go", Offset: 20}}},
+		{From: ids.create, To: ids.repository, Kind: graph.EdgeReturns, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "project.go", Offset: 10}}},
 	}
 	got := query.DirectDependencies(g, ids.create)
 	if !reflect.DeepEqual(got, want) {
@@ -39,13 +39,13 @@ func TestDirectDependenciesPreserveKindsEvidenceAndOrder(t *testing.T) {
 func TestDirectDependenciesCoverImplementsAndEmbeds(t *testing.T) {
 	g, ids := navigationFixture(t)
 	if got, want := query.DirectDependencies(g, ids.service), []query.Relationship{
-		{From: ids.service, To: ids.repository, Kind: graph.EdgeImplements, Evidence: []graph.Location{{File: "project.go", Offset: 70}}},
-		{From: ids.service, To: ids.base, Kind: graph.EdgeEmbeds, Evidence: []graph.Location{{File: "project.go", Offset: 60}}},
+		{From: ids.service, To: ids.repository, Kind: graph.EdgeImplements, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "project.go", Offset: 70}}},
+		{From: ids.service, To: ids.base, Kind: graph.EdgeEmbeds, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "project.go", Offset: 60}}},
 	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("DirectDependencies(Service) = %#v, want %#v", got, want)
 	}
 	if got, want := query.DirectDependencies(g, ids.concreteSave), []query.Relationship{
-		{From: ids.concreteSave, To: ids.interfaceSave, Kind: graph.EdgeImplements, Evidence: []graph.Location{{File: "project.go", Offset: 80}}},
+		{From: ids.concreteSave, To: ids.interfaceSave, Kind: graph.EdgeImplements, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "project.go", Offset: 80}}},
 	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("DirectDependencies(Service.Save) = %#v, want %#v", got, want)
 	}
@@ -61,31 +61,31 @@ func TestDirectDependentsCoverEverySupportedRelationshipKind(t *testing.T) {
 		{
 			name: "calls",
 			id:   ids.next,
-			want: []query.Relationship{{From: ids.create, To: ids.next, Kind: graph.EdgeCalls, Evidence: []graph.Location{{File: "project.go", Offset: 50}}}},
+			want: []query.Relationship{{From: ids.create, To: ids.next, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "project.go", Offset: 50}}}},
 		},
 		{
 			name: "accepts evidence",
 			id:   ids.order,
-			want: []query.Relationship{{From: ids.create, To: ids.order, Kind: graph.EdgeAccepts, Evidence: []graph.Location{{File: "project.go", Offset: 30}, {File: "project.go", Offset: 31}}}},
+			want: []query.Relationship{{From: ids.create, To: ids.order, Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "project.go", Offset: 30}, {File: "project.go", Offset: 31}}}},
 		},
 		{
 			name: "same source and target retain different kinds",
 			id:   ids.repository,
 			want: []query.Relationship{
-				{From: ids.service, To: ids.repository, Kind: graph.EdgeImplements, Evidence: []graph.Location{{File: "project.go", Offset: 70}}},
-				{From: ids.create, To: ids.repository, Kind: graph.EdgeAccepts, Evidence: []graph.Location{{File: "project.go", Offset: 20}}},
-				{From: ids.create, To: ids.repository, Kind: graph.EdgeReturns, Evidence: []graph.Location{{File: "project.go", Offset: 10}}},
+				{From: ids.service, To: ids.repository, Kind: graph.EdgeImplements, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "project.go", Offset: 70}}},
+				{From: ids.create, To: ids.repository, Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "project.go", Offset: 20}}},
+				{From: ids.create, To: ids.repository, Kind: graph.EdgeReturns, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "project.go", Offset: 10}}},
 			},
 		},
 		{
 			name: "embeds",
 			id:   ids.base,
-			want: []query.Relationship{{From: ids.service, To: ids.base, Kind: graph.EdgeEmbeds, Evidence: []graph.Location{{File: "project.go", Offset: 60}}}},
+			want: []query.Relationship{{From: ids.service, To: ids.base, Kind: graph.EdgeEmbeds, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "project.go", Offset: 60}}}},
 		},
 		{
 			name: "method implements",
 			id:   ids.interfaceSave,
-			want: []query.Relationship{{From: ids.concreteSave, To: ids.interfaceSave, Kind: graph.EdgeImplements, Evidence: []graph.Location{{File: "project.go", Offset: 80}}}},
+			want: []query.Relationship{{From: ids.concreteSave, To: ids.interfaceSave, Kind: graph.EdgeImplements, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "project.go", Offset: 80}}}},
 		},
 	}
 
@@ -141,9 +141,9 @@ func TestAnalyzerPipelineProvidesDirectNavigation(t *testing.T) {
 
 	transformID := graph.SymbolRef("example.com/shop/orders::Service::Transform")
 	wantDependencies := []query.Relationship{
-		{From: transformID, To: "example.com/shop/orders::Order", Kind: graph.EdgeAccepts},
-		{From: transformID, To: "example.com/shop/orders::Repository", Kind: graph.EdgeAccepts},
-		{From: transformID, To: "example.com/shop/orders::Repository", Kind: graph.EdgeReturns},
+		{From: transformID, To: "example.com/shop/orders::Order", Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed},
+		{From: transformID, To: "example.com/shop/orders::Repository", Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed},
+		{From: transformID, To: "example.com/shop/orders::Repository", Kind: graph.EdgeReturns, Certainty: graph.RelationshipConfirmed},
 	}
 	gotDependencies := query.DirectDependencies(g, transformID)
 	if len(gotDependencies) != len(wantDependencies) {
@@ -230,15 +230,15 @@ func navigationFixture(t *testing.T) (*graph.Graph, navigationIDs) {
 	}
 
 	edges := []testEdge{
-		{From: ids.create, To: ids.repository, Kind: graph.EdgeReturns, Evidence: []graph.Location{{File: "project.go", Offset: 10}}},
-		{From: ids.create, To: ids.repository, Kind: graph.EdgeAccepts, Evidence: []graph.Location{{File: "project.go", Offset: 20}}},
-		{From: ids.create, To: ids.order, Kind: graph.EdgeAccepts, Evidence: []graph.Location{{File: "project.go", Offset: 30}}},
-		{From: ids.create, To: ids.order, Kind: graph.EdgeAccepts, Evidence: []graph.Location{{File: "project.go", Offset: 31}}},
-		{From: ids.next, To: ids.final, Kind: graph.EdgeCalls, Evidence: []graph.Location{{File: "project.go", Offset: 40}}},
-		{From: ids.create, To: ids.next, Kind: graph.EdgeCalls, Evidence: []graph.Location{{File: "project.go", Offset: 50}}},
-		{From: ids.service, To: ids.base, Kind: graph.EdgeEmbeds, Evidence: []graph.Location{{File: "project.go", Offset: 60}}},
-		{From: ids.service, To: ids.repository, Kind: graph.EdgeImplements, Evidence: []graph.Location{{File: "project.go", Offset: 70}}},
-		{From: ids.concreteSave, To: ids.interfaceSave, Kind: graph.EdgeImplements, Evidence: []graph.Location{{File: "project.go", Offset: 80}}},
+		{From: ids.create, To: ids.repository, Kind: graph.EdgeReturns, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "project.go", Offset: 10}}},
+		{From: ids.create, To: ids.repository, Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "project.go", Offset: 20}}},
+		{From: ids.create, To: ids.order, Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "project.go", Offset: 30}}},
+		{From: ids.create, To: ids.order, Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "project.go", Offset: 31}}},
+		{From: ids.next, To: ids.final, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "project.go", Offset: 40}}},
+		{From: ids.create, To: ids.next, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "project.go", Offset: 50}}},
+		{From: ids.service, To: ids.base, Kind: graph.EdgeEmbeds, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "project.go", Offset: 60}}},
+		{From: ids.service, To: ids.repository, Kind: graph.EdgeImplements, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "project.go", Offset: 70}}},
+		{From: ids.concreteSave, To: ids.interfaceSave, Kind: graph.EdgeImplements, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "project.go", Offset: 80}}},
 	}
 	for _, edge := range edges {
 		if err := addTestEdge(g, edge); err != nil {

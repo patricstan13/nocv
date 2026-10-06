@@ -37,9 +37,10 @@ type packageNode struct {
 }
 
 type packageEdge struct {
-	ID   string          `json:"id"`
-	From graph.SymbolRef `json:"from"`
-	To   graph.SymbolRef `json:"to"`
+	ID        string          `json:"id"`
+	From      graph.SymbolRef `json:"from"`
+	To        graph.SymbolRef `json:"to"`
+	Certainty string          `json:"certainty"`
 }
 
 type nodeInspection struct {
@@ -102,29 +103,33 @@ type symbolSummary struct {
 }
 
 type symbolRelationship struct {
-	From     symbolSummary `json:"from"`
-	To       symbolSummary `json:"to"`
-	Kind     string        `json:"kind"`
-	Evidence []location    `json:"evidence"`
+	From      symbolSummary `json:"from"`
+	To        symbolSummary `json:"to"`
+	Kind      string        `json:"kind"`
+	Certainty string        `json:"certainty"`
+	Evidence  []location    `json:"evidence"`
 }
 
 type packageDependency struct {
-	From     graph.SymbolRef `json:"from"`
-	To       graph.SymbolRef `json:"to"`
-	Evidence []relationship  `json:"evidence"`
+	From      graph.SymbolRef `json:"from"`
+	To        graph.SymbolRef `json:"to"`
+	Certainty string          `json:"certainty"`
+	Evidence  []relationship  `json:"evidence"`
 }
 
 type typeDependency struct {
-	From     graph.SymbolRef `json:"from"`
-	To       graph.SymbolRef `json:"to"`
-	Evidence []relationship  `json:"evidence"`
+	From      graph.SymbolRef `json:"from"`
+	To        graph.SymbolRef `json:"to"`
+	Certainty string          `json:"certainty"`
+	Evidence  []relationship  `json:"evidence"`
 }
 
 type relationship struct {
-	From     graph.SymbolRef `json:"from"`
-	To       graph.SymbolRef `json:"to"`
-	Kind     string          `json:"kind"`
-	Evidence []location      `json:"evidence"`
+	From      graph.SymbolRef `json:"from"`
+	To        graph.SymbolRef `json:"to"`
+	Kind      string          `json:"kind"`
+	Certainty string          `json:"certainty"`
+	Evidence  []location      `json:"evidence"`
 }
 
 type dependencyInspection struct {
@@ -170,9 +175,10 @@ func handler(analysis *goanalyzer.Analysis, g *graph.Graph) http.Handler {
 			response.Nodes = append(response.Nodes, packageNode{ID: node.Ref, Label: node.Name})
 			for _, dependency := range query.DirectPackageDependencies(g, node.Ref) {
 				response.Edges = append(response.Edges, packageEdge{
-					ID:   edgeID(dependency.From, dependency.To),
-					From: dependency.From,
-					To:   dependency.To,
+					ID:        edgeID(dependency.From, dependency.To),
+					From:      dependency.From,
+					To:        dependency.To,
+					Certainty: dependency.Certainty.String(),
 				})
 			}
 		}
@@ -382,7 +388,7 @@ func presentSymbolRelationships(source []query.SymbolRelationship) []symbolRelat
 		}
 		result = append(result, symbolRelationship{
 			From: presentSymbolSummary(item.From), To: presentSymbolSummary(item.To),
-			Kind: item.Kind.String(), Evidence: evidence,
+			Kind: item.Kind.String(), Certainty: item.Certainty.String(), Evidence: evidence,
 		})
 	}
 	return result
@@ -397,14 +403,18 @@ func presentPackageDependencies(source []query.PackageDependency) []packageDepen
 }
 
 func presentPackageDependency(source query.PackageDependency) packageDependency {
-	return packageDependency{From: source.From, To: source.To, Evidence: presentRelationships(source.Evidence)}
+	return packageDependency{
+		From: source.From, To: source.To, Certainty: source.Certainty.String(),
+		Evidence: presentRelationships(source.Evidence),
+	}
 }
 
 func presentTypeDependencies(source []query.TypeDependency) []typeDependency {
 	result := make([]typeDependency, 0, len(source))
 	for _, dependency := range source {
 		result = append(result, typeDependency{
-			From: dependency.From, To: dependency.To, Evidence: presentRelationships(dependency.Evidence),
+			From: dependency.From, To: dependency.To, Certainty: dependency.Certainty.String(),
+			Evidence: presentRelationships(dependency.Evidence),
 		})
 	}
 	return result
@@ -420,7 +430,8 @@ func presentRelationships(source []query.Relationship) []relationship {
 			})
 		}
 		result = append(result, relationship{
-			From: item.From, To: item.To, Kind: item.Kind.String(), Evidence: evidence,
+			From: item.From, To: item.To, Kind: item.Kind.String(),
+			Certainty: item.Certainty.String(), Evidence: evidence,
 		})
 	}
 	return result

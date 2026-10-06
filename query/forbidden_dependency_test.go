@@ -155,14 +155,14 @@ func forbiddenDependencyFixture(t *testing.T) (*graph.Graph, forbiddenDependency
 		mustAddPackagePathNode(t, g, node)
 	}
 	edges := []testEdge{
-		{From: "example.com/app::Direct", To: ids.repositorySave, Kind: graph.EdgeCalls},
-		{From: ids.appRun, To: "example.com/cache::Get", Kind: graph.EdgeCalls},
-		{From: "example.com/cache::Get", To: ids.repositorySave, Kind: graph.EdgeCalls},
-		{From: ids.appRun, To: "example.com/service::Create", Kind: graph.EdgeCalls},
-		{From: "example.com/service::Create", To: "example.com/repository::Contract", Kind: graph.EdgeAccepts},
-		{From: "example.com/app::Alternate", To: "example.com/service::Update", Kind: graph.EdgeCalls},
-		{From: "example.com/service::Update", To: "example.com/repository::Contract", Kind: graph.EdgeAccepts},
-		{From: ids.app, To: ids.plugin, Kind: graph.EdgeImports},
+		{From: "example.com/app::Direct", To: ids.repositorySave, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: ids.appRun, To: "example.com/cache::Get", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "example.com/cache::Get", To: ids.repositorySave, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: ids.appRun, To: "example.com/service::Create", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "example.com/service::Create", To: "example.com/repository::Contract", Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed},
+		{From: "example.com/app::Alternate", To: "example.com/service::Update", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "example.com/service::Update", To: "example.com/repository::Contract", Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed},
+		{From: ids.app, To: ids.plugin, Kind: graph.EdgeImports, Certainty: graph.RelationshipConfirmed},
 	}
 	for index := range edges {
 		edges[index].Evidence = []graph.Location{{File: "fixture.go", Offset: index}}

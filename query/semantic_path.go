@@ -14,9 +14,10 @@ type SemanticPath struct {
 
 // SemanticStep is one semantic relationship in ordinary dependency direction.
 type SemanticStep struct {
-	From graph.SymbolRef
-	To   graph.SymbolRef
-	Kind graph.EdgeKind
+	From      graph.SymbolRef
+	To        graph.SymbolRef
+	Kind      graph.EdgeKind
+	Certainty graph.RelationshipCertainty
 }
 
 func semanticPathLess(left, right SemanticPath) bool {

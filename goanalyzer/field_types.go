@@ -36,10 +36,11 @@ func addFieldRelationships(g *graph.Graph, pkg *packages.Package, symbols *symbo
 					}
 					for _, targetID := range representedTypesInField(pkg.TypesInfo.TypeOf(field.Type), symbols) {
 						if err := g.AddEdge(graph.Edge{
-							From:     sourceID,
-							To:       targetID,
-							Kind:     graph.EdgeFieldType,
-							Evidence: []graph.Location{sourceLocation(pkg.Fset, field.Type.Pos())},
+							From:      sourceID,
+							To:        targetID,
+							Kind:      graph.EdgeFieldType,
+							Certainty: graph.RelationshipConfirmed,
+							Evidence:  []graph.Location{sourceLocation(pkg.Fset, field.Type.Pos())},
 						}); err != nil {
 							return err
 						}

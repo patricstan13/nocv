@@ -11,9 +11,10 @@ import (
 // packages. Evidence contains every stored cross-package semantic fact that
 // establishes the package relationship.
 type PackageDependency struct {
-	From     graph.SymbolRef
-	To       graph.SymbolRef
-	Evidence []Relationship
+	From      graph.SymbolRef
+	To        graph.SymbolRef
+	Certainty graph.RelationshipCertainty
+	Evidence  []Relationship
 }
 
 // PackageDependencyPath is one simple route through the derived semantic
@@ -150,7 +151,10 @@ func packageDependencyView(g *graph.Graph) map[graph.NodeID][]packageDependency 
 			if !fromExactExists || !toExactExists {
 				continue
 			}
-			relationship := Relationship{From: fromExact.Ref, To: toExact.Ref, Kind: edge.Kind, Evidence: append([]graph.Location(nil), edge.Evidence...)}
+			relationship := Relationship{
+				From: fromExact.Ref, To: toExact.Ref, Kind: edge.Kind, Certainty: edge.Certainty,
+				Evidence: append([]graph.Location(nil), edge.Evidence...),
+			}
 			fromPackage, fromExists := g.Node(fromID)
 			toPackage, toExists := g.Node(toID)
 			if !fromExists || !toExists {
@@ -163,8 +167,12 @@ func packageDependencyView(g *graph.Graph) map[graph.NodeID][]packageDependency 
 			}
 			dependency := byTarget[toID]
 			if dependency == nil {
-				dependency = &PackageDependency{From: fromPackage.Ref, To: toPackage.Ref}
+				dependency = &PackageDependency{
+					From: fromPackage.Ref, To: toPackage.Ref, Certainty: relationship.Certainty,
+				}
 				byTarget[toID] = dependency
+			} else {
+				dependency.Certainty = mergeRelationshipCertainty(dependency.Certainty, relationship.Certainty)
 			}
 			dependency.Evidence = append(dependency.Evidence, relationship)
 		}
@@ -217,12 +225,25 @@ func appendPackageDependency(steps []PackageDependency, dependency PackageDepend
 }
 
 func copyPackageDependency(dependency PackageDependency) PackageDependency {
-	copy := PackageDependency{From: dependency.From, To: dependency.To}
+	copy := PackageDependency{From: dependency.From, To: dependency.To, Certainty: dependency.Certainty}
 	copy.Evidence = make([]Relationship, len(dependency.Evidence))
 	for index, relationship := range dependency.Evidence {
 		copy.Evidence[index] = copyRelationship(relationship)
 	}
 	return copy
+}
+
+func mergeRelationshipCertainty(
+	current graph.RelationshipCertainty,
+	incoming graph.RelationshipCertainty,
+) graph.RelationshipCertainty {
+	if current == graph.RelationshipConfirmed || incoming == graph.RelationshipConfirmed {
+		return graph.RelationshipConfirmed
+	}
+	if current == graph.RelationshipUncertain || incoming == graph.RelationshipUncertain {
+		return graph.RelationshipUncertain
+	}
+	return graph.RelationshipCertaintyUnknown
 }
 
 func isPackageNode(g *graph.Graph, id graph.SymbolRef) bool {

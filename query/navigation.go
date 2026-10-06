@@ -9,10 +9,11 @@ import (
 // Relationship is one stored graph fact presented as direct navigation.
 // Evidence is copied from the graph edge that established it.
 type Relationship struct {
-	From     graph.SymbolRef
-	To       graph.SymbolRef
-	Kind     graph.EdgeKind
-	Evidence []graph.Location
+	From      graph.SymbolRef
+	To        graph.SymbolRef
+	Kind      graph.EdgeKind
+	Certainty graph.RelationshipCertainty
+	Evidence  []graph.Location
 }
 
 var directDependencyKinds = []graph.EdgeKind{
@@ -78,10 +79,11 @@ func copyRelationships(g *graph.Graph, edges []*graph.Edge) []Relationship {
 			continue
 		}
 		relationships = append(relationships, Relationship{
-			From:     from.Ref,
-			To:       to.Ref,
-			Kind:     edge.Kind,
-			Evidence: append([]graph.Location(nil), edge.Evidence...),
+			From:      from.Ref,
+			To:        to.Ref,
+			Kind:      edge.Kind,
+			Certainty: edge.Certainty,
+			Evidence:  append([]graph.Location(nil), edge.Evidence...),
 		})
 	}
 	return relationships

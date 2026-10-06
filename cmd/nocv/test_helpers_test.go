@@ -44,5 +44,8 @@ func addFixtureEdge(g *graph.Graph, edge fixtureEdge) error {
 	if !fromExists || !toExists {
 		return fmt.Errorf("edge endpoint missing: %q -> %q", edge.From, edge.To)
 	}
-	return g.AddEdge(graph.Edge{From: from, To: to, Kind: edge.Kind, Evidence: edge.Evidence})
+	return g.AddEdge(graph.Edge{
+		From: from, To: to, Kind: edge.Kind, Certainty: graph.RelationshipConfirmed,
+		Evidence: edge.Evidence,
+	})
 }

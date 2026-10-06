@@ -80,7 +80,7 @@ func TestCheckForbiddenPackageImportValidatesExactPackagesAndSelfEdge(t *testing
 	}
 
 	if err := addTestEdge(g, testEdge{
-		From: ids.a, To: ids.a, Kind: graph.EdgeImports,
+		From: ids.a, To: ids.a, Kind: graph.EdgeImports, Certainty: graph.RelationshipConfirmed,
 		Evidence: []graph.Location{{File: "malformed.go", Offset: 1}},
 	}); err != nil {
 		t.Fatal(err)
@@ -147,11 +147,11 @@ func forbiddenImportFixture(t *testing.T) (*graph.Graph, forbiddenImportIDs) {
 		}
 	}
 	for _, edge := range []testEdge{
-		{From: ids.a, To: ids.b, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "a.go", Offset: 10}}},
-		{From: ids.a, To: ids.b, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "other.go", Offset: 20}}},
-		{From: ids.b, To: ids.c, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "b.go", Offset: 10}}},
-		{From: ids.c, To: ids.d, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "c.go", Offset: 10}}},
-		{From: ids.dFunction, To: ids.aFunction, Kind: graph.EdgeCalls, Evidence: []graph.Location{{File: "d.go", Offset: 10}}},
+		{From: ids.a, To: ids.b, Kind: graph.EdgeImports, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "a.go", Offset: 10}}},
+		{From: ids.a, To: ids.b, Kind: graph.EdgeImports, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "other.go", Offset: 20}}},
+		{From: ids.b, To: ids.c, Kind: graph.EdgeImports, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "b.go", Offset: 10}}},
+		{From: ids.c, To: ids.d, Kind: graph.EdgeImports, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "c.go", Offset: 10}}},
+		{From: ids.dFunction, To: ids.aFunction, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "d.go", Offset: 10}}},
 	} {
 		if err := addTestEdge(g, edge); err != nil {
 			t.Fatalf("AddEdge(%s, %q -> %q): %v", edge.Kind, edge.From, edge.To, err)

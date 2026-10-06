@@ -518,14 +518,59 @@ func TestPackagesAPIIsDeterministicAndExcludesImports(t *testing.T) {
 		{ID: "example.com/service", Label: "service"},
 	}
 	wantEdges := []packageEdge{
-		{ID: edgeID("example.com/app", "example.com/service"), From: "example.com/app", To: "example.com/service"},
-		{ID: edgeID("example.com/service", "example.com/repository"), From: "example.com/service", To: "example.com/repository"},
+		{ID: edgeID("example.com/app", "example.com/service"), From: "example.com/app", To: "example.com/service", Certainty: "confirmed"},
+		{ID: edgeID("example.com/service", "example.com/repository"), From: "example.com/service", To: "example.com/repository", Certainty: "confirmed"},
 	}
 	if !reflect.DeepEqual(result.Nodes, wantNodes) {
 		t.Errorf("nodes = %#v, want %#v", result.Nodes, wantNodes)
 	}
 	if !reflect.DeepEqual(result.Edges, wantEdges) {
 		t.Errorf("edges = %#v, want semantic-only %#v", result.Edges, wantEdges)
+	}
+}
+
+func TestRelationshipCertaintyIsExplicitInAPIModels(t *testing.T) {
+	g := graph.New()
+	for _, node := range []webNode{
+		{ID: "example.com/source", Kind: graph.NodePackage, Name: "source"},
+		{ID: "example.com/target", Kind: graph.NodePackage, Name: "target"},
+		{ID: "example.com/source::Concrete", Kind: graph.NodeStruct, Name: "Concrete", Parent: "example.com/source"},
+		{ID: "example.com/target::Contract", Kind: graph.NodeInterface, Name: "Contract", Parent: "example.com/target"},
+	} {
+		if err := addWebNode(g, node); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := addWebEdge(g, webEdge{
+		From: "example.com/source::Concrete", To: "example.com/target::Contract",
+		Kind: graph.EdgeImplements, Certainty: graph.RelationshipUncertain,
+		Evidence: []graph.Location{{File: "source.go", Line: 3, Column: 1}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := graphHandler(g)
+	packagesResponse := request(t, handler, http.MethodGet, "/api/packages")
+	if packagesResponse.Code != http.StatusOK {
+		t.Fatalf("packages status = %d, body = %s", packagesResponse.Code, packagesResponse.Body.String())
+	}
+	var packages packageGraph
+	decode(t, packagesResponse, &packages)
+	if len(packages.Edges) != 1 || packages.Edges[0].Certainty != "uncertain" {
+		t.Fatalf("package edges = %#v, want explicit uncertain certainty", packages.Edges)
+	}
+
+	nodeResponse := request(t, handler, http.MethodGet, "/api/node?id=example.com/source::Concrete")
+	if nodeResponse.Code != http.StatusOK {
+		t.Fatalf("node status = %d, body = %s", nodeResponse.Code, nodeResponse.Body.String())
+	}
+	var node nodeInspection
+	decode(t, nodeResponse, &node)
+	if node.Type == nil || len(node.Type.Dependencies) != 1 ||
+		node.Type.Dependencies[0].Certainty != "uncertain" ||
+		len(node.Type.DirectDependencies) != 1 ||
+		node.Type.DirectDependencies[0].Certainty != "uncertain" {
+		t.Fatalf("node inspection lost certainty: %#v", node)
 	}
 }
 
@@ -1000,10 +1045,11 @@ type webNode struct {
 }
 
 type webEdge struct {
-	From     graph.SymbolRef
-	To       graph.SymbolRef
-	Kind     graph.EdgeKind
-	Evidence []graph.Location
+	From      graph.SymbolRef
+	To        graph.SymbolRef
+	Kind      graph.EdgeKind
+	Certainty graph.RelationshipCertainty
+	Evidence  []graph.Location
 }
 
 func addWebNode(g *graph.Graph, node webNode) error {
@@ -1028,5 +1074,12 @@ func addWebEdge(g *graph.Graph, edge webEdge) error {
 	if !fromExists || !toExists {
 		return fmt.Errorf("edge endpoint missing: %q -> %q", edge.From, edge.To)
 	}
-	return g.AddEdge(graph.Edge{From: from, To: to, Kind: edge.Kind, Evidence: edge.Evidence})
+	certainty := edge.Certainty
+	if certainty == graph.RelationshipCertaintyUnknown {
+		certainty = graph.RelationshipConfirmed
+	}
+	return g.AddEdge(graph.Edge{
+		From: from, To: to, Kind: edge.Kind, Certainty: certainty,
+		Evidence: edge.Evidence,
+	})
 }

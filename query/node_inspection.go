@@ -40,10 +40,11 @@ type SymbolSummary struct {
 // resolved for human-oriented inspection. Evidence remains supporting detail
 // for the generic semantic fact stored by the graph.
 type SymbolRelationship struct {
-	From     SymbolSummary
-	To       SymbolSummary
-	Kind     graph.EdgeKind
-	Evidence []graph.Location
+	From      SymbolSummary
+	To        SymbolSummary
+	Kind      graph.EdgeKind
+	Certainty graph.RelationshipCertainty
+	Evidence  []graph.Location
 }
 
 // TypeInspection describes direct methods, projected type relationships, and
@@ -169,10 +170,11 @@ func symbolRelationships(g *graph.Graph, relationships []Relationship) []SymbolR
 			continue
 		}
 		result = append(result, SymbolRelationship{
-			From:     symbolSummary(g, *from),
-			To:       symbolSummary(g, *to),
-			Kind:     relationship.Kind,
-			Evidence: append([]graph.Location(nil), relationship.Evidence...),
+			From:      symbolSummary(g, *from),
+			To:        symbolSummary(g, *to),
+			Kind:      relationship.Kind,
+			Certainty: relationship.Certainty,
+			Evidence:  append([]graph.Location(nil), relationship.Evidence...),
 		})
 	}
 	sort.Slice(result, func(i, j int) bool {

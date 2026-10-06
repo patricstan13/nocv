@@ -233,21 +233,21 @@ func typeDependencyFixture(t *testing.T) (*graph.Graph, typeDependencyIDs) {
 		mustAddPackagePathNode(t, g, node)
 	}
 	edges := []testEdge{
-		{From: ids.serviceCreate, To: "example.com/other::Repository::Save", Kind: graph.EdgeCalls},
-		{From: "example.com/types::Service::Update", To: "example.com/other::Repository::Update", Kind: graph.EdgeCalls},
-		{From: "example.com/types::Service::Delete", To: "example.com/other::Repository::Delete", Kind: graph.EdgeCalls},
-		{From: ids.serviceCreate, To: ids.repository, Kind: graph.EdgeAccepts},
-		{From: ids.serviceCreate, To: ids.repository, Kind: graph.EdgeReturns},
-		{From: ids.service, To: ids.repository, Kind: graph.EdgeEmbeds},
-		{From: ids.serviceValidate, To: "example.com/other::Repository::Save", Kind: graph.EdgeCalls},
-		{From: ids.service, To: ids.contract, Kind: graph.EdgeImplements},
-		{From: ids.serviceCreate, To: "example.com/other::Contract::Execute", Kind: graph.EdgeImplements},
-		{From: "example.com/other::Contract::Execute", To: ids.repository, Kind: graph.EdgeAccepts},
-		{From: ids.childInterface, To: ids.parentInterface, Kind: graph.EdgeEmbeds},
-		{From: ids.serviceCreate, To: ids.serviceValidate, Kind: graph.EdgeCalls},
-		{From: ids.run, To: ids.serviceCreate, Kind: graph.EdgeCalls},
-		{From: ids.serviceCreate, To: ids.helper, Kind: graph.EdgeCalls},
-		{From: ids.pkg, To: ids.otherPackage, Kind: graph.EdgeImports},
+		{From: ids.serviceCreate, To: "example.com/other::Repository::Save", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "example.com/types::Service::Update", To: "example.com/other::Repository::Update", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "example.com/types::Service::Delete", To: "example.com/other::Repository::Delete", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: ids.serviceCreate, To: ids.repository, Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed},
+		{From: ids.serviceCreate, To: ids.repository, Kind: graph.EdgeReturns, Certainty: graph.RelationshipConfirmed},
+		{From: ids.service, To: ids.repository, Kind: graph.EdgeEmbeds, Certainty: graph.RelationshipConfirmed},
+		{From: ids.serviceValidate, To: "example.com/other::Repository::Save", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: ids.service, To: ids.contract, Kind: graph.EdgeImplements, Certainty: graph.RelationshipConfirmed},
+		{From: ids.serviceCreate, To: "example.com/other::Contract::Execute", Kind: graph.EdgeImplements, Certainty: graph.RelationshipConfirmed},
+		{From: "example.com/other::Contract::Execute", To: ids.repository, Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed},
+		{From: ids.childInterface, To: ids.parentInterface, Kind: graph.EdgeEmbeds, Certainty: graph.RelationshipConfirmed},
+		{From: ids.serviceCreate, To: ids.serviceValidate, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: ids.run, To: ids.serviceCreate, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: ids.serviceCreate, To: ids.helper, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: ids.pkg, To: ids.otherPackage, Kind: graph.EdgeImports, Certainty: graph.RelationshipConfirmed},
 	}
 	for index := range edges {
 		edges[index].Evidence = []graph.Location{{File: "types.go", Offset: index}}
@@ -293,11 +293,11 @@ func typePathFixture(t *testing.T) (*graph.Graph, typePathIDs) {
 		mustAddPackagePathNode(t, g, node)
 	}
 	edges := []testEdge{
-		{From: ids.serviceCreate, To: "types::Repository::Save", Kind: graph.EdgeCalls},
-		{From: "types::Repository::Update", To: ids.storePut, Kind: graph.EdgeCalls},
-		{From: "types::Service::Cache", To: "types::Cache::Get", Kind: graph.EdgeCalls},
-		{From: "types::Cache::Write", To: ids.storePut, Kind: graph.EdgeCalls},
-		{From: "types::Repository::Save", To: ids.serviceCreate, Kind: graph.EdgeCalls}, // malformed type cycle
+		{From: ids.serviceCreate, To: "types::Repository::Save", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "types::Repository::Update", To: ids.storePut, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "types::Service::Cache", To: "types::Cache::Get", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "types::Cache::Write", To: ids.storePut, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "types::Repository::Save", To: ids.serviceCreate, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed}, // malformed type cycle
 	}
 	for index := range edges {
 		edges[index].Evidence = []graph.Location{{File: "paths.go", Offset: index}}

@@ -107,8 +107,8 @@ func TestDistinctSameNamedNodesHaveIndependentEdges(t *testing.T) {
 	one := addTestNode(t, g, Node{Ref: "example.com/repeated::one", Kind: NodeFunction, Name: "one", Parent: pkg})
 	two := addTestNode(t, g, Node{Ref: "example.com/repeated::two", Kind: NodeFunction, Name: "two", Parent: pkg})
 
-	addTestEdge(t, g, Edge{From: init1, To: one, Kind: EdgeCalls, Evidence: []Location{{File: "a.go", Offset: 10}}})
-	addTestEdge(t, g, Edge{From: init2, To: two, Kind: EdgeCalls, Evidence: []Location{{File: "b.go", Offset: 20}}})
+	addTestEdge(t, g, Edge{From: init1, To: one, Kind: EdgeCalls, Certainty: RelationshipConfirmed, Evidence: []Location{{File: "a.go", Offset: 10}}})
+	addTestEdge(t, g, Edge{From: init2, To: two, Kind: EdgeCalls, Certainty: RelationshipConfirmed, Evidence: []Location{{File: "b.go", Offset: 20}}})
 	if got := g.Outgoing(init1, EdgeCalls); len(got) != 1 || got[0].To != one {
 		t.Fatalf("init#1 edges = %#v", got)
 	}
@@ -131,23 +131,23 @@ func TestEdgesValidateKindsAggregateEvidenceAndCopyResults(t *testing.T) {
 	interfaceMethod := addTestNode(t, g, Node{Ref: "pkg::Interface::Run", Kind: NodeFunction, Name: "Run", Parent: iface})
 	evidence := []Location{{File: "one.go", Offset: 10}}
 	valid := []Edge{
-		{From: function, To: callee, Kind: EdgeCalls, Evidence: evidence},
-		{From: structure, To: iface, Kind: EdgeImplements, Evidence: evidence},
-		{From: method, To: interfaceMethod, Kind: EdgeImplements, Evidence: evidence},
-		{From: structure, To: base, Kind: EdgeEmbeds, Evidence: evidence},
-		{From: childIface, To: iface, Kind: EdgeEmbeds, Evidence: evidence},
-		{From: function, To: structure, Kind: EdgeAccepts, Evidence: evidence},
-		{From: function, To: iface, Kind: EdgeReturns, Evidence: evidence},
-		{From: structure, To: base, Kind: EdgeFieldType, Evidence: evidence},
-		{From: structure, To: iface, Kind: EdgeFieldType, Evidence: evidence},
-		{From: pkg, To: otherPkg, Kind: EdgeImports, Evidence: evidence},
+		{From: function, To: callee, Kind: EdgeCalls, Certainty: RelationshipConfirmed, Evidence: evidence},
+		{From: structure, To: iface, Kind: EdgeImplements, Certainty: RelationshipConfirmed, Evidence: evidence},
+		{From: method, To: interfaceMethod, Kind: EdgeImplements, Certainty: RelationshipConfirmed, Evidence: evidence},
+		{From: structure, To: base, Kind: EdgeEmbeds, Certainty: RelationshipConfirmed, Evidence: evidence},
+		{From: childIface, To: iface, Kind: EdgeEmbeds, Certainty: RelationshipConfirmed, Evidence: evidence},
+		{From: function, To: structure, Kind: EdgeAccepts, Certainty: RelationshipConfirmed, Evidence: evidence},
+		{From: function, To: iface, Kind: EdgeReturns, Certainty: RelationshipConfirmed, Evidence: evidence},
+		{From: structure, To: base, Kind: EdgeFieldType, Certainty: RelationshipConfirmed, Evidence: evidence},
+		{From: structure, To: iface, Kind: EdgeFieldType, Certainty: RelationshipConfirmed, Evidence: evidence},
+		{From: pkg, To: otherPkg, Kind: EdgeImports, Certainty: RelationshipConfirmed, Evidence: evidence},
 	}
 	for _, edge := range valid {
 		addTestEdge(t, g, edge)
 	}
 
 	second := Location{File: "two.go", Offset: 20}
-	addTestEdge(t, g, Edge{From: function, To: callee, Kind: EdgeCalls, Evidence: []Location{evidence[0], second}})
+	addTestEdge(t, g, Edge{From: function, To: callee, Kind: EdgeCalls, Certainty: RelationshipConfirmed, Evidence: []Location{evidence[0], second}})
 	outgoing := g.Outgoing(function, EdgeCalls)
 	if len(outgoing) != 1 || !reflect.DeepEqual(outgoing[0].Evidence, []Location{evidence[0], second}) {
 		t.Fatalf("aggregated calls = %#v", outgoing)
@@ -161,25 +161,100 @@ func TestEdgesValidateKindsAggregateEvidenceAndCopyResults(t *testing.T) {
 	}
 
 	invalid := []Edge{
-		{From: 999, To: callee, Kind: EdgeCalls, Evidence: evidence},
-		{From: function, To: 999, Kind: EdgeCalls, Evidence: evidence},
-		{From: pkg, To: function, Kind: EdgeCalls, Evidence: evidence},
-		{From: function, To: callee, Kind: EdgeCalls},
-		{From: iface, To: structure, Kind: EdgeImplements, Evidence: evidence},
-		{From: structure, To: iface, Kind: EdgeEmbeds, Evidence: evidence},
-		{From: structure, To: iface, Kind: EdgeAccepts, Evidence: evidence},
-		{From: function, To: callee, Kind: EdgeReturns, Evidence: evidence},
-		{From: function, To: structure, Kind: EdgeFieldType, Evidence: evidence},
-		{From: iface, To: structure, Kind: EdgeFieldType, Evidence: evidence},
-		{From: pkg, To: structure, Kind: EdgeFieldType, Evidence: evidence},
-		{From: structure, To: function, Kind: EdgeFieldType, Evidence: evidence},
-		{From: function, To: otherPkg, Kind: EdgeImports, Evidence: evidence},
-		{From: pkg, To: otherPkg, Kind: EdgeKind(99), Evidence: evidence},
+		{From: 999, To: callee, Kind: EdgeCalls, Certainty: RelationshipConfirmed, Evidence: evidence},
+		{From: function, To: 999, Kind: EdgeCalls, Certainty: RelationshipConfirmed, Evidence: evidence},
+		{From: pkg, To: function, Kind: EdgeCalls, Certainty: RelationshipConfirmed, Evidence: evidence},
+		{From: function, To: callee, Kind: EdgeCalls, Certainty: RelationshipConfirmed},
+		{From: iface, To: structure, Kind: EdgeImplements, Certainty: RelationshipConfirmed, Evidence: evidence},
+		{From: structure, To: iface, Kind: EdgeEmbeds, Certainty: RelationshipConfirmed, Evidence: evidence},
+		{From: structure, To: iface, Kind: EdgeAccepts, Certainty: RelationshipConfirmed, Evidence: evidence},
+		{From: function, To: callee, Kind: EdgeReturns, Certainty: RelationshipConfirmed, Evidence: evidence},
+		{From: function, To: structure, Kind: EdgeFieldType, Certainty: RelationshipConfirmed, Evidence: evidence},
+		{From: iface, To: structure, Kind: EdgeFieldType, Certainty: RelationshipConfirmed, Evidence: evidence},
+		{From: pkg, To: structure, Kind: EdgeFieldType, Certainty: RelationshipConfirmed, Evidence: evidence},
+		{From: structure, To: function, Kind: EdgeFieldType, Certainty: RelationshipConfirmed, Evidence: evidence},
+		{From: function, To: otherPkg, Kind: EdgeImports, Certainty: RelationshipConfirmed, Evidence: evidence},
+		{From: pkg, To: otherPkg, Kind: EdgeKind(99), Certainty: RelationshipConfirmed, Evidence: evidence},
 	}
 	for _, edge := range invalid {
 		if err := g.AddEdge(edge); err == nil {
 			t.Errorf("AddEdge(%#v) succeeded", edge)
 		}
+	}
+}
+
+func TestEdgeCertaintyValidationMergeAndCopies(t *testing.T) {
+	if RelationshipConfirmed.String() != "confirmed" || RelationshipUncertain.String() != "uncertain" {
+		t.Fatalf("certainty strings = %q, %q", RelationshipConfirmed, RelationshipUncertain)
+	}
+
+	newCallGraph := func(t *testing.T) (*Graph, NodeID, NodeID) {
+		t.Helper()
+		g := New()
+		pkg := addTestNode(t, g, Node{Ref: "pkg", Kind: NodePackage, Name: "pkg"})
+		from := addTestNode(t, g, Node{Ref: "pkg::From", Kind: NodeFunction, Name: "From", Parent: pkg})
+		to := addTestNode(t, g, Node{Ref: "pkg::To", Kind: NodeFunction, Name: "To", Parent: pkg})
+		return g, from, to
+	}
+
+	t.Run("unknown rejected", func(t *testing.T) {
+		g, from, to := newCallGraph(t)
+		err := g.AddEdge(Edge{
+			From: from, To: to, Kind: EdgeCalls,
+			Certainty: RelationshipCertaintyUnknown,
+			Evidence:  []Location{{File: "unknown.go", Offset: 1}},
+		})
+		if err == nil {
+			t.Fatal("AddEdge with unknown certainty succeeded")
+		}
+	})
+
+	for _, test := range []struct {
+		name  string
+		first RelationshipCertainty
+		last  RelationshipCertainty
+	}{
+		{name: "uncertain remains uncertain", first: RelationshipUncertain, last: RelationshipUncertain},
+		{name: "uncertain upgrades to confirmed", first: RelationshipUncertain, last: RelationshipConfirmed},
+		{name: "confirmed does not downgrade", first: RelationshipConfirmed, last: RelationshipUncertain},
+		{name: "confirmed remains confirmed", first: RelationshipConfirmed, last: RelationshipConfirmed},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			g, from, to := newCallGraph(t)
+			firstEvidence := Location{File: "first.go", Offset: 1}
+			secondEvidence := Location{File: "second.go", Offset: 2}
+			addTestEdge(t, g, Edge{
+				From: from, To: to, Kind: EdgeCalls, Certainty: test.first,
+				Evidence: []Location{firstEvidence},
+			})
+			addTestEdge(t, g, Edge{
+				From: from, To: to, Kind: EdgeCalls, Certainty: test.last,
+				Evidence: []Location{firstEvidence, secondEvidence},
+			})
+
+			want := RelationshipUncertain
+			if test.first == RelationshipConfirmed || test.last == RelationshipConfirmed {
+				want = RelationshipConfirmed
+			}
+			outgoing := g.Outgoing(from, EdgeCalls)
+			incoming := g.Incoming(to, EdgeCalls)
+			if len(outgoing) != 1 || len(incoming) != 1 {
+				t.Fatalf("edge counts = outgoing %d, incoming %d; want one each", len(outgoing), len(incoming))
+			}
+			if outgoing[0].Certainty != want || incoming[0].Certainty != want {
+				t.Fatalf("certainties = %s, %s; want %s", outgoing[0].Certainty, incoming[0].Certainty, want)
+			}
+			if got := outgoing[0].Evidence; !reflect.DeepEqual(got, []Location{firstEvidence, secondEvidence}) {
+				t.Fatalf("evidence = %#v", got)
+			}
+
+			outgoing[0].Certainty = RelationshipCertaintyUnknown
+			outgoing[0].Evidence[0].Offset = 99
+			stored := g.Outgoing(from, EdgeCalls)[0]
+			if stored.Certainty != want || stored.Evidence[0] != firstEvidence {
+				t.Fatalf("detached copy mutated stored edge: %#v", stored)
+			}
+		})
 	}
 }
 

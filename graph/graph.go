@@ -95,13 +95,36 @@ func (k EdgeKind) String() string {
 	}
 }
 
+// RelationshipCertainty describes whether available supported semantic
+// information establishes a relationship conclusively.
+type RelationshipCertainty uint8
+
+const (
+	RelationshipCertaintyUnknown RelationshipCertainty = iota
+	RelationshipConfirmed
+	RelationshipUncertain
+)
+
+// String returns the public representation of a relationship certainty.
+func (certainty RelationshipCertainty) String() string {
+	switch certainty {
+	case RelationshipConfirmed:
+		return "confirmed"
+	case RelationshipUncertain:
+		return "uncertain"
+	default:
+		return "unknown"
+	}
+}
+
 // Edge is one language-independent relationship. Evidence records every
 // source location that established the relationship.
 type Edge struct {
-	From     NodeID
-	To       NodeID
-	Kind     EdgeKind
-	Evidence []Location
+	From      NodeID
+	To        NodeID
+	Kind      EdgeKind
+	Certainty RelationshipCertainty
+	Evidence  []Location
 }
 
 // PackageRef constructs a package reference.
@@ -263,6 +286,15 @@ func (g *Graph) AddEdge(edge Edge) error {
 	if !toExists {
 		return fmt.Errorf("edge target %d does not exist", edge.To)
 	}
+	if edge.Certainty != RelationshipConfirmed && edge.Certainty != RelationshipUncertain {
+		return fmt.Errorf(
+			"%s edge %d -> %d has invalid certainty %d",
+			edge.Kind,
+			edge.From,
+			edge.To,
+			edge.Certainty,
+		)
+	}
 	switch edge.Kind {
 	case EdgeCalls:
 		if from.Kind != NodeFunction || to.Kind != NodeFunction {
@@ -346,6 +378,9 @@ func (g *Graph) AddEdge(edge Edge) error {
 
 	key := edgeKey{from: edge.From, to: edge.To, kind: edge.Kind}
 	if existing, ok := g.edges[key]; ok {
+		if edge.Certainty == RelationshipConfirmed {
+			existing.Certainty = RelationshipConfirmed
+		}
 		appendUniqueEvidence(existing, edge.Evidence)
 		return nil
 	}
