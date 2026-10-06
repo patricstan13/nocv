@@ -128,6 +128,18 @@ Package/type projections aggregate exact evidence. Evidence need not provide
 IDE-grade ranges, but it must remain precise enough to verify the relationship
 in source.
 
+Structure is for orientation. Relationships are for reasoning. Evidence is for
+verification. Certainty states how conclusively a relationship is established.
+
+Confirmed relationships are established by the available supported semantic
+information. Uncertain relationships are permitted by incomplete information
+but are not established conclusively. Exploratory consumers retain and label
+both. Deterministic consumers act only on Confirmed relationships and preserve
+relevant Uncertain relationships as inconclusive context. Package/type
+projections are Confirmed when any exact evidence is Confirmed; otherwise an
+Uncertain-only projection remains Uncertain. Currently only type-level
+`Implements` extraction produces Uncertain relationships.
+
 ## Analysis lifecycle
 
 An analysis attempt has three product outcomes:
@@ -143,10 +155,12 @@ active Go build environment. It does not mean all configurations or Go
 constructs were analyzed.
 
 Partial currently means incomplete type information may have prevented facts
-that NOCV intends to model. Reasons are coarse, package-scoped, deduplicated,
-and deterministic. Positive facts remain useful; missing facts are not
-conclusive. Status stays on `Analysis` and is communicated at CLI/web
-boundaries, not copied into graph/query results.
+that NOCV intends to model or left a supported relationship non-conclusive.
+Reasons are coarse, package-scoped, deduplicated, and deterministic. Partial
+does not make every relationship Uncertain: certainty is relationship-specific,
+Confirmed facts remain established, and missing facts are not conclusive.
+Status stays on `Analysis` and is communicated at CLI/web boundaries rather
+than determining graph relationship certainty.
 
 List, parse, load, zero-package, and graph-invariant failures return no usable
 analysis. Type-check errors may produce Partial when sufficient compiler state
@@ -165,6 +179,12 @@ One resolved proposed signature feeds four distinct lenses:
 2. compiler diagnostic consequences from an in-memory overlay recheck;
 3. loss of existing interface contracts;
 4. concrete promoted-method surface changes through embedding.
+
+Contract consequences use only Confirmed implementation relationships.
+Relevant Uncertain implementations are returned separately as context rather
+than being claimed as deterministic contract losses. The same boundary applies
+to future deterministic transformations: Uncertain relationships are not proof
+for an actionable rewrite.
 
 The compiler recheck covers the changed package and represented reverse-import
 closure. Exact baseline diagnostics are suppressed; shifted matching dirty-
