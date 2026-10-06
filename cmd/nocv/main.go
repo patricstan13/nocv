@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -43,6 +44,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	writeAnalysisStatusWarning(stderr, analysis)
 	if err := executeCommandWithAnalysis(stdout, analysis.Graph(), analysis, invocation); err != nil {
+		if errors.Is(err, errInconclusiveForbiddenDependency) {
+			return 1
+		}
 		fmt.Fprintln(stderr, "nocv:", err)
 		return 1
 	}

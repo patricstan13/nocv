@@ -386,7 +386,7 @@ func assertCompatibilityCounts(t *testing.T, result goanalyzer.SignatureChangeIm
 func assertNoSignatureConsequences(t *testing.T, impact goanalyzer.SignatureChangeImpact) {
 	t.Helper()
 	if len(impact.CallSites) != 0 || len(impact.Compiler.Consequences) != 0 ||
-		len(impact.Contracts) != 0 || len(impact.Structural) != 0 {
+		len(impact.Contracts) != 0 || len(impact.UncertainContracts) != 0 || len(impact.Structural) != 0 {
 		t.Fatalf("semantic no-op impact = %+v", impact)
 	}
 }

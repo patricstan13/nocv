@@ -21,13 +21,14 @@ type parameterImpactInput struct {
 }
 
 type signatureImpact struct {
-	Callable   graph.SymbolRef    `json:"callable"`
-	Before     callableSignature  `json:"before"`
-	After      callableSignature  `json:"after"`
-	CallSites  []callSiteImpact   `json:"callSites"`
-	Compiler   compilerImpact     `json:"compiler"`
-	Contracts  []contractImpact   `json:"contracts"`
-	Structural []structuralImpact `json:"structural"`
+	Callable           graph.SymbolRef     `json:"callable"`
+	Before             callableSignature   `json:"before"`
+	After              callableSignature   `json:"after"`
+	CallSites          []callSiteImpact    `json:"callSites"`
+	Compiler           compilerImpact      `json:"compiler"`
+	Contracts          []contractImpact    `json:"contracts"`
+	UncertainContracts []uncertainContract `json:"uncertainContracts"`
+	Structural         []structuralImpact  `json:"structural"`
 }
 
 type callableSignature struct {
@@ -68,6 +69,14 @@ type contractImpact struct {
 	Interface       symbolSummary `json:"interface"`
 	ConcreteMethod  symbolSummary `json:"concreteMethod"`
 	InterfaceMethod symbolSummary `json:"interfaceMethod"`
+}
+
+type uncertainContract struct {
+	Concrete        symbolSummary `json:"concrete"`
+	Interface       symbolSummary `json:"interface"`
+	ConcreteMethod  symbolSummary `json:"concreteMethod"`
+	InterfaceMethod symbolSummary `json:"interfaceMethod"`
+	Certainty       string        `json:"certainty"`
 }
 
 type structuralImpact struct {
@@ -138,8 +147,9 @@ func presentSignatureImpact(source goanalyzer.SignatureChangeImpact) signatureIm
 			Consequences:     make([]compilerConsequence, 0, len(source.Compiler.Consequences)),
 			BaselineStatus:   source.Compiler.BaselineStatus.String(),
 		},
-		Contracts:  make([]contractImpact, 0, len(source.Contracts)),
-		Structural: make([]structuralImpact, 0, len(source.Structural)),
+		Contracts:          make([]contractImpact, 0, len(source.Contracts)),
+		UncertainContracts: make([]uncertainContract, 0, len(source.UncertainContracts)),
+		Structural:         make([]structuralImpact, 0, len(source.Structural)),
 	}
 	for _, consequence := range source.Compiler.Consequences {
 		presented := compilerConsequence{
@@ -182,6 +192,15 @@ func presentSignatureImpact(source goanalyzer.SignatureChangeImpact) signatureIm
 			Interface:       presentSymbolSummary(contract.Interface),
 			ConcreteMethod:  presentSymbolSummary(contract.ConcreteMethod),
 			InterfaceMethod: presentSymbolSummary(contract.InterfaceMethod),
+		})
+	}
+	for _, contract := range source.UncertainContracts {
+		result.UncertainContracts = append(result.UncertainContracts, uncertainContract{
+			Concrete:        presentSymbolSummary(contract.Concrete),
+			Interface:       presentSymbolSummary(contract.Interface),
+			ConcreteMethod:  presentSymbolSummary(contract.ConcreteMethod),
+			InterfaceMethod: presentSymbolSummary(contract.InterfaceMethod),
+			Certainty:       contract.Certainty.String(),
 		})
 	}
 	for _, structural := range source.Structural {

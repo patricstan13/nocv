@@ -67,6 +67,30 @@ func TestClientShowsPersistentPartialAnalysisIndicator(t *testing.T) {
 	}
 }
 
+func TestClientSurfacesUncertainRelationshipsWithoutNoisyConfirmedLabels(t *testing.T) {
+	client := readAsset(t, "static/app.js")
+	styles := readAsset(t, "static/app.css")
+	for _, required := range []string{
+		`function certaintyBadge(certainty)`,
+		`if (certainty !== "uncertain") return null`,
+		`element("span", "uncertain", "certainty-badge")`,
+		`appendCertainty(summary, value.certainty)`,
+		`appendCertainty(item, relationship.certainty)`,
+		`dashes: edge.certainty === "uncertain"`,
+		`label: edge.certainty === "uncertain" ? "uncertain" : undefined`,
+		`dashes: dependency.certainty === "uncertain"`,
+		`element("h4", "Uncertain contract context")`,
+		`"These relationships are relevant context, not deterministic contract-loss claims."`,
+	} {
+		if !strings.Contains(client, required) {
+			t.Errorf("uncertain relationship UI source lacks %q", required)
+		}
+	}
+	if !strings.Contains(styles, ".certainty-badge") || !strings.Contains(styles, "border: 1px dashed") {
+		t.Error("uncertain relationship badge lacks explicit styled treatment")
+	}
+}
+
 func TestClientFreezesPhysicsAndPreservesSemanticEdgeDirection(t *testing.T) {
 	client := readAsset(t, "static/app.js")
 	for _, required := range []string{
@@ -582,9 +606,14 @@ func TestAnalyzerProducedUncertainImplementationReachesAPI(t *testing.T) {
 		"go.mod": "module example.com/webcertainty\n\ngo 1.22\n",
 		"certainty.go": `package webcertainty
 
-type Contract interface { Required() }
+type Contract interface {
+	Required() string
+	Other()
+}
 type MissingAlias = MissingDependency
 type Candidate struct { MissingAlias }
+
+func (Candidate) Required() string { return "" }
 `,
 	} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(contents), 0o644); err != nil {
@@ -606,6 +635,24 @@ type Candidate struct { MissingAlias }
 		node.Type.DirectDependencies[0].Kind != "implements" ||
 		node.Type.DirectDependencies[0].Certainty != "uncertain" {
 		t.Fatalf("analyzer-produced implementation response = %#v", node)
+	}
+
+	impactResponse := requestBody(
+		t,
+		Handler(analysis),
+		http.MethodPost,
+		"/api/signature-impact",
+		`{"callable":"example.com/webcertainty::Contract::Required","results":[{"type":"int"}]}`,
+	)
+	if impactResponse.Code != http.StatusOK {
+		t.Fatalf("impact status = %d, body = %s", impactResponse.Code, impactResponse.Body.String())
+	}
+	var impact signatureImpact
+	decode(t, impactResponse, &impact)
+	if len(impact.Contracts) != 0 || len(impact.UncertainContracts) != 1 ||
+		impact.UncertainContracts[0].Concrete.Ref != "example.com/webcertainty::Candidate" ||
+		impact.UncertainContracts[0].Certainty != "uncertain" {
+		t.Fatalf("uncertain contract API result = %#v", impact)
 	}
 }
 

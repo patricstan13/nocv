@@ -16,10 +16,11 @@ type fixtureNode struct {
 }
 
 type fixtureEdge struct {
-	From     graph.SymbolRef
-	To       graph.SymbolRef
-	Kind     graph.EdgeKind
-	Evidence []graph.Location
+	From      graph.SymbolRef
+	To        graph.SymbolRef
+	Kind      graph.EdgeKind
+	Certainty graph.RelationshipCertainty
+	Evidence  []graph.Location
 }
 
 func addFixtureNode(g *graph.Graph, node fixtureNode) error {
@@ -44,8 +45,12 @@ func addFixtureEdge(g *graph.Graph, edge fixtureEdge) error {
 	if !fromExists || !toExists {
 		return fmt.Errorf("edge endpoint missing: %q -> %q", edge.From, edge.To)
 	}
+	certainty := edge.Certainty
+	if certainty == graph.RelationshipCertaintyUnknown {
+		certainty = graph.RelationshipConfirmed
+	}
 	return g.AddEdge(graph.Edge{
-		From: from, To: to, Kind: edge.Kind, Certainty: graph.RelationshipConfirmed,
+		From: from, To: to, Kind: edge.Kind, Certainty: certainty,
 		Evidence: edge.Evidence,
 	})
 }

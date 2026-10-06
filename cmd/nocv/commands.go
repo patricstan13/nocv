@@ -1,12 +1,16 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 
 	"nocv/goanalyzer"
 	"nocv/graph"
+	"nocv/query"
 )
+
+var errInconclusiveForbiddenDependency = errors.New("forbidden dependency result is inconclusive")
 
 const topLevelHelp = `usage: nocv <command> [arguments...]
 
@@ -297,7 +301,9 @@ func executeGoPackageCommand(out io.Writer, g *graph.Graph, invocation invocatio
 		if err := requirePackage(g, to); err != nil {
 			return err
 		}
-		printForbiddenDependencyCheck(out, g, from, to)
+		if printForbiddenDependencyCheck(out, g, from, to) == query.ForbiddenDependencyPotentialViolation {
+			return errInconclusiveForbiddenDependency
+		}
 	case "go.package.dependency-paths":
 		from := graph.SymbolRef(invocation.values[0])
 		to := graph.SymbolRef(invocation.values[1])

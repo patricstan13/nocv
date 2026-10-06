@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -228,6 +229,131 @@ func TestExecuteCommandsRenderFocusedDeterministicOutput(t *testing.T) {
 				t.Errorf("%s output is not deterministic:\nfirst:  %q\nsecond: %q", test.name, first.String(), second.String())
 			}
 		})
+	}
+}
+
+func TestCLIExplicitlyMarksUncertainRelationshipsAndPaths(t *testing.T) {
+	confirmedGraph, confirmedIDs := cliFixture(t)
+	var confirmed bytes.Buffer
+	if err := executeCommand(&confirmed, confirmedGraph, invocation{
+		name: "node.dependencies", pattern: "./...", values: []string{string(confirmedIDs.caller)},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(confirmed.String(), "[confirmed]") || strings.Contains(confirmed.String(), "[uncertain]") ||
+		!strings.Contains(confirmed.String(), "calls -> "+string(confirmedIDs.callee)) {
+		t.Fatalf("confirmed relationship output changed:\n%s", confirmed.String())
+	}
+
+	g := graph.New()
+	source := graph.SymbolRef("example.com/source")
+	target := graph.SymbolRef("example.com/target")
+	concrete := graph.SymbolRef("example.com/source::Concrete")
+	contract := graph.SymbolRef("example.com/target::Contract")
+	for _, node := range []fixtureNode{
+		{ID: source, Kind: graph.NodePackage, Name: "source"},
+		{ID: target, Kind: graph.NodePackage, Name: "target"},
+		{ID: concrete, Kind: graph.NodeStruct, Name: "Concrete", Parent: source},
+		{ID: contract, Kind: graph.NodeInterface, Name: "Contract", Parent: target},
+	} {
+		if err := addFixtureNode(g, node); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := addFixtureEdge(g, fixtureEdge{
+		From: concrete, To: contract, Kind: graph.EdgeImplements,
+		Certainty: graph.RelationshipUncertain,
+		Evidence:  []graph.Location{{File: "uncertain.go", Line: 3, Column: 1}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name   string
+		values []string
+		want   string
+	}{
+		{name: "node.dependencies", values: []string{string(concrete)}, want: "implements [uncertain] -> " + string(contract)},
+		{name: "node.dependents", values: []string{string(contract)}, want: "<- implements [uncertain] " + string(concrete)},
+		{name: "node.dependency-paths", values: []string{string(concrete), string(contract)}, want: "implements [uncertain] ->"},
+		{name: "go.package.dependency-paths", values: []string{string(source), string(target)}, want: "implements [uncertain] ->"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var output bytes.Buffer
+			if err := executeCommand(&output, g, invocation{name: test.name, pattern: "./...", values: test.values}); err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(output.String(), test.want) {
+				t.Fatalf("output lacks %q:\n%s", test.want, output.String())
+			}
+		})
+	}
+
+	var forbidden bytes.Buffer
+	err := executeCommand(&forbidden, g, invocation{
+		name: "go.package.check-forbidden-dependency", pattern: "./...",
+		values: []string{string(source), string(target)},
+	})
+	if !errors.Is(err, errInconclusiveForbiddenDependency) ||
+		!strings.Contains(forbidden.String(), "POTENTIAL VIOLATION (inconclusive)") ||
+		strings.Contains(forbidden.String(), "\nVIOLATION\n") {
+		t.Fatalf("uncertain forbidden dependency = error %v, output:\n%s", err, forbidden.String())
+	}
+}
+
+func TestRunReturnsNonSuccessForUncertainForbiddenDependency(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		"go.mod":           "module example.com/cliuncertain\n\ngo 1.22\n",
+		"source/source.go": "package source\n\ntype MissingAlias = MissingDependency\ntype Candidate struct { MissingAlias }\n",
+		"target/target.go": "package target\n\ntype Contract interface { Required() }\n",
+	}
+	for name, contents := range files {
+		path := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var stdout, stderr bytes.Buffer
+	status := run([]string{
+		"go", "package", "check-forbidden-dependency", filepath.Join(dir, "..."),
+		"example.com/cliuncertain/source", "example.com/cliuncertain/target",
+	}, &stdout, &stderr)
+	if status != 1 || !strings.Contains(stdout.String(), "POTENTIAL VIOLATION (inconclusive)") ||
+		!strings.Contains(stdout.String(), "implements [uncertain]") {
+		t.Fatalf("uncertain run status = %d, stdout = %q, stderr = %q", status, stdout.String(), stderr.String())
+	}
+}
+
+func TestRunPreservesSuccessForConfirmedForbiddenDependency(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		"go.mod":           "module example.com/cliconfirmed\n\ngo 1.22\n",
+		"source/source.go": "package source\n\nimport \"example.com/cliconfirmed/target\"\n\nfunc Run() { target.Save() }\n",
+		"target/target.go": "package target\n\nfunc Save() {}\n",
+	}
+	for name, contents := range files {
+		path := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var stdout, stderr bytes.Buffer
+	status := run([]string{
+		"go", "package", "check-forbidden-dependency", filepath.Join(dir, "..."),
+		"example.com/cliconfirmed/source", "example.com/cliconfirmed/target",
+	}, &stdout, &stderr)
+	if status != 0 || !strings.Contains(stdout.String(), "\nVIOLATION\n") || strings.Contains(stdout.String(), "[uncertain]") {
+		t.Fatalf("confirmed run status = %d, stdout = %q, stderr = %q", status, stdout.String(), stderr.String())
 	}
 }
 

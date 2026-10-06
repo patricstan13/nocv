@@ -42,7 +42,7 @@ func printDirectDependencies(out io.Writer, g *graph.Graph, id graph.SymbolRef) 
 		return
 	}
 	for _, relationship := range relationships {
-		fmt.Fprintf(out, "  %s -> %s\n", relationship.Kind, relationship.To)
+		fmt.Fprintf(out, "  %s%s -> %s\n", relationship.Kind, certaintyMarker(relationship.Certainty), relationship.To)
 	}
 }
 
@@ -54,7 +54,7 @@ func printDirectDependents(out io.Writer, g *graph.Graph, id graph.SymbolRef) {
 		return
 	}
 	for _, relationship := range relationships {
-		fmt.Fprintf(out, "  <- %s %s\n", relationship.Kind, relationship.From)
+		fmt.Fprintf(out, "  <- %s%s %s\n", relationship.Kind, certaintyMarker(relationship.Certainty), relationship.From)
 	}
 }
 
@@ -128,17 +128,23 @@ func formatLocation(location graph.Location) string {
 	return fmt.Sprintf("%s:%d:%d", location.File, location.Line, location.Column)
 }
 
-func printForbiddenDependencyCheck(out io.Writer, g *graph.Graph, from, to graph.SymbolRef) {
+func printForbiddenDependencyCheck(out io.Writer, g *graph.Graph, from, to graph.SymbolRef) query.ForbiddenDependencyOutcome {
 	fmt.Fprintf(out, "Forbidden package dependency:\n  %s -> %s\n\n", from, to)
 	violation, exists := query.CheckForbiddenPackageDependency(g, from, to)
 	if !exists {
 		fmt.Fprintln(out, "No violation.")
-		return
+		return query.ForbiddenDependencyNoObservedPath
 	}
 
-	fmt.Fprintln(out, "VIOLATION")
+	if violation.Outcome == query.ForbiddenDependencyPotentialViolation {
+		fmt.Fprintln(out, "POTENTIAL VIOLATION (inconclusive)")
+		fmt.Fprintln(out, "Only uncertain semantic paths were observed.")
+	} else {
+		fmt.Fprintln(out, "VIOLATION")
+	}
 	fmt.Fprintln(out)
 	printPackagePathResults(out, violation.Paths)
+	return violation.Outcome
 }
 
 func printTransitiveDependents(out io.Writer, g *graph.Graph, id graph.SymbolRef) {
@@ -168,7 +174,7 @@ func printSemanticPaths(out io.Writer, paths []query.SemanticPath, indent string
 	for index, path := range paths {
 		fmt.Fprintf(out, "%spath %d:\n", indent, index+1)
 		for _, step := range path.Steps {
-			fmt.Fprintf(out, "%s  %s %s -> %s\n", indent, step.From, step.Kind, step.To)
+			fmt.Fprintf(out, "%s  %s %s%s -> %s\n", indent, step.From, step.Kind, certaintyMarker(step.Certainty), step.To)
 		}
 	}
 }
@@ -188,10 +194,10 @@ func printPackagePathResults(out io.Writer, paths []query.PackageDependencyPath)
 		fmt.Fprintf(out, "path %d:\n", index+1)
 		fmt.Fprintf(out, "  %s\n", path.Packages[0])
 		for _, step := range path.Steps {
-			fmt.Fprintf(out, "  -> %s\n", step.To)
+			fmt.Fprintf(out, "  ->%s %s\n", certaintyMarker(step.Certainty), step.To)
 			fmt.Fprintln(out, "     evidence:")
 			for _, evidence := range step.Evidence {
-				fmt.Fprintf(out, "       %s %s -> %s\n", evidence.From, evidence.Kind, evidence.To)
+				fmt.Fprintf(out, "       %s %s%s -> %s\n", evidence.From, evidence.Kind, certaintyMarker(evidence.Certainty), evidence.To)
 			}
 		}
 	}
@@ -205,10 +211,10 @@ func printDirectTypeDependencies(out io.Writer, g *graph.Graph, id graph.SymbolR
 		return
 	}
 	for _, dependency := range dependencies {
-		fmt.Fprintf(out, "  -> %s\n", dependency.To)
+		fmt.Fprintf(out, "  ->%s %s\n", certaintyMarker(dependency.Certainty), dependency.To)
 		fmt.Fprintln(out, "     evidence:")
 		for _, evidence := range dependency.Evidence {
-			fmt.Fprintf(out, "       %s %s -> %s\n", evidence.From, evidence.Kind, evidence.To)
+			fmt.Fprintf(out, "       %s %s%s -> %s\n", evidence.From, evidence.Kind, certaintyMarker(evidence.Certainty), evidence.To)
 		}
 	}
 }
@@ -224,10 +230,10 @@ func printTypeDependencyPaths(out io.Writer, g *graph.Graph, from, to graph.Symb
 		fmt.Fprintf(out, "path %d:\n", index+1)
 		fmt.Fprintf(out, "  %s\n", path.Types[0])
 		for _, step := range path.Steps {
-			fmt.Fprintf(out, "  -> %s\n", step.To)
+			fmt.Fprintf(out, "  ->%s %s\n", certaintyMarker(step.Certainty), step.To)
 			fmt.Fprintln(out, "     evidence:")
 			for _, evidence := range step.Evidence {
-				fmt.Fprintf(out, "       %s %s -> %s\n", evidence.From, evidence.Kind, evidence.To)
+				fmt.Fprintf(out, "       %s %s%s -> %s\n", evidence.From, evidence.Kind, certaintyMarker(evidence.Certainty), evidence.To)
 			}
 		}
 	}
@@ -256,10 +262,10 @@ func printDependencyInspection(out io.Writer, g *graph.Graph, from, to graph.Sym
 				fmt.Fprintln(out, "    (none)")
 			} else {
 				for _, dependency := range inspection.TypeDependencies {
-					fmt.Fprintf(out, "    %s -> %s\n", dependency.From, dependency.To)
+					fmt.Fprintf(out, "    %s ->%s %s\n", dependency.From, certaintyMarker(dependency.Certainty), dependency.To)
 					fmt.Fprintln(out, "      evidence:")
 					for _, evidence := range dependency.Evidence {
-						fmt.Fprintf(out, "        %s %s -> %s\n", evidence.From, evidence.Kind, evidence.To)
+						fmt.Fprintf(out, "        %s %s%s -> %s\n", evidence.From, evidence.Kind, certaintyMarker(evidence.Certainty), evidence.To)
 					}
 				}
 			}
@@ -269,7 +275,7 @@ func printDependencyInspection(out io.Writer, g *graph.Graph, from, to graph.Sym
 				fmt.Fprintln(out, "    (none)")
 			}
 			for _, evidence := range inspection.ExactOnly {
-				fmt.Fprintf(out, "    %s %s -> %s\n", evidence.From, evidence.Kind, evidence.To)
+				fmt.Fprintf(out, "    %s %s%s -> %s\n", evidence.From, evidence.Kind, certaintyMarker(evidence.Certainty), evidence.To)
 			}
 		}
 	}
@@ -365,9 +371,9 @@ func printPackageDependenciesForNode(out io.Writer, heading string, dependencies
 	}
 	for _, dependency := range dependencies {
 		if incoming {
-			fmt.Fprintf(out, "  <- %s\n", dependency.From)
+			fmt.Fprintf(out, "  <-%s %s\n", certaintyMarker(dependency.Certainty), dependency.From)
 		} else {
-			fmt.Fprintf(out, "  -> %s\n", dependency.To)
+			fmt.Fprintf(out, "  ->%s %s\n", certaintyMarker(dependency.Certainty), dependency.To)
 		}
 		printNodeEvidence(out, dependency.Evidence)
 	}
@@ -381,9 +387,9 @@ func printTypeDependenciesForNode(out io.Writer, heading string, dependencies []
 	}
 	for _, dependency := range dependencies {
 		if incoming {
-			fmt.Fprintf(out, "  <- %s\n", dependency.From)
+			fmt.Fprintf(out, "  <-%s %s\n", certaintyMarker(dependency.Certainty), dependency.From)
 		} else {
-			fmt.Fprintf(out, "  -> %s\n", dependency.To)
+			fmt.Fprintf(out, "  ->%s %s\n", certaintyMarker(dependency.Certainty), dependency.To)
 		}
 		printNodeEvidence(out, dependency.Evidence)
 	}
@@ -392,7 +398,7 @@ func printTypeDependenciesForNode(out io.Writer, heading string, dependencies []
 func printNodeEvidence(out io.Writer, evidence []query.Relationship) {
 	fmt.Fprintln(out, "     evidence:")
 	for _, relationship := range evidence {
-		fmt.Fprintf(out, "       %s %s -> %s\n", relationship.From, relationship.Kind, relationship.To)
+		fmt.Fprintf(out, "       %s %s%s -> %s\n", relationship.From, relationship.Kind, certaintyMarker(relationship.Certainty), relationship.To)
 	}
 }
 
@@ -404,9 +410,9 @@ func printRelationshipsForNode(out io.Writer, heading string, relationships []qu
 	}
 	for _, relationship := range relationships {
 		if incoming {
-			fmt.Fprintf(out, "  <- %s %s\n", relationship.Kind, relationship.From)
+			fmt.Fprintf(out, "  <- %s%s %s\n", relationship.Kind, certaintyMarker(relationship.Certainty), relationship.From)
 		} else {
-			fmt.Fprintf(out, "  %s -> %s\n", relationship.Kind, relationship.To)
+			fmt.Fprintf(out, "  %s%s -> %s\n", relationship.Kind, certaintyMarker(relationship.Certainty), relationship.To)
 		}
 	}
 }
@@ -419,9 +425,16 @@ func printSymbolRelationshipsForNode(out io.Writer, heading string, relationship
 	}
 	for _, relationship := range relationships {
 		if incoming {
-			fmt.Fprintf(out, "  <- %s %s\n", relationship.Kind, relationship.From.Ref)
+			fmt.Fprintf(out, "  <- %s%s %s\n", relationship.Kind, certaintyMarker(relationship.Certainty), relationship.From.Ref)
 		} else {
-			fmt.Fprintf(out, "  %s -> %s\n", relationship.Kind, relationship.To.Ref)
+			fmt.Fprintf(out, "  %s%s -> %s\n", relationship.Kind, certaintyMarker(relationship.Certainty), relationship.To.Ref)
 		}
 	}
+}
+
+func certaintyMarker(certainty graph.RelationshipCertainty) string {
+	if certainty == graph.RelationshipUncertain {
+		return " [uncertain]"
+	}
+	return ""
 }
