@@ -13,17 +13,17 @@ func TestDirectImportNavigationIsDeterministicDefensiveAndValidated(t *testing.T
 	before := importGraphSnapshot(g)
 
 	wantImports := []query.Relationship{
-		{From: ids.app, To: ids.plugin, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "app.go", Offset: 30}}},
-		{From: ids.app, To: ids.repository, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "app.go", Offset: 20}}},
-		{From: ids.app, To: ids.service, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "app.go", Offset: 10}, {File: "other.go", Offset: 5}}},
+		{From: ids.app, To: ids.plugin, Kind: graph.EdgeImports, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "app.go", Offset: 30}}},
+		{From: ids.app, To: ids.repository, Kind: graph.EdgeImports, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "app.go", Offset: 20}}},
+		{From: ids.app, To: ids.service, Kind: graph.EdgeImports, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "app.go", Offset: 10}, {File: "other.go", Offset: 5}}},
 	}
 	imports := query.DirectImports(g, ids.app)
 	if !reflect.DeepEqual(imports, wantImports) {
 		t.Fatalf("DirectImports(app) = %#v, want %#v", imports, wantImports)
 	}
 	wantImporters := []query.Relationship{
-		{From: ids.app, To: ids.service, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "app.go", Offset: 10}, {File: "other.go", Offset: 5}}},
-		{From: ids.worker, To: ids.service, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "worker.go", Offset: 10}}},
+		{From: ids.app, To: ids.service, Kind: graph.EdgeImports, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "app.go", Offset: 10}, {File: "other.go", Offset: 5}}},
+		{From: ids.worker, To: ids.service, Kind: graph.EdgeImports, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "worker.go", Offset: 10}}},
 	}
 	if got := query.DirectImporters(g, ids.service); !reflect.DeepEqual(got, wantImporters) {
 		t.Fatalf("DirectImporters(service) = %#v, want %#v", got, wantImporters)
@@ -110,12 +110,12 @@ func importFixture(t *testing.T) (*graph.Graph, importIDs) {
 		}
 	}
 	edges := []testEdge{
-		{From: ids.app, To: ids.service, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "app.go", Offset: 10}}},
-		{From: ids.worker, To: ids.service, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "worker.go", Offset: 10}}},
-		{From: ids.app, To: ids.repository, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "app.go", Offset: 20}}},
-		{From: ids.app, To: ids.plugin, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "app.go", Offset: 30}}},
-		{From: ids.app, To: ids.service, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "other.go", Offset: 5}}},
-		{From: ids.appFunction, To: ids.serviceFunction, Kind: graph.EdgeCalls, Evidence: []graph.Location{{File: "app.go", Offset: 50}}},
+		{From: ids.app, To: ids.service, Kind: graph.EdgeImports, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "app.go", Offset: 10}}},
+		{From: ids.worker, To: ids.service, Kind: graph.EdgeImports, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "worker.go", Offset: 10}}},
+		{From: ids.app, To: ids.repository, Kind: graph.EdgeImports, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "app.go", Offset: 20}}},
+		{From: ids.app, To: ids.plugin, Kind: graph.EdgeImports, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "app.go", Offset: 30}}},
+		{From: ids.app, To: ids.service, Kind: graph.EdgeImports, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "other.go", Offset: 5}}},
+		{From: ids.appFunction, To: ids.serviceFunction, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "app.go", Offset: 50}}},
 	}
 	for _, edge := range edges {
 		if err := addTestEdge(g, edge); err != nil {

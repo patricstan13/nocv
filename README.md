@@ -118,6 +118,15 @@ Package and type dependencies are projections of exact semantic facts. NOCV
 retains those facts as evidence, so a package edge can be inspected down to the
 calls, contracts, embeddings, and signature relationships that establish it.
 
+Relationships carry an explicit certainty. **Confirmed** means the available
+supported semantic information establishes the relationship. **Uncertain**
+means incomplete compiler information permits the relationship but does not
+establish it conclusively. Exploratory queries retain both states and mark
+uncertain relationships explicitly; deterministic conclusions use only
+confirmed relationships and preserve relevant uncertainty as inconclusive
+context. Currently, only type-level `Implements` relationships have a proven
+uncertainty-producing condition.
+
 ## CLI structure
 
 ```text
@@ -176,13 +185,16 @@ A load has one of three outcomes:
 - **Complete:** NOCV found no known condition that prevented its supported
   analysis for the loaded packages and active build configuration.
 - **Partial:** the graph is useful, but incomplete type information may have
-  caused supported facts to be omitted. The CLI warns once and the web
-  interface displays a persistent status indicator.
+  caused supported facts to be omitted or particular relationships to remain
+  uncertain. The CLI warns once and the web interface displays a persistent
+  status indicator.
 - **Failed:** no usable analysis is returned, for example after a syntax/load
   failure or when no packages match.
 
-For a Partial analysis, positive facts remain useful; absence is not
-conclusive.
+Partial does not make every relationship uncertain. Confirmed relationships
+remain established by the available supported semantic information. Uncertain
+relationships are retained and labeled as architectural context. Absence under
+Partial analysis remains inconclusive.
 
 ## Current limitations
 

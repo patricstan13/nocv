@@ -55,6 +55,10 @@ func InspectPackageDependency(g *graph.Graph, dependency PackageDependency) Pack
 					continue
 				}
 				filtered.Evidence = append(filtered.Evidence, copyRelationship(packageRelationship))
+				filtered.Certainty = mergeRelationshipCertainty(
+					filtered.Certainty,
+					packageRelationship.Certainty,
+				)
 				matched[identity] = true
 			}
 			if len(filtered.Evidence) != 0 {

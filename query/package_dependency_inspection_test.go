@@ -258,17 +258,17 @@ func packageInspectionFixture(t *testing.T) *graph.Graph {
 		}
 	}
 	for index, edge := range []testEdge{
-		{From: "app::Run", To: "service::Service::Create", Kind: graph.EdgeCalls},
-		{From: "app::Run", To: "service::Service", Kind: graph.EdgeAccepts},
-		{From: "service::Migrate", To: "repository::Repository::Save", Kind: graph.EdgeCalls},
-		{From: "service::Service::Create", To: "repository::Repository::Save", Kind: graph.EdgeCalls},
-		{From: "service::Service::Create", To: "repository::Repository", Kind: graph.EdgeAccepts},
-		{From: "service::Service::Create", To: "repository::helper", Kind: graph.EdgeCalls},
-		{From: "service::Service", To: "repository::Repository", Kind: graph.EdgeImplements},
-		{From: "service::Service::Create", To: "repository::Repository::Save", Kind: graph.EdgeImplements},
-		{From: "service::Worker::Sync", To: "repository::Audit::Record", Kind: graph.EdgeCalls},
-		{From: "service::Child", To: "repository::Parent", Kind: graph.EdgeEmbeds},
-		{From: "service", To: "repository", Kind: graph.EdgeImports},
+		{From: "app::Run", To: "service::Service::Create", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "app::Run", To: "service::Service", Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed},
+		{From: "service::Migrate", To: "repository::Repository::Save", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "service::Service::Create", To: "repository::Repository::Save", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "service::Service::Create", To: "repository::Repository", Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed},
+		{From: "service::Service::Create", To: "repository::helper", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "service::Service", To: "repository::Repository", Kind: graph.EdgeImplements, Certainty: graph.RelationshipConfirmed},
+		{From: "service::Service::Create", To: "repository::Repository::Save", Kind: graph.EdgeImplements, Certainty: graph.RelationshipConfirmed},
+		{From: "service::Worker::Sync", To: "repository::Audit::Record", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "service::Child", To: "repository::Parent", Kind: graph.EdgeEmbeds, Certainty: graph.RelationshipConfirmed},
+		{From: "service", To: "repository", Kind: graph.EdgeImports, Certainty: graph.RelationshipConfirmed},
 	} {
 		edge.Evidence = []graph.Location{{File: "inspection.go", Offset: index}}
 		if err := addTestEdge(g, edge); err != nil {

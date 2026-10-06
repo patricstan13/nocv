@@ -40,15 +40,15 @@ func TestDirectPackageDependenciesAggregateBoundaryFactsAndIgnoreInternalAndImpo
 	}
 
 	edges := []testEdge{
-		{From: "a::Start", To: "a::Helper1", Kind: graph.EdgeCalls},
-		{From: "a::Helper1", To: "a::Helper2", Kind: graph.EdgeCalls},
-		{From: "a::Helper2", To: "b::Target", Kind: graph.EdgeCalls},
-		{From: "a::Accept", To: "b::Contract", Kind: graph.EdgeAccepts},
-		{From: "a::Return", To: "b::Base", Kind: graph.EdgeReturns},
-		{From: "a::Implement", To: "b::Contract", Kind: graph.EdgeImplements},
-		{From: "a::Embed", To: "b::Base", Kind: graph.EdgeEmbeds},
-		{From: "a::ToC", To: "c::Target", Kind: graph.EdgeCalls},
-		{From: a, To: plugin, Kind: graph.EdgeImports},
+		{From: "a::Start", To: "a::Helper1", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "a::Helper1", To: "a::Helper2", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "a::Helper2", To: "b::Target", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "a::Accept", To: "b::Contract", Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed},
+		{From: "a::Return", To: "b::Base", Kind: graph.EdgeReturns, Certainty: graph.RelationshipConfirmed},
+		{From: "a::Implement", To: "b::Contract", Kind: graph.EdgeImplements, Certainty: graph.RelationshipConfirmed},
+		{From: "a::Embed", To: "b::Base", Kind: graph.EdgeEmbeds, Certainty: graph.RelationshipConfirmed},
+		{From: "a::ToC", To: "c::Target", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: a, To: plugin, Kind: graph.EdgeImports, Certainty: graph.RelationshipConfirmed},
 	}
 	for index := range edges {
 		edges[index].Evidence = []graph.Location{{File: "projection.go", Offset: index}}
@@ -119,11 +119,11 @@ func TestPackageDependencyPathsTraversePackageViewAcrossDisconnectedSymbols(t *t
 		mustAddPackagePathNode(t, g, testNode{ID: id, Kind: graph.NodeFunction, Name: value[3:], Parent: parent})
 	}
 	edges := []testEdge{
-		{From: "a::ToB", To: "b::FromA", Kind: graph.EdgeCalls},
-		{From: "b::ToD", To: "d::FromB", Kind: graph.EdgeCalls},
-		{From: "a::ToC", To: "c::FromA", Kind: graph.EdgeCalls},
-		{From: "c::ToD", To: "d::FromC", Kind: graph.EdgeCalls},
-		{From: "b::FromA", To: "a::ToB", Kind: graph.EdgeCalls}, // malformed package cycle
+		{From: "a::ToB", To: "b::FromA", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "b::ToD", To: "d::FromB", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "a::ToC", To: "c::FromA", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "c::ToD", To: "d::FromC", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "b::FromA", To: "a::ToB", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed}, // malformed package cycle
 	}
 	for index := range edges {
 		edges[index].Evidence = []graph.Location{{File: "routes.go", Offset: index}}
@@ -174,13 +174,13 @@ func TestPackageViewCollapsesInternalChainsWithoutChangingExactPaths(t *testing.
 		mustAddPackagePathNode(t, g, node)
 	}
 	edges := []testEdge{
-		{From: "a::Start", To: "a::Helper1", Kind: graph.EdgeCalls},
-		{From: "a::Helper1", To: "a::Helper2", Kind: graph.EdgeCalls},
-		{From: "a::Helper2", To: "b::Target", Kind: graph.EdgeCalls},
-		{From: "a::Start", To: "a::One", Kind: graph.EdgeCalls},
-		{From: "a::Start", To: "a::Two", Kind: graph.EdgeCalls},
-		{From: "a::One", To: "b::Target", Kind: graph.EdgeCalls},
-		{From: "a::Two", To: "b::Target", Kind: graph.EdgeCalls},
+		{From: "a::Start", To: "a::Helper1", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "a::Helper1", To: "a::Helper2", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "a::Helper2", To: "b::Target", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "a::Start", To: "a::One", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "a::Start", To: "a::Two", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "a::One", To: "b::Target", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "a::Two", To: "b::Target", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
 	}
 	for index := range edges {
 		edges[index].Evidence = []graph.Location{{File: "internal.go", Offset: index}}
@@ -245,13 +245,13 @@ func TestAnalyzerPipelineBuildsPackageViewWithoutChangingExactPaths(t *testing.T
 	want := []query.PackageDependencyPath{{
 		Packages: []graph.SymbolRef{app, service, repository},
 		Steps: []query.PackageDependency{
-			{From: app, To: service, Evidence: []query.Relationship{
-				{From: run, To: create, Kind: graph.EdgeCalls, Evidence: graphEvidence(g, run, create, graph.EdgeCalls)},
-				{From: run, To: update, Kind: graph.EdgeCalls, Evidence: graphEvidence(g, run, update, graph.EdgeCalls)},
+			{From: app, To: service, Certainty: graph.RelationshipConfirmed, Evidence: []query.Relationship{
+				{From: run, To: create, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed, Evidence: graphEvidence(g, run, create, graph.EdgeCalls)},
+				{From: run, To: update, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed, Evidence: graphEvidence(g, run, update, graph.EdgeCalls)},
 			}},
-			{From: service, To: repository, Evidence: []query.Relationship{
-				{From: create, To: save, Kind: graph.EdgeCalls, Evidence: graphEvidence(g, create, save, graph.EdgeCalls)},
-				{From: update, To: save, Kind: graph.EdgeCalls, Evidence: graphEvidence(g, update, save, graph.EdgeCalls)},
+			{From: service, To: repository, Certainty: graph.RelationshipConfirmed, Evidence: []query.Relationship{
+				{From: create, To: save, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed, Evidence: graphEvidence(g, create, save, graph.EdgeCalls)},
+				{From: update, To: save, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed, Evidence: graphEvidence(g, update, save, graph.EdgeCalls)},
 			}},
 		},
 	}}
@@ -259,8 +259,8 @@ func TestAnalyzerPipelineBuildsPackageViewWithoutChangingExactPaths(t *testing.T
 		t.Fatalf("fixture package paths = %#v, want %#v", got, want)
 	}
 	wantExact := []query.SemanticPath{
-		{Steps: []query.SemanticStep{{From: run, To: create, Kind: graph.EdgeCalls}, {From: create, To: save, Kind: graph.EdgeCalls}}},
-		{Steps: []query.SemanticStep{{From: run, To: update, Kind: graph.EdgeCalls}, {From: update, To: save, Kind: graph.EdgeCalls}}},
+		{Steps: []query.SemanticStep{{From: run, To: create, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed}, {From: create, To: save, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed}}},
+		{Steps: []query.SemanticStep{{From: run, To: update, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed}, {From: update, To: save, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed}}},
 	}
 	if got := query.DependencyPaths(g, run, save); !reflect.DeepEqual(got, wantExact) {
 		t.Fatalf("fixture exact paths = %#v, want unchanged %#v", got, wantExact)

@@ -54,7 +54,7 @@ func TestWouldCreateImportCycleIsSafeOnExistingCycle(t *testing.T) {
 		}
 	}
 	for _, endpoints := range [][2]graph.SymbolRef{{"p", "q"}, {"q", "p"}, {"q", "r"}} {
-		if err := addTestEdge(g, testEdge{From: endpoints[0], To: endpoints[1], Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "fixture.go"}}}); err != nil {
+		if err := addTestEdge(g, testEdge{From: endpoints[0], To: endpoints[1], Kind: graph.EdgeImports, Certainty: graph.RelationshipConfirmed, Evidence: []graph.Location{{File: "fixture.go"}}}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -156,14 +156,14 @@ func importCycleFixture(t *testing.T) (*graph.Graph, importCycleIDs) {
 	}
 	for index, endpoints := range imports {
 		if err := addTestEdge(g, testEdge{
-			From: endpoints[0], To: endpoints[1], Kind: graph.EdgeImports,
+			From: endpoints[0], To: endpoints[1], Kind: graph.EdgeImports, Certainty: graph.RelationshipConfirmed,
 			Evidence: []graph.Location{{File: "fixture.go", Offset: index}},
 		}); err != nil {
 			t.Fatalf("AddEdge(imports, %q -> %q): %v", endpoints[0], endpoints[1], err)
 		}
 	}
 	if err := addTestEdge(g, testEdge{
-		From: ids.dFunction, To: ids.aFunction, Kind: graph.EdgeCalls,
+		From: ids.dFunction, To: ids.aFunction, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed,
 		Evidence: []graph.Location{{File: "fixture.go", Offset: 100}},
 	}); err != nil {
 		t.Fatal(err)

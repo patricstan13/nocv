@@ -9,20 +9,21 @@ import (
 	"nocv/query"
 )
 
-func (a *Analysis) contractImpacts(callable resolvedCallable, proposed resolvedSignature) []ContractImpact {
+func (a *Analysis) contractImpacts(callable resolvedCallable, proposed resolvedSignature) ([]ContractImpact, []UncertainContract) {
 	parent, exists := a.graph.Node(callable.node.Parent)
 	if !exists {
-		return nil
+		return nil, nil
 	}
 
 	var impacts []ContractImpact
+	var uncertain []UncertainContract
 	switch parent.Kind {
 	case graph.NodeStruct:
-		impacts = a.contractsForConcreteMethod(callable, proposed)
+		impacts, uncertain = a.contractsForConcreteMethod(callable, proposed)
 	case graph.NodeInterface:
-		impacts = a.contractsForInterfaceMethod(callable, proposed)
+		impacts, uncertain = a.contractsForInterfaceMethod(callable, proposed)
 	default:
-		return nil
+		return nil, nil
 	}
 
 	impacts = uniqueContractImpacts(impacts)
@@ -39,18 +40,27 @@ func (a *Analysis) contractImpacts(callable resolvedCallable, proposed resolvedS
 		}
 		return left.InterfaceMethod.Ref < right.InterfaceMethod.Ref
 	})
-	return impacts
+	uncertain = uniqueUncertainContracts(uncertain)
+	sort.Slice(uncertain, func(i, j int) bool {
+		left, right := uncertain[i], uncertain[j]
+		if left.Concrete.Ref != right.Concrete.Ref {
+			return left.Concrete.Ref < right.Concrete.Ref
+		}
+		return left.Interface.Ref < right.Interface.Ref
+	})
+	return impacts, uncertain
 }
 
 // contractsForConcreteMethod starts with current type-level implementation
 // edges from the method's owning struct. Compiler method-set lookup then proves
 // that the selected declaration supplies a method required by that contract.
-func (a *Analysis) contractsForConcreteMethod(callable resolvedCallable, proposed resolvedSignature) []ContractImpact {
+func (a *Analysis) contractsForConcreteMethod(callable resolvedCallable, proposed resolvedSignature) ([]ContractImpact, []UncertainContract) {
 	var result []ContractImpact
+	var uncertain []UncertainContract
 	concreteID := callable.node.Parent
 	concreteNamed := a.symbols.namedTypes[concreteID]
 	if concreteNamed == nil {
-		return nil
+		return nil, nil
 	}
 
 	for _, edge := range a.graph.Outgoing(concreteID, graph.EdgeImplements) {
@@ -68,6 +78,16 @@ func (a *Analysis) contractsForConcreteMethod(callable resolvedCallable, propose
 			if selection == nil || selection.Obj() != callable.function {
 				continue
 			}
+			if edge.Certainty == graph.RelationshipUncertain {
+				uncertain = append(uncertain, UncertainContract{
+					Concrete:        a.symbolSummary(concreteID),
+					Interface:       a.symbolSummary(edge.To),
+					ConcreteMethod:  a.symbolSummary(callable.node.ID),
+					InterfaceMethod: a.symbolSummaryForObject(interfaceMethod),
+					Certainty:       edge.Certainty,
+				})
+				continue
+			}
 			if hypotheticalMethodImplements(callable, proposed, interfaceMethod, implementation) {
 				continue
 			}
@@ -80,7 +100,7 @@ func (a *Analysis) contractsForConcreteMethod(callable resolvedCallable, propose
 			})
 		}
 	}
-	return result
+	return result, uncertain
 }
 
 // contractsForInterfaceMethod considers current type-level implementation
@@ -88,8 +108,9 @@ func (a *Analysis) contractsForConcreteMethod(callable resolvedCallable, propose
 // A temporary flattened interface substitutes only the proposed method
 // signature, and go/types rechecks satisfaction against the unchanged concrete
 // method set.
-func (a *Analysis) contractsForInterfaceMethod(callable resolvedCallable, proposed resolvedSignature) []ContractImpact {
+func (a *Analysis) contractsForInterfaceMethod(callable resolvedCallable, proposed resolvedSignature) ([]ContractImpact, []UncertainContract) {
 	var result []ContractImpact
+	var uncertain []UncertainContract
 	for _, concrete := range a.graph.Nodes() {
 		if concrete.Kind != graph.NodeStruct {
 			continue
@@ -101,6 +122,22 @@ func (a *Analysis) contractsForInterfaceMethod(callable resolvedCallable, propos
 		for _, edge := range a.graph.Outgoing(concrete.ID, graph.EdgeImplements) {
 			interfaceType := a.interfaceType(edge.To)
 			if interfaceType == nil || !interfaceContainsMethod(interfaceType, callable.function) {
+				continue
+			}
+			if edge.Certainty == graph.RelationshipUncertain {
+				concreteMethod := query.SymbolSummary{}
+				if implementation, ok := implementationType(concreteNamed, interfaceType); ok {
+					if selection := types.NewMethodSet(implementation).Lookup(callable.function.Pkg(), callable.function.Name()); selection != nil {
+						concreteMethod = a.symbolSummaryForObject(selection.Obj())
+					}
+				}
+				uncertain = append(uncertain, UncertainContract{
+					Concrete:        a.symbolSummary(concrete.ID),
+					Interface:       a.symbolSummary(edge.To),
+					ConcreteMethod:  concreteMethod,
+					InterfaceMethod: a.symbolSummary(callable.node.ID),
+					Certainty:       edge.Certainty,
+				})
 				continue
 			}
 			implementation, currentlyImplements := implementationType(concreteNamed, interfaceType)
@@ -125,7 +162,7 @@ func (a *Analysis) contractsForInterfaceMethod(callable resolvedCallable, propos
 			})
 		}
 	}
-	return result
+	return result, uncertain
 }
 
 func (a *Analysis) interfaceType(id graph.NodeID) *types.Interface {
@@ -231,6 +268,24 @@ func uniqueContractImpacts(impacts []ContractImpact) []ContractImpact {
 		}
 		seen[key] = true
 		result = append(result, impact)
+	}
+	return result
+}
+
+func uniqueUncertainContracts(contracts []UncertainContract) []UncertainContract {
+	type key struct {
+		concrete graph.SymbolRef
+		iface    graph.SymbolRef
+	}
+	seen := make(map[key]bool, len(contracts))
+	result := make([]UncertainContract, 0, len(contracts))
+	for _, contract := range contracts {
+		key := key{concrete: contract.Concrete.Ref, iface: contract.Interface.Ref}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		result = append(result, contract)
 	}
 	return result
 }

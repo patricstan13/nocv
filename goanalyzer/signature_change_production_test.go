@@ -125,7 +125,7 @@ func TestAnalyzeSignatureChangeNoopAndVariadicOnly(t *testing.T) {
 		t.Fatalf("parameter-only impact = %#v", parameterOnly)
 	}
 	noop := analyzeSignature(t, analysis, "example.com/shop/parameterimpact::UseID", []string{"ID"}, nil, false)
-	if len(noop.CallSites) != 0 || len(noop.Compiler.Consequences) != 0 || len(noop.Contracts) != 0 || len(noop.Structural) != 0 {
+	if len(noop.CallSites) != 0 || len(noop.Compiler.Consequences) != 0 || len(noop.Contracts) != 0 || len(noop.UncertainContracts) != 0 || len(noop.Structural) != 0 {
 		t.Fatalf("semantic no-op = %#v", noop)
 	}
 	nameOnly, err := analysis.AnalyzeSignatureChange("example.com/shop/parameterimpact::ResultBase::Fetch", goanalyzer.ProposedSignature{
@@ -135,7 +135,7 @@ func TestAnalyzeSignatureChangeNoopAndVariadicOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(nameOnly.CallSites) != 0 || len(nameOnly.Compiler.Consequences) != 0 || len(nameOnly.Contracts) != 0 || len(nameOnly.Structural) != 0 {
+	if len(nameOnly.CallSites) != 0 || len(nameOnly.Compiler.Consequences) != 0 || len(nameOnly.Contracts) != 0 || len(nameOnly.UncertainContracts) != 0 || len(nameOnly.Structural) != 0 {
 		t.Fatalf("name-only proposal = %#v", nameOnly)
 	}
 	variadic := analyzeSignature(t, analysis, "example.com/shop/parameterimpact::Variadic", []string{"string"}, nil, false)

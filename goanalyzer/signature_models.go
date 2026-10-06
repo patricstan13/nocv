@@ -115,6 +115,17 @@ type ContractImpact struct {
 	InterfaceMethod query.SymbolSummary
 }
 
+// UncertainContract is a currently permitted, but not conclusively
+// established, implementation relationship relevant to a signature change.
+// It is context only and is not a deterministic contract consequence.
+type UncertainContract struct {
+	Concrete        query.SymbolSummary
+	Interface       query.SymbolSummary
+	ConcreteMethod  query.SymbolSummary
+	InterfaceMethod query.SymbolSummary
+	Certainty       graph.RelationshipCertainty
+}
+
 // ContractImpactKind identifies a deterministic Go contract consequence.
 type ContractImpactKind uint8
 

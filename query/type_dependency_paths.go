@@ -11,9 +11,10 @@ import (
 // structs or interfaces. Evidence contains every stored semantic fact that
 // establishes the type relationship.
 type TypeDependency struct {
-	From     graph.SymbolRef
-	To       graph.SymbolRef
-	Evidence []Relationship
+	From      graph.SymbolRef
+	To        graph.SymbolRef
+	Certainty graph.RelationshipCertainty
+	Evidence  []Relationship
 }
 
 // TypeDependencyPath is one simple route through the derived semantic type
@@ -146,7 +147,10 @@ func typeDependencyView(g *graph.Graph) map[graph.NodeID][]typeDependency {
 			if !fromExists || !toExists {
 				continue
 			}
-			relationship := Relationship{From: fromExact.Ref, To: toExact.Ref, Kind: edge.Kind, Evidence: append([]graph.Location(nil), edge.Evidence...)}
+			relationship := Relationship{
+				From: fromExact.Ref, To: toExact.Ref, Kind: edge.Kind, Certainty: edge.Certainty,
+				Evidence: append([]graph.Location(nil), edge.Evidence...),
+			}
 			fromType, fromExists := g.Node(from)
 			toType, toExists := g.Node(to)
 			if !fromExists || !toExists {
@@ -159,8 +163,12 @@ func typeDependencyView(g *graph.Graph) map[graph.NodeID][]typeDependency {
 			}
 			dependency := byTarget[to]
 			if dependency == nil {
-				dependency = &TypeDependency{From: fromType.Ref, To: toType.Ref}
+				dependency = &TypeDependency{
+					From: fromType.Ref, To: toType.Ref, Certainty: relationship.Certainty,
+				}
 				byTarget[to] = dependency
+			} else {
+				dependency.Certainty = mergeRelationshipCertainty(dependency.Certainty, relationship.Certainty)
 			}
 			dependency.Evidence = append(dependency.Evidence, relationship)
 		}
@@ -231,7 +239,7 @@ func appendTypeDependency(steps []TypeDependency, dependency TypeDependency) []T
 }
 
 func copyTypeDependency(dependency TypeDependency) TypeDependency {
-	copy := TypeDependency{From: dependency.From, To: dependency.To}
+	copy := TypeDependency{From: dependency.From, To: dependency.To, Certainty: dependency.Certainty}
 	copy.Evidence = make([]Relationship, len(dependency.Evidence))
 	for index, relationship := range dependency.Evidence {
 		copy.Evidence[index] = copyRelationship(relationship)

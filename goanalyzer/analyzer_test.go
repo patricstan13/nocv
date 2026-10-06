@@ -9,6 +9,26 @@ import (
 	"nocv/internal/testutil"
 )
 
+func TestCanonicalAnalysisProducesOnlyConfirmedRelationships(t *testing.T) {
+	g, err := Load(context.Background(), testutil.GoProjectDir(t), "./...")
+	if err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+
+	edgeCount := 0
+	for _, node := range g.Nodes() {
+		for _, edge := range g.Outgoing(node.ID) {
+			edgeCount++
+			if edge.Certainty != graph.RelationshipConfirmed {
+				t.Errorf("edge %d -> %d (%s) certainty = %s, want confirmed", edge.From, edge.To, edge.Kind, edge.Certainty)
+			}
+		}
+	}
+	if edgeCount == 0 {
+		t.Fatal("canonical analysis produced no relationships")
+	}
+}
+
 func TestLoadDiscoversStructuralHierarchy(t *testing.T) {
 	g, err := Load(context.Background(), testutil.GoProjectDir(t), "./app", "./inventory", "./logging", "./orders", "./repository", "./service")
 	if err != nil {

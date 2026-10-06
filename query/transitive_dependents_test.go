@@ -21,40 +21,40 @@ func TestTransitiveDependentsPreserveAllSimplePathsAndDeterministicOrdering(t *t
 		{
 			ID: ids.a,
 			Paths: []query.SemanticPath{
-				{Steps: []query.SemanticStep{{From: ids.a, To: ids.changed, Kind: graph.EdgeAccepts}}},
-				{Steps: []query.SemanticStep{{From: ids.a, To: ids.changed, Kind: graph.EdgeReturns}}},
+				{Steps: []query.SemanticStep{{From: ids.a, To: ids.changed, Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed}}},
+				{Steps: []query.SemanticStep{{From: ids.a, To: ids.changed, Kind: graph.EdgeReturns, Certainty: graph.RelationshipConfirmed}}},
 				{Steps: []query.SemanticStep{
-					{From: ids.a, To: ids.b, Kind: graph.EdgeCalls},
-					{From: ids.b, To: ids.changed, Kind: graph.EdgeAccepts},
+					{From: ids.a, To: ids.b, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+					{From: ids.b, To: ids.changed, Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed},
 				}},
 				{Steps: []query.SemanticStep{
-					{From: ids.a, To: ids.c, Kind: graph.EdgeCalls},
-					{From: ids.c, To: ids.changed, Kind: graph.EdgeReturns},
+					{From: ids.a, To: ids.c, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+					{From: ids.c, To: ids.changed, Kind: graph.EdgeReturns, Certainty: graph.RelationshipConfirmed},
 				}},
 			},
 		},
-		{ID: ids.b, Paths: []query.SemanticPath{{Steps: []query.SemanticStep{{From: ids.b, To: ids.changed, Kind: graph.EdgeAccepts}}}}},
-		{ID: ids.c, Paths: []query.SemanticPath{{Steps: []query.SemanticStep{{From: ids.c, To: ids.changed, Kind: graph.EdgeReturns}}}}},
+		{ID: ids.b, Paths: []query.SemanticPath{{Steps: []query.SemanticStep{{From: ids.b, To: ids.changed, Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed}}}}},
+		{ID: ids.c, Paths: []query.SemanticPath{{Steps: []query.SemanticStep{{From: ids.c, To: ids.changed, Kind: graph.EdgeReturns, Certainty: graph.RelationshipConfirmed}}}}},
 		{
 			ID: ids.d,
 			Paths: []query.SemanticPath{
 				{Steps: []query.SemanticStep{
-					{From: ids.d, To: ids.a, Kind: graph.EdgeCalls},
-					{From: ids.a, To: ids.changed, Kind: graph.EdgeAccepts},
+					{From: ids.d, To: ids.a, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+					{From: ids.a, To: ids.changed, Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed},
 				}},
 				{Steps: []query.SemanticStep{
-					{From: ids.d, To: ids.a, Kind: graph.EdgeCalls},
-					{From: ids.a, To: ids.changed, Kind: graph.EdgeReturns},
+					{From: ids.d, To: ids.a, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+					{From: ids.a, To: ids.changed, Kind: graph.EdgeReturns, Certainty: graph.RelationshipConfirmed},
 				}},
 				{Steps: []query.SemanticStep{
-					{From: ids.d, To: ids.a, Kind: graph.EdgeCalls},
-					{From: ids.a, To: ids.b, Kind: graph.EdgeCalls},
-					{From: ids.b, To: ids.changed, Kind: graph.EdgeAccepts},
+					{From: ids.d, To: ids.a, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+					{From: ids.a, To: ids.b, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+					{From: ids.b, To: ids.changed, Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed},
 				}},
 				{Steps: []query.SemanticStep{
-					{From: ids.d, To: ids.a, Kind: graph.EdgeCalls},
-					{From: ids.a, To: ids.c, Kind: graph.EdgeCalls},
-					{From: ids.c, To: ids.changed, Kind: graph.EdgeReturns},
+					{From: ids.d, To: ids.a, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+					{From: ids.a, To: ids.c, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+					{From: ids.c, To: ids.changed, Kind: graph.EdgeReturns, Certainty: graph.RelationshipConfirmed},
 				}},
 			},
 		},
@@ -98,8 +98,8 @@ func TestTransitiveDependentsTerminatesCyclesWithPathLocalState(t *testing.T) {
 	}
 
 	want := []query.TransitiveDependent{
-		{ID: a, Paths: []query.SemanticPath{{Steps: []query.SemanticStep{{From: a, To: b, Kind: graph.EdgeCalls}, {From: b, To: c, Kind: graph.EdgeCalls}}}}},
-		{ID: b, Paths: []query.SemanticPath{{Steps: []query.SemanticStep{{From: b, To: c, Kind: graph.EdgeCalls}}}}},
+		{ID: a, Paths: []query.SemanticPath{{Steps: []query.SemanticStep{{From: a, To: b, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed}, {From: b, To: c, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed}}}}},
+		{ID: b, Paths: []query.SemanticPath{{Steps: []query.SemanticStep{{From: b, To: c, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed}}}}},
 	}
 	got := query.TransitiveDependents(g, c)
 	if !reflect.DeepEqual(got, want) {
@@ -130,7 +130,7 @@ func TestDirectAndTransitiveDependentsSpecifyTraversalDepth(t *testing.T) {
 	}
 	for offset, endpoints := range [][2]graph.SymbolRef{{b, a}, {c, b}} {
 		if err := addTestEdge(g, testEdge{
-			From: endpoints[0], To: endpoints[1], Kind: graph.EdgeCalls,
+			From: endpoints[0], To: endpoints[1], Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed,
 			Evidence: []graph.Location{{File: "depth.go", Offset: offset}},
 		}); err != nil {
 			t.Fatal(err)
@@ -178,12 +178,12 @@ func TestTransitiveDependentsTraversesEveryDirectSemanticKind(t *testing.T) {
 		}
 	}
 	edges := []testEdge{
-		{From: child, To: base, Kind: graph.EdgeEmbeds},
-		{From: implementation, To: contract, Kind: graph.EdgeImplements},
-		{From: implementationMethod, To: contractMethod, Kind: graph.EdgeImplements},
-		{From: acceptor, To: contract, Kind: graph.EdgeAccepts},
-		{From: returner, To: contract, Kind: graph.EdgeReturns},
-		{From: caller, To: callee, Kind: graph.EdgeCalls},
+		{From: child, To: base, Kind: graph.EdgeEmbeds, Certainty: graph.RelationshipConfirmed},
+		{From: implementation, To: contract, Kind: graph.EdgeImplements, Certainty: graph.RelationshipConfirmed},
+		{From: implementationMethod, To: contractMethod, Kind: graph.EdgeImplements, Certainty: graph.RelationshipConfirmed},
+		{From: acceptor, To: contract, Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed},
+		{From: returner, To: contract, Kind: graph.EdgeReturns, Certainty: graph.RelationshipConfirmed},
+		{From: caller, To: callee, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
 	}
 	for index := range edges {
 		edges[index].Evidence = []graph.Location{{File: "relationships.go", Offset: index}}
@@ -233,7 +233,7 @@ func TestTransitiveDependentsExcludesStructuralAndProjectedRelationships(t *test
 		}
 	}
 	if err := addTestEdge(g, testEdge{
-		From: caller, To: callee, Kind: graph.EdgeCalls,
+		From: caller, To: callee, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed,
 		Evidence: []graph.Location{{File: "call.go"}},
 	}); err != nil {
 		t.Fatal(err)
@@ -348,13 +348,13 @@ func branchingDependentsFixture(t *testing.T) (*graph.Graph, branchingDependents
 		}
 	}
 	edges := []testEdge{
-		{From: ids.d, To: ids.a, Kind: graph.EdgeCalls},
-		{From: ids.a, To: ids.c, Kind: graph.EdgeCalls},
-		{From: ids.a, To: ids.changed, Kind: graph.EdgeReturns},
-		{From: ids.c, To: ids.changed, Kind: graph.EdgeReturns},
-		{From: ids.a, To: ids.b, Kind: graph.EdgeCalls},
-		{From: ids.b, To: ids.changed, Kind: graph.EdgeAccepts},
-		{From: ids.a, To: ids.changed, Kind: graph.EdgeAccepts},
+		{From: ids.d, To: ids.a, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: ids.a, To: ids.c, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: ids.a, To: ids.changed, Kind: graph.EdgeReturns, Certainty: graph.RelationshipConfirmed},
+		{From: ids.c, To: ids.changed, Kind: graph.EdgeReturns, Certainty: graph.RelationshipConfirmed},
+		{From: ids.a, To: ids.b, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: ids.b, To: ids.changed, Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed},
+		{From: ids.a, To: ids.changed, Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed},
 	}
 	for index := range edges {
 		edges[index].Evidence = []graph.Location{{File: "dependents.go", Offset: index}}
@@ -396,7 +396,7 @@ func hasOneStepDependent(
 			continue
 		}
 		for _, path := range result.Paths {
-			if len(path.Steps) == 1 && path.Steps[0] == (query.SemanticStep{From: from, To: to, Kind: kind}) {
+			if len(path.Steps) == 1 && path.Steps[0] == (query.SemanticStep{From: from, To: to, Kind: kind, Certainty: graph.RelationshipConfirmed}) {
 				return true
 			}
 		}

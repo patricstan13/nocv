@@ -16,15 +16,15 @@ func TestDependencyPathsPreserveAllBranchesKindsAndOrdering(t *testing.T) {
 	before := outgoingSnapshot(g)
 
 	want := []query.SemanticPath{
-		{Steps: []query.SemanticStep{{From: ids.a, To: ids.changed, Kind: graph.EdgeAccepts}}},
-		{Steps: []query.SemanticStep{{From: ids.a, To: ids.changed, Kind: graph.EdgeReturns}}},
+		{Steps: []query.SemanticStep{{From: ids.a, To: ids.changed, Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed}}},
+		{Steps: []query.SemanticStep{{From: ids.a, To: ids.changed, Kind: graph.EdgeReturns, Certainty: graph.RelationshipConfirmed}}},
 		{Steps: []query.SemanticStep{
-			{From: ids.a, To: ids.b, Kind: graph.EdgeCalls},
-			{From: ids.b, To: ids.changed, Kind: graph.EdgeAccepts},
+			{From: ids.a, To: ids.b, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+			{From: ids.b, To: ids.changed, Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed},
 		}},
 		{Steps: []query.SemanticStep{
-			{From: ids.a, To: ids.c, Kind: graph.EdgeCalls},
-			{From: ids.c, To: ids.changed, Kind: graph.EdgeReturns},
+			{From: ids.a, To: ids.c, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+			{From: ids.c, To: ids.changed, Kind: graph.EdgeReturns, Certainty: graph.RelationshipConfirmed},
 		}},
 	}
 	got := query.DependencyPaths(g, ids.a, ids.changed)
@@ -72,11 +72,11 @@ func TestDependencyPathsTraverseEverySemanticKindAndMixedPaths(t *testing.T) {
 		}
 	}
 	edges := []testEdge{
-		{From: a, To: b, Kind: graph.EdgeCalls},
-		{From: b, To: c, Kind: graph.EdgeAccepts},
-		{From: c, To: d, Kind: graph.EdgeEmbeds},
-		{From: implementation, To: c, Kind: graph.EdgeImplements},
-		{From: returner, To: c, Kind: graph.EdgeReturns},
+		{From: a, To: b, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: b, To: c, Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed},
+		{From: c, To: d, Kind: graph.EdgeEmbeds, Certainty: graph.RelationshipConfirmed},
+		{From: implementation, To: c, Kind: graph.EdgeImplements, Certainty: graph.RelationshipConfirmed},
+		{From: returner, To: c, Kind: graph.EdgeReturns, Certainty: graph.RelationshipConfirmed},
 	}
 	for index := range edges {
 		edges[index].Evidence = []graph.Location{{File: "mixed.go", Offset: index}}
@@ -86,9 +86,9 @@ func TestDependencyPathsTraverseEverySemanticKindAndMixedPaths(t *testing.T) {
 	}
 
 	wantMixed := []query.SemanticPath{{Steps: []query.SemanticStep{
-		{From: a, To: b, Kind: graph.EdgeCalls},
-		{From: b, To: c, Kind: graph.EdgeAccepts},
-		{From: c, To: d, Kind: graph.EdgeEmbeds},
+		{From: a, To: b, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: b, To: c, Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed},
+		{From: c, To: d, Kind: graph.EdgeEmbeds, Certainty: graph.RelationshipConfirmed},
 	}}}
 	if got := query.DependencyPaths(g, a, d); !reflect.DeepEqual(got, wantMixed) {
 		t.Fatalf("mixed DependencyPaths(A, D) = %#v, want %#v", got, wantMixed)
@@ -107,7 +107,7 @@ func TestDependencyPathsTraverseEverySemanticKindAndMixedPaths(t *testing.T) {
 	}
 	for _, test := range tests {
 		paths := query.DependencyPaths(g, test.from, test.to)
-		if len(paths) != 1 || len(paths[0].Steps) != 1 || paths[0].Steps[0] != (query.SemanticStep{From: test.from, To: test.to, Kind: test.kind}) {
+		if len(paths) != 1 || len(paths[0].Steps) != 1 || paths[0].Steps[0] != (query.SemanticStep{From: test.from, To: test.to, Kind: test.kind, Certainty: graph.RelationshipConfirmed}) {
 			t.Errorf("DependencyPaths(%q, %q) = %#v, want one %s step", test.from, test.to, paths, test.kind)
 		}
 	}
@@ -133,7 +133,7 @@ func TestDependencyPathsTerminateCyclesWithoutSuppressingBranches(t *testing.T) 
 	}
 	for index, endpoints := range [][2]graph.SymbolRef{{a, b}, {b, c}, {c, a}, {a, d}, {d, c}} {
 		if err := addTestEdge(g, testEdge{
-			From: endpoints[0], To: endpoints[1], Kind: graph.EdgeCalls,
+			From: endpoints[0], To: endpoints[1], Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed,
 			Evidence: []graph.Location{{File: "cycle.go", Offset: index}},
 		}); err != nil {
 			t.Fatal(err)
@@ -173,7 +173,7 @@ func TestDependencyPathsRejectInvalidEndpointsAndProjection(t *testing.T) {
 		}
 	}
 	if err := addTestEdge(g, testEdge{
-		From: caller, To: callee, Kind: graph.EdgeCalls,
+		From: caller, To: callee, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed,
 		Evidence: []graph.Location{{File: "call.go"}},
 	}); err != nil {
 		t.Fatal(err)
@@ -210,13 +210,13 @@ func TestAnalyzerPipelineExplainsRunCreateToOrder(t *testing.T) {
 	order := graph.SymbolRef("example.com/shop/orders::Order")
 	want := []query.SemanticPath{
 		{Steps: []query.SemanticStep{
-			{From: runCreate, To: create, Kind: graph.EdgeCalls},
-			{From: create, To: order, Kind: graph.EdgeAccepts},
+			{From: runCreate, To: create, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+			{From: create, To: order, Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed},
 		}},
 		{Steps: []query.SemanticStep{
-			{From: runCreate, To: create, Kind: graph.EdgeCalls},
-			{From: create, To: repositorySave, Kind: graph.EdgeCalls},
-			{From: repositorySave, To: order, Kind: graph.EdgeAccepts},
+			{From: runCreate, To: create, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+			{From: create, To: repositorySave, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+			{From: repositorySave, To: order, Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed},
 		}},
 	}
 	if got := query.DependencyPaths(g, runCreate, order); !reflect.DeepEqual(got, want) {

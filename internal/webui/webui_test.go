@@ -8,6 +8,8 @@ import (
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -62,6 +64,30 @@ func TestClientShowsPersistentPartialAnalysisIndicator(t *testing.T) {
 				t.Errorf("status UI source lacks %q", fragment)
 			}
 		}
+	}
+}
+
+func TestClientSurfacesUncertainRelationshipsWithoutNoisyConfirmedLabels(t *testing.T) {
+	client := readAsset(t, "static/app.js")
+	styles := readAsset(t, "static/app.css")
+	for _, required := range []string{
+		`function certaintyBadge(certainty)`,
+		`if (certainty !== "uncertain") return null`,
+		`element("span", "uncertain", "certainty-badge")`,
+		`appendCertainty(summary, value.certainty)`,
+		`appendCertainty(item, relationship.certainty)`,
+		`dashes: edge.certainty === "uncertain"`,
+		`label: edge.certainty === "uncertain" ? "uncertain" : undefined`,
+		`dashes: dependency.certainty === "uncertain"`,
+		`element("h4", "Uncertain contract context")`,
+		`"These relationships are relevant context, not deterministic contract-loss claims."`,
+	} {
+		if !strings.Contains(client, required) {
+			t.Errorf("uncertain relationship UI source lacks %q", required)
+		}
+	}
+	if !strings.Contains(styles, ".certainty-badge") || !strings.Contains(styles, "border: 1px dashed") {
+		t.Error("uncertain relationship badge lacks explicit styled treatment")
 	}
 }
 
@@ -518,14 +544,115 @@ func TestPackagesAPIIsDeterministicAndExcludesImports(t *testing.T) {
 		{ID: "example.com/service", Label: "service"},
 	}
 	wantEdges := []packageEdge{
-		{ID: edgeID("example.com/app", "example.com/service"), From: "example.com/app", To: "example.com/service"},
-		{ID: edgeID("example.com/service", "example.com/repository"), From: "example.com/service", To: "example.com/repository"},
+		{ID: edgeID("example.com/app", "example.com/service"), From: "example.com/app", To: "example.com/service", Certainty: "confirmed"},
+		{ID: edgeID("example.com/service", "example.com/repository"), From: "example.com/service", To: "example.com/repository", Certainty: "confirmed"},
 	}
 	if !reflect.DeepEqual(result.Nodes, wantNodes) {
 		t.Errorf("nodes = %#v, want %#v", result.Nodes, wantNodes)
 	}
 	if !reflect.DeepEqual(result.Edges, wantEdges) {
 		t.Errorf("edges = %#v, want semantic-only %#v", result.Edges, wantEdges)
+	}
+}
+
+func TestRelationshipCertaintyIsExplicitInAPIModels(t *testing.T) {
+	g := graph.New()
+	for _, node := range []webNode{
+		{ID: "example.com/source", Kind: graph.NodePackage, Name: "source"},
+		{ID: "example.com/target", Kind: graph.NodePackage, Name: "target"},
+		{ID: "example.com/source::Concrete", Kind: graph.NodeStruct, Name: "Concrete", Parent: "example.com/source"},
+		{ID: "example.com/target::Contract", Kind: graph.NodeInterface, Name: "Contract", Parent: "example.com/target"},
+	} {
+		if err := addWebNode(g, node); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := addWebEdge(g, webEdge{
+		From: "example.com/source::Concrete", To: "example.com/target::Contract",
+		Kind: graph.EdgeImplements, Certainty: graph.RelationshipUncertain,
+		Evidence: []graph.Location{{File: "source.go", Line: 3, Column: 1}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := graphHandler(g)
+	packagesResponse := request(t, handler, http.MethodGet, "/api/packages")
+	if packagesResponse.Code != http.StatusOK {
+		t.Fatalf("packages status = %d, body = %s", packagesResponse.Code, packagesResponse.Body.String())
+	}
+	var packages packageGraph
+	decode(t, packagesResponse, &packages)
+	if len(packages.Edges) != 1 || packages.Edges[0].Certainty != "uncertain" {
+		t.Fatalf("package edges = %#v, want explicit uncertain certainty", packages.Edges)
+	}
+
+	nodeResponse := request(t, handler, http.MethodGet, "/api/node?id=example.com/source::Concrete")
+	if nodeResponse.Code != http.StatusOK {
+		t.Fatalf("node status = %d, body = %s", nodeResponse.Code, nodeResponse.Body.String())
+	}
+	var node nodeInspection
+	decode(t, nodeResponse, &node)
+	if node.Type == nil || len(node.Type.Dependencies) != 1 ||
+		node.Type.Dependencies[0].Certainty != "uncertain" ||
+		len(node.Type.DirectDependencies) != 1 ||
+		node.Type.DirectDependencies[0].Certainty != "uncertain" {
+		t.Fatalf("node inspection lost certainty: %#v", node)
+	}
+}
+
+func TestAnalyzerProducedUncertainImplementationReachesAPI(t *testing.T) {
+	dir := t.TempDir()
+	for name, contents := range map[string]string{
+		"go.mod": "module example.com/webcertainty\n\ngo 1.22\n",
+		"certainty.go": `package webcertainty
+
+type Contract interface {
+	Required() string
+	Other()
+}
+type MissingAlias = MissingDependency
+type Candidate struct { MissingAlias }
+
+func (Candidate) Required() string { return "" }
+`,
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(contents), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	analysis, err := goanalyzer.LoadAnalysis(context.Background(), dir, ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response := request(t, Handler(analysis), http.MethodGet, "/api/node?id=example.com%2Fwebcertainty::Candidate")
+	if response.Code != http.StatusOK {
+		t.Fatalf("node status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var node nodeInspection
+	decode(t, response, &node)
+	if node.Type == nil || len(node.Type.DirectDependencies) != 1 ||
+		node.Type.DirectDependencies[0].Kind != "implements" ||
+		node.Type.DirectDependencies[0].Certainty != "uncertain" {
+		t.Fatalf("analyzer-produced implementation response = %#v", node)
+	}
+
+	impactResponse := requestBody(
+		t,
+		Handler(analysis),
+		http.MethodPost,
+		"/api/signature-impact",
+		`{"callable":"example.com/webcertainty::Contract::Required","results":[{"type":"int"}]}`,
+	)
+	if impactResponse.Code != http.StatusOK {
+		t.Fatalf("impact status = %d, body = %s", impactResponse.Code, impactResponse.Body.String())
+	}
+	var impact signatureImpact
+	decode(t, impactResponse, &impact)
+	if len(impact.Contracts) != 0 || len(impact.UncertainContracts) != 1 ||
+		impact.UncertainContracts[0].Concrete.Ref != "example.com/webcertainty::Candidate" ||
+		impact.UncertainContracts[0].Certainty != "uncertain" {
+		t.Fatalf("uncertain contract API result = %#v", impact)
 	}
 }
 
@@ -1000,10 +1127,11 @@ type webNode struct {
 }
 
 type webEdge struct {
-	From     graph.SymbolRef
-	To       graph.SymbolRef
-	Kind     graph.EdgeKind
-	Evidence []graph.Location
+	From      graph.SymbolRef
+	To        graph.SymbolRef
+	Kind      graph.EdgeKind
+	Certainty graph.RelationshipCertainty
+	Evidence  []graph.Location
 }
 
 func addWebNode(g *graph.Graph, node webNode) error {
@@ -1028,5 +1156,12 @@ func addWebEdge(g *graph.Graph, edge webEdge) error {
 	if !fromExists || !toExists {
 		return fmt.Errorf("edge endpoint missing: %q -> %q", edge.From, edge.To)
 	}
-	return g.AddEdge(graph.Edge{From: from, To: to, Kind: edge.Kind, Evidence: edge.Evidence})
+	certainty := edge.Certainty
+	if certainty == graph.RelationshipCertaintyUnknown {
+		certainty = graph.RelationshipConfirmed
+	}
+	return g.AddEdge(graph.Edge{
+		From: from, To: to, Kind: edge.Kind, Certainty: certainty,
+		Evidence: edge.Evidence,
+	})
 }

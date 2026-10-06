@@ -71,9 +71,10 @@ func walkTransitiveDependents(
 
 		nextPath := make([]SemanticStep, len(path)+1)
 		nextPath[0] = SemanticStep{
-			From: fromNode.Ref,
-			To:   toNode.Ref,
-			Kind: edge.Kind,
+			From:      fromNode.Ref,
+			To:        toNode.Ref,
+			Kind:      edge.Kind,
+			Certainty: edge.Certainty,
 		}
 		copy(nextPath[1:], path)
 

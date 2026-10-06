@@ -92,6 +92,18 @@
     return section(title, values, render);
   }
 
+  function certaintyBadge(certainty) {
+    if (certainty !== "uncertain") return null;
+    const badge = element("span", "uncertain", "certainty-badge");
+    badge.title = "Incomplete compiler information permits this relationship but does not establish it conclusively.";
+    return badge;
+  }
+
+  function appendCertainty(container, certainty) {
+    const badge = certaintyBadge(certainty);
+    if (badge) container.appendChild(badge);
+  }
+
   function disclosure(label, parts, className) {
     const details = element("details", undefined, className || "advanced-disclosure");
     details.appendChild(element("summary", label));
@@ -105,6 +117,7 @@
     const item = element("li", undefined, "relationship");
     const summary = element("div");
     summary.appendChild(element("strong", value.kind));
+    appendCertainty(summary, value.certainty);
     const from = typeof value.from === "string" ? value.from : value.from.ref;
     const to = typeof value.to === "string" ? value.to : value.to.ref;
     summary.appendChild(document.createTextNode("  " + from + " → " + to));
@@ -170,6 +183,7 @@
     const item = element("li", undefined, "symbol-row relationship-symbol-row");
     const summary = incoming ? relationship.from : relationship.to;
     item.appendChild(renderSymbolButton(summary));
+    appendCertainty(item, relationship.certainty);
     if (showKind) item.appendChild(element("span", relationship.kind, "relationship-kind"));
     const evidence = evidenceDisclosure(relationship.evidence || []);
     if (evidence) item.appendChild(evidence);
@@ -198,6 +212,7 @@
     button.setAttribute("aria-label", label + " (" + ref + ")");
     button.addEventListener("click", () => navigateToPackageDependency(value, originPackageRef));
     item.appendChild(button);
+    appendCertainty(item, value.certainty);
     return item;
   }
 
@@ -395,11 +410,15 @@
   }
 
   function typeTargetItem(value) {
-    return refSymbolItem(value.to);
+    const item = refSymbolItem(value.to);
+    appendCertainty(item, value.certainty);
+    return item;
   }
 
   function typeSourceItem(value) {
-    return refSymbolItem(value.from);
+    const item = refSymbolItem(value.from);
+    appendCertainty(item, value.certainty);
+    return item;
   }
 
   function renderPackageDependencyInspection(result) {
@@ -415,9 +434,11 @@
     }
     const semanticFrom = result.dependency.from;
     const semanticTo = result.dependency.to;
+    const dependencyHeading = element("h2", semanticFrom + " depends on " + semanticTo);
+    appendCertainty(dependencyHeading, result.dependency.certainty);
     parts.push(
       element("p", "Semantic dependency", "eyebrow"),
-      element("h2", semanticFrom + " depends on " + semanticTo),
+      dependencyHeading,
     );
     parts.push(...section("From", [semanticFrom], packageEndpointItem));
     parts.push(...section("To", [semanticTo], packageEndpointItem));
@@ -426,6 +447,7 @@
       const facts = dependency.evidence || [];
       const heading = element("div", undefined, "type-relationship-heading");
       heading.appendChild(element("div", dependency.from + " → " + dependency.to + " (" + facts.length + " facts)", "symbol"));
+      appendCertainty(heading, dependency.certainty);
       const view = element("button", "View type graph", "type-view-button");
       view.type = "button";
       view.addEventListener("click", () => showTypeDrilldown(result));
@@ -517,6 +539,10 @@
       semanticFrom: dependency.from,
       semanticTo: dependency.to,
       evidence: dependency.evidence || [],
+      certainty: dependency.certainty,
+      dashes: dependency.certainty === "uncertain",
+      label: dependency.certainty === "uncertain" ? "uncertain" : undefined,
+      title: dependency.certainty === "uncertain" ? "Uncertain semantic type dependency" : undefined,
       arrows: { to: { enabled: true, scaleFactor: 0.7 } },
     })));
 
@@ -568,9 +594,11 @@
       }
     });
 
+    const heading = element("h2", currentPackageDependency.from + " depends on " + currentPackageDependency.to);
+    appendCertainty(heading, currentPackageDependency.result.dependency.certainty);
     replaceInspector([
       element("p", "Type relationships", "eyebrow"),
-      element("h2", currentPackageDependency.from + " depends on " + currentPackageDependency.to),
+      heading,
       element("p", dependencies.length + " type relationships explain this package dependency.", "documentation"),
       element("p", "Select a type or type dependency to inspect it.", "muted"),
     ]);
@@ -827,24 +855,37 @@
 
   function renderContractImpact(result) {
     const contracts = result.contracts || [];
+    const uncertainContracts = result.uncertainContracts || [];
     const parts = [element("h3", "Contract impact")];
     if (contracts.length === 0) {
       parts.push(element("p", "None", "muted"));
-      return parts;
+    } else {
+      parts.push(element("h4", "Lost implementation"));
+      const list = element("ul");
+      contracts.forEach((contract) => {
+        const item = element("li", undefined, "impact-row impact-sentence");
+        item.append(renderSymbolButton(contract.concrete), document.createTextNode(" no longer implements "), renderSymbolButton(contract.interface));
+        if (contract.concreteMethod.ref && contract.interfaceMethod.ref) {
+          const methods = element("div", undefined, "impact-methods");
+          methods.append(renderSymbolButton(contract.concreteMethod), document.createTextNode(" · "), renderSymbolButton(contract.interfaceMethod));
+          item.appendChild(methods);
+        }
+        list.appendChild(item);
+      });
+      parts.push(list);
     }
-    parts.push(element("h4", "Lost implementation"));
-    const list = element("ul");
-    contracts.forEach((contract) => {
-      const item = element("li", undefined, "impact-row impact-sentence");
-      item.append(renderSymbolButton(contract.concrete), document.createTextNode(" no longer implements "), renderSymbolButton(contract.interface));
-      if (contract.concreteMethod.ref && contract.interfaceMethod.ref) {
-        const methods = element("div", undefined, "impact-methods");
-        methods.append(renderSymbolButton(contract.concreteMethod), document.createTextNode(" · "), renderSymbolButton(contract.interfaceMethod));
-        item.appendChild(methods);
-      }
-      list.appendChild(item);
-    });
-    parts.push(list);
+    if (uncertainContracts.length > 0) {
+      parts.push(element("h4", "Uncertain contract context"));
+      parts.push(element("p", "These relationships are relevant context, not deterministic contract-loss claims.", "muted"));
+      const uncertainList = element("ul");
+      uncertainContracts.forEach((contract) => {
+        const item = element("li", undefined, "impact-row impact-sentence");
+        item.append(renderSymbolButton(contract.concrete), document.createTextNode(" may implement "), renderSymbolButton(contract.interface));
+        appendCertainty(item, contract.certainty);
+        uncertainList.appendChild(item);
+      });
+      parts.push(uncertainList);
+    }
     return parts;
   }
 
@@ -992,9 +1033,11 @@
   function showTypeDependency(dependency) {
     invalidateInspectorRequests();
     const facts = dependency.evidence || [];
+    const heading = element("h2", dependency.semanticFrom + " depends on " + dependency.semanticTo);
+    appendCertainty(heading, dependency.certainty);
     replaceInspector([
       element("p", "Type dependency", "eyebrow"),
-      element("h2", dependency.semanticFrom + " depends on " + dependency.semanticTo),
+      heading,
       element("p", facts.length + " exact facts", "documentation"),
       collapsibleRelationships(facts, 2, "Show evidence"),
     ]);
@@ -1054,6 +1097,10 @@
       to: edge.from,
       semanticFrom: edge.from,
       semanticTo: edge.to,
+      certainty: edge.certainty,
+      dashes: edge.certainty === "uncertain",
+      label: edge.certainty === "uncertain" ? "uncertain" : undefined,
+      title: edge.certainty === "uncertain" ? "Uncertain semantic package dependency" : undefined,
       arrows: { to: { enabled: true, scaleFactor: 0.7 } },
     })));
     packageNetwork = new vis.Network(networkElement, { nodes, edges: packageEdges }, {

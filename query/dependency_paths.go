@@ -57,9 +57,10 @@ func walkDependencyPaths(traversal *dependencyPathTraversal, current graph.NodeI
 
 		nextSteps := append([]SemanticStep(nil), steps...)
 		nextSteps = append(nextSteps, SemanticStep{
-			From: fromNode.Ref,
-			To:   toNode.Ref,
-			Kind: edge.Kind,
+			From:      fromNode.Ref,
+			To:        toNode.Ref,
+			Kind:      edge.Kind,
+			Certainty: edge.Certainty,
 		})
 		if next == traversal.target {
 			key := semanticPathKey(nextSteps)

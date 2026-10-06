@@ -22,6 +22,9 @@ func TestCheckForbiddenPackageDependencyPreservesProjectedRoutesAndEvidence(t *t
 	if !exists {
 		t.Fatal("CheckForbiddenPackageDependency(app, repository) returned no violation")
 	}
+	if violation.Outcome != query.ForbiddenDependencyConfirmedViolation {
+		t.Fatalf("dependency outcome = %s, want confirmed violation", violation.Outcome)
+	}
 	if violation.From != ids.app || violation.To != ids.repository || !reflect.DeepEqual(violation.Paths, beforePaths) {
 		t.Fatalf("dependency violation = %#v, want endpoints and paths %#v", violation, beforePaths)
 	}
@@ -62,6 +65,34 @@ func TestCheckForbiddenPackageDependencyPreservesProjectedRoutesAndEvidence(t *t
 	if got := query.WouldCreateImportCycle(g, ids.plugin, ids.app); !reflect.DeepEqual(got, beforeCycle) {
 		t.Fatalf("WouldCreateImportCycle changed: got %#v, want %#v", got, beforeCycle)
 	}
+}
+
+func TestCheckForbiddenPackageDependencyClassifiesRelationshipCertainty(t *testing.T) {
+	t.Run("uncertain only is potential", func(t *testing.T) {
+		g, from, to := forbiddenCertaintyFixture(t, false)
+		result, observed := query.CheckForbiddenPackageDependency(g, from, to)
+		if !observed || result.Outcome != query.ForbiddenDependencyPotentialViolation || len(result.Paths) != 1 {
+			t.Fatalf("uncertain-only dependency = (%#v, %v), want potential violation", result, observed)
+		}
+		if result.Paths[0].Steps[0].Certainty != graph.RelationshipUncertain {
+			t.Fatalf("uncertain path lost step certainty: %#v", result.Paths[0])
+		}
+	})
+
+	t.Run("confirmed evidence dominates", func(t *testing.T) {
+		g, from, to := forbiddenCertaintyFixture(t, true)
+		result, observed := query.CheckForbiddenPackageDependency(g, from, to)
+		if !observed || result.Outcome != query.ForbiddenDependencyConfirmedViolation || len(result.Paths) != 1 {
+			t.Fatalf("mixed dependency = (%#v, %v), want confirmed violation", result, observed)
+		}
+		step := result.Paths[0].Steps[0]
+		if step.Certainty != graph.RelationshipConfirmed || len(step.Evidence) != 2 {
+			t.Fatalf("mixed projected step = %#v, want confirmed summary with both facts", step)
+		}
+		if step.Evidence[0].Certainty == step.Evidence[1].Certainty {
+			t.Fatalf("mixed evidence lost exact certainty: %#v", step.Evidence)
+		}
+	})
 }
 
 func TestForbiddenImportAndSemanticDependencyRulesRemainDistinct(t *testing.T) {
@@ -155,20 +186,52 @@ func forbiddenDependencyFixture(t *testing.T) (*graph.Graph, forbiddenDependency
 		mustAddPackagePathNode(t, g, node)
 	}
 	edges := []testEdge{
-		{From: "example.com/app::Direct", To: ids.repositorySave, Kind: graph.EdgeCalls},
-		{From: ids.appRun, To: "example.com/cache::Get", Kind: graph.EdgeCalls},
-		{From: "example.com/cache::Get", To: ids.repositorySave, Kind: graph.EdgeCalls},
-		{From: ids.appRun, To: "example.com/service::Create", Kind: graph.EdgeCalls},
-		{From: "example.com/service::Create", To: "example.com/repository::Contract", Kind: graph.EdgeAccepts},
-		{From: "example.com/app::Alternate", To: "example.com/service::Update", Kind: graph.EdgeCalls},
-		{From: "example.com/service::Update", To: "example.com/repository::Contract", Kind: graph.EdgeAccepts},
-		{From: ids.app, To: ids.plugin, Kind: graph.EdgeImports},
+		{From: "example.com/app::Direct", To: ids.repositorySave, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: ids.appRun, To: "example.com/cache::Get", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "example.com/cache::Get", To: ids.repositorySave, Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: ids.appRun, To: "example.com/service::Create", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "example.com/service::Create", To: "example.com/repository::Contract", Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed},
+		{From: "example.com/app::Alternate", To: "example.com/service::Update", Kind: graph.EdgeCalls, Certainty: graph.RelationshipConfirmed},
+		{From: "example.com/service::Update", To: "example.com/repository::Contract", Kind: graph.EdgeAccepts, Certainty: graph.RelationshipConfirmed},
+		{From: ids.app, To: ids.plugin, Kind: graph.EdgeImports, Certainty: graph.RelationshipConfirmed},
 	}
 	for index := range edges {
 		edges[index].Evidence = []graph.Location{{File: "fixture.go", Offset: index}}
 		mustAddPackagePathEdge(t, g, edges[index])
 	}
 	return g, ids
+}
+
+func forbiddenCertaintyFixture(t *testing.T, addConfirmed bool) (*graph.Graph, graph.SymbolRef, graph.SymbolRef) {
+	t.Helper()
+	from := graph.SymbolRef("example.com/source")
+	to := graph.SymbolRef("example.com/target")
+	concrete := graph.SymbolRef("example.com/source::Concrete")
+	use := graph.SymbolRef("example.com/source::Use")
+	contract := graph.SymbolRef("example.com/target::Contract")
+	g := graph.New()
+	for _, node := range []testNode{
+		{ID: from, Kind: graph.NodePackage, Name: "source"},
+		{ID: to, Kind: graph.NodePackage, Name: "target"},
+		{ID: concrete, Kind: graph.NodeStruct, Name: "Concrete", Parent: from},
+		{ID: use, Kind: graph.NodeFunction, Name: "Use", Parent: from},
+		{ID: contract, Kind: graph.NodeInterface, Name: "Contract", Parent: to},
+	} {
+		mustAddPackagePathNode(t, g, node)
+	}
+	mustAddPackagePathEdge(t, g, testEdge{
+		From: concrete, To: contract, Kind: graph.EdgeImplements,
+		Certainty: graph.RelationshipUncertain,
+		Evidence:  []graph.Location{{File: "uncertain.go", Offset: 1}},
+	})
+	if addConfirmed {
+		mustAddPackagePathEdge(t, g, testEdge{
+			From: use, To: contract, Kind: graph.EdgeAccepts,
+			Certainty: graph.RelationshipConfirmed,
+			Evidence:  []graph.Location{{File: "confirmed.go", Offset: 2}},
+		})
+	}
+	return g, from, to
 }
 
 func containsSemanticKind(path query.PackageDependencyPath, kind graph.EdgeKind) bool {
