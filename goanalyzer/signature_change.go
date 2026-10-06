@@ -8,13 +8,17 @@ import (
 // SignatureChangeImpact combines precise local semantic checks with the Go
 // compiler's diagnostics for one hypothetical callable signature.
 type SignatureChangeImpact struct {
-	Callable   graph.SymbolRef
-	Before     CallableSignature
-	After      CallableSignature
-	CallSites  []CallSiteImpact
-	Compiler   CompilerImpact
-	Contracts  []ContractImpact
-	Structural []StructuralImpact
+	Callable  graph.SymbolRef
+	Before    CallableSignature
+	After     CallableSignature
+	CallSites []CallSiteImpact
+	Compiler  CompilerImpact
+	Contracts []ContractImpact
+	// UncertainContracts preserves relevant implementation relationships that
+	// are not established strongly enough to support deterministic contract
+	// consequences.
+	UncertainContracts []UncertainContract
+	Structural         []StructuralImpact
 }
 
 // CompilerImpact is the compiler-observed portion of a signature change. Its

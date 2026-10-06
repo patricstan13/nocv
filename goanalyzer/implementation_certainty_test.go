@@ -57,6 +57,12 @@ type ThroughUnresolvedPointerAlias struct {
 	*MissingAlias
 }
 
+type PartialDirect struct {
+	MissingAlias
+}
+
+func (PartialDirect) RepoHost() string { return "" }
+
 type InvalidCarrier struct {
 	MissingAlias
 }
@@ -84,6 +90,7 @@ func TestImplementationCertaintyInPartialAnalysis(t *testing.T) {
 	assertImplementationCertainty(t, g, "example.com/statusfixture::PointerGood", repository, graph.RelationshipConfirmed)
 	assertImplementationCertainty(t, g, "example.com/statusfixture::ThroughUnresolvedEmbedding", repository, graph.RelationshipUncertain)
 	assertImplementationCertainty(t, g, "example.com/statusfixture::ThroughUnresolvedPointerAlias", repository, graph.RelationshipUncertain)
+	assertImplementationCertainty(t, g, "example.com/statusfixture::PartialDirect", repository, graph.RelationshipUncertain)
 	assertImplementationCertainty(t, g, "example.com/statusfixture::ThroughRecursiveEmbedding", repository, graph.RelationshipUncertain)
 	assertNoImplementation(t, g, "example.com/statusfixture::UnrelatedResolved", repository)
 
@@ -106,6 +113,13 @@ func TestImplementationCertaintyInPartialAnalysis(t *testing.T) {
 	if _, exists := g.NodeByRef("example.com/statusfixture::PromotedGood::RepoHost"); exists {
 		t.Fatal("promoted method unexpectedly has a synthetic graph node")
 	}
+	assertImplementationCertainty(
+		t,
+		g,
+		"example.com/statusfixture::PartialDirect::RepoHost",
+		"example.com/statusfixture::Repository::RepoHost",
+		graph.RelationshipConfirmed,
+	)
 
 	relationships := query.DirectDependencies(g, "example.com/statusfixture::ThroughUnresolvedEmbedding")
 	if len(relationships) != 1 || relationships[0].Kind != graph.EdgeImplements ||
@@ -119,6 +133,58 @@ func TestImplementationCertaintyInPartialAnalysis(t *testing.T) {
 				t.Errorf("unexpected uncertain %s edge: %#v", edge.Kind, edge)
 			}
 		}
+	}
+}
+
+func TestSignatureChangeSeparatesUncertainContractsFromDeterministicImpacts(t *testing.T) {
+	analysis, err := LoadAnalysis(context.Background(), testModule(t, map[string]string{
+		"certainty.go": implementationCertaintyFixture,
+	}), ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	interfaceImpact, err := analysis.AnalyzeSignatureChange(
+		"example.com/statusfixture::Repository::RepoHost",
+		ProposedSignature{Results: []ProposedResult{{TypeExpr: "int"}}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, impact := range interfaceImpact.Contracts {
+		if impact.Concrete.Ref == "example.com/statusfixture::PartialDirect" ||
+			impact.Concrete.Ref == "example.com/statusfixture::ThroughUnresolvedEmbedding" ||
+			impact.Concrete.Ref == "example.com/statusfixture::ThroughUnresolvedPointerAlias" ||
+			impact.Concrete.Ref == "example.com/statusfixture::ThroughRecursiveEmbedding" {
+			t.Fatalf("uncertain implementation reported as deterministic impact: %#v", impact)
+		}
+	}
+	wantUncertain := map[graph.SymbolRef]bool{
+		"example.com/statusfixture::InvalidCarrier":                true,
+		"example.com/statusfixture::PartialDirect":                 true,
+		"example.com/statusfixture::ThroughRecursiveEmbedding":     true,
+		"example.com/statusfixture::ThroughUnresolvedEmbedding":    true,
+		"example.com/statusfixture::ThroughUnresolvedPointerAlias": true,
+	}
+	if len(interfaceImpact.UncertainContracts) != len(wantUncertain) {
+		t.Fatalf("uncertain interface contracts = %#v, want %d", interfaceImpact.UncertainContracts, len(wantUncertain))
+	}
+	for _, contract := range interfaceImpact.UncertainContracts {
+		if !wantUncertain[contract.Concrete.Ref] || contract.Certainty != graph.RelationshipUncertain {
+			t.Errorf("unexpected uncertain contract context: %#v", contract)
+		}
+	}
+
+	concreteImpact, err := analysis.AnalyzeSignatureChange(
+		"example.com/statusfixture::PartialDirect::RepoHost",
+		ProposedSignature{Results: []ProposedResult{{TypeExpr: "int"}}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(concreteImpact.Contracts) != 0 || len(concreteImpact.UncertainContracts) != 1 ||
+		concreteImpact.UncertainContracts[0].Concrete.Ref != "example.com/statusfixture::PartialDirect" {
+		t.Fatalf("partial concrete method contract result = %#v", concreteImpact)
 	}
 }
 
@@ -142,6 +208,7 @@ func TestResolvedEmbeddingDoesNotImplement(t *testing.T) {
 	repository := graph.SymbolRef("example.com/statusfixture::Repository")
 	assertNoImplementation(t, analysis.Graph(), "example.com/statusfixture::ThroughUnresolvedEmbedding", repository)
 	assertNoImplementation(t, analysis.Graph(), "example.com/statusfixture::ThroughUnresolvedPointerAlias", repository)
+	assertNoImplementation(t, analysis.Graph(), "example.com/statusfixture::PartialDirect", repository)
 	assertNoImplementation(t, analysis.Graph(), "example.com/statusfixture::ThroughRecursiveEmbedding", repository)
 }
 

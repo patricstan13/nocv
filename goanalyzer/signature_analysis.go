@@ -120,7 +120,7 @@ func (a *Analysis) AnalyzeSignatureChange(callable graph.SymbolRef, proposed Pro
 		if err != nil {
 			return SignatureChangeImpact{}, err
 		}
-		result.Contracts = a.contractImpacts(resolved, after)
+		result.Contracts, result.UncertainContracts = a.contractImpacts(resolved, after)
 		result.Structural = a.structuralImpacts(resolved, after)
 	}
 	sort.Slice(result.CallSites, func(i, j int) bool {
