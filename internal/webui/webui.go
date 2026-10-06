@@ -62,7 +62,8 @@ type nodeInfo struct {
 
 type location struct {
 	File   string `json:"file"`
-	Offset int    `json:"offset"`
+	Line   int    `json:"line"`
+	Column int    `json:"column"`
 }
 
 type packageInspection struct {
@@ -339,8 +340,10 @@ func presentNode(g *graph.Graph, source graph.Node) nodeInfo {
 		result.ParentName = parent.Name
 		result.ParentKind = parent.Kind.String()
 	}
-	if source.Location.File != "" || source.Location.Offset != 0 {
-		result.Location = &location{File: source.Location.File, Offset: source.Location.Offset}
+	if source.Location.File != "" || source.Location.Line != 0 || source.Location.Column != 0 {
+		result.Location = &location{
+			File: source.Location.File, Line: source.Location.Line, Column: source.Location.Column,
+		}
 	}
 	return result
 }
@@ -373,7 +376,9 @@ func presentSymbolRelationships(source []query.SymbolRelationship) []symbolRelat
 	for _, item := range source {
 		evidence := make([]location, 0, len(item.Evidence))
 		for _, itemLocation := range item.Evidence {
-			evidence = append(evidence, location{File: itemLocation.File, Offset: itemLocation.Offset})
+			evidence = append(evidence, location{
+				File: itemLocation.File, Line: itemLocation.Line, Column: itemLocation.Column,
+			})
 		}
 		result = append(result, symbolRelationship{
 			From: presentSymbolSummary(item.From), To: presentSymbolSummary(item.To),
@@ -410,7 +415,9 @@ func presentRelationships(source []query.Relationship) []relationship {
 	for _, item := range source {
 		evidence := make([]location, 0, len(item.Evidence))
 		for _, itemLocation := range item.Evidence {
-			evidence = append(evidence, location{File: itemLocation.File, Offset: itemLocation.Offset})
+			evidence = append(evidence, location{
+				File: itemLocation.File, Line: itemLocation.Line, Column: itemLocation.Column,
+			})
 		}
 		result = append(result, relationship{
 			From: item.From, To: item.To, Kind: item.Kind.String(), Evidence: evidence,

@@ -33,6 +33,21 @@ func TestClientRendersServerDataAsText(t *testing.T) {
 	}
 }
 
+func TestClientFormatsLocationsAsLineAndColumn(t *testing.T) {
+	client := readAsset(t, "static/app.js")
+	for _, required := range []string{
+		`value.line && value.column ? ":" + value.line + ":" + value.column`,
+		`location.line && location.column ? ":" + location.line + ":" + location.column`,
+	} {
+		if !strings.Contains(client, required) {
+			t.Errorf("client source lacks line-and-column formatting %q", required)
+		}
+	}
+	if strings.Contains(client, "location.offset") || strings.Contains(client, "value.offset") {
+		t.Error("client still formats byte offsets as source locations")
+	}
+}
+
 func TestClientShowsPersistentPartialAnalysisIndicator(t *testing.T) {
 	markup := readAsset(t, "static/index.html")
 	client := readAsset(t, "static/app.js")
@@ -660,6 +675,9 @@ func TestNodeAPISerializesSymbolCentricTypeAndFunctionInspection(t *testing.T) {
 	if functionResult.Node.Parent != "example.com/service::Service" || functionResult.Node.ParentName != "Service" || functionResult.Node.ParentKind != "struct" {
 		t.Errorf("function parent presentation = %#v", functionResult.Node)
 	}
+	if functionResult.Node.Location == nil || functionResult.Node.Location.Line != 8 || functionResult.Node.Location.Column != 18 {
+		t.Errorf("function location = %#v, want service.go:8:18", functionResult.Node.Location)
+	}
 	detail := functionResult.Function
 	if detail == nil || len(detail.Calls) != 1 || len(detail.CalledBy) != 1 || len(detail.Accepts) != 1 {
 		t.Fatalf("function inspection = %#v", detail)
@@ -667,8 +685,11 @@ func TestNodeAPISerializesSymbolCentricTypeAndFunctionInspection(t *testing.T) {
 	call := detail.Calls[0]
 	if call.From.Ref != "example.com/service::Service::Create" || call.From.ParentName != "Service" ||
 		call.To.Ref != "example.com/repository::Repository::Save" || call.To.ParentRef != "example.com/repository::Repository" ||
-		call.Kind != "calls" || len(call.Evidence) != 1 || call.Evidence[0].Offset != 110 {
+		call.Kind != "calls" || len(call.Evidence) != 1 || call.Evidence[0].Line != 11 || call.Evidence[0].Column != 3 {
 		t.Errorf("call relationship = %#v", call)
+	}
+	if strings.Contains(functionResponse.Body.String(), `"offset"`) {
+		t.Errorf("function response exposes byte offset: %s", functionResponse.Body.String())
 	}
 	if detail.CalledBy[0].From.Ref != "example.com/app::Run" || detail.CalledBy[0].From.ParentRef != "example.com/app" {
 		t.Errorf("called-by relationship = %#v", detail.CalledBy[0])
@@ -941,12 +962,12 @@ func webFixture(t *testing.T) *graph.Graph {
 		{ID: service, Kind: graph.NodePackage, Name: "service", Documentation: "Package service owns application behavior."},
 		{ID: repository, Kind: graph.NodePackage, Name: "repository"},
 		{ID: importOnly, Kind: graph.NodePackage, Name: "importonly"},
-		{ID: appRun, Kind: graph.NodeFunction, Name: "Run", Parent: app, Location: graph.Location{File: "app.go", Offset: 40}},
-		{ID: serviceT, Kind: graph.NodeStruct, Name: "Service", Parent: service, Location: graph.Location{File: "service.go", Offset: 20}},
-		{ID: serviceBase, Kind: graph.NodeStruct, Name: "Base", Parent: service, Location: graph.Location{File: "service.go", Offset: 30}},
-		{ID: serviceRun, Kind: graph.NodeFunction, Name: "Create", Parent: serviceT, Location: graph.Location{File: "service.go", Offset: 80}},
-		{ID: repoT, Kind: graph.NodeInterface, Name: "Repository", Parent: repository, Location: graph.Location{File: "repository.go", Offset: 15}},
-		{ID: repoSave, Kind: graph.NodeFunction, Name: "Save", Parent: repoT, Location: graph.Location{File: "repository.go", Offset: 45}},
+		{ID: appRun, Kind: graph.NodeFunction, Name: "Run", Parent: app, Location: graph.Location{File: "app.go", Line: 4, Column: 1, Offset: 40}},
+		{ID: serviceT, Kind: graph.NodeStruct, Name: "Service", Parent: service, Location: graph.Location{File: "service.go", Line: 2, Column: 6, Offset: 20}},
+		{ID: serviceBase, Kind: graph.NodeStruct, Name: "Base", Parent: service, Location: graph.Location{File: "service.go", Line: 3, Column: 6, Offset: 30}},
+		{ID: serviceRun, Kind: graph.NodeFunction, Name: "Create", Parent: serviceT, Location: graph.Location{File: "service.go", Line: 8, Column: 18, Offset: 80}},
+		{ID: repoT, Kind: graph.NodeInterface, Name: "Repository", Parent: repository, Location: graph.Location{File: "repository.go", Line: 2, Column: 6, Offset: 15}},
+		{ID: repoSave, Kind: graph.NodeFunction, Name: "Save", Parent: repoT, Location: graph.Location{File: "repository.go", Line: 4, Column: 2, Offset: 45}},
 	}
 	for _, node := range nodes {
 		if err := addWebNode(g, node); err != nil {
@@ -954,12 +975,12 @@ func webFixture(t *testing.T) *graph.Graph {
 		}
 	}
 	edges := []webEdge{
-		{From: app, To: service, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "app.go", Offset: 8}}},
-		{From: app, To: importOnly, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "app.go", Offset: 16}}},
-		{From: appRun, To: serviceRun, Kind: graph.EdgeCalls, Evidence: []graph.Location{{File: "app.go", Offset: 70}}},
-		{From: serviceRun, To: repoSave, Kind: graph.EdgeCalls, Evidence: []graph.Location{{File: "service.go", Offset: 110}}},
-		{From: serviceRun, To: repoT, Kind: graph.EdgeAccepts, Evidence: []graph.Location{{File: "service.go", Offset: 90}}},
-		{From: serviceT, To: serviceBase, Kind: graph.EdgeEmbeds, Evidence: []graph.Location{{File: "service.go", Offset: 35}}},
+		{From: app, To: service, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "app.go", Line: 1, Column: 8, Offset: 8}}},
+		{From: app, To: importOnly, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "app.go", Line: 2, Column: 8, Offset: 16}}},
+		{From: appRun, To: serviceRun, Kind: graph.EdgeCalls, Evidence: []graph.Location{{File: "app.go", Line: 7, Column: 2, Offset: 70}}},
+		{From: serviceRun, To: repoSave, Kind: graph.EdgeCalls, Evidence: []graph.Location{{File: "service.go", Line: 11, Column: 3, Offset: 110}}},
+		{From: serviceRun, To: repoT, Kind: graph.EdgeAccepts, Evidence: []graph.Location{{File: "service.go", Line: 9, Column: 4, Offset: 90}}},
+		{From: serviceT, To: serviceBase, Kind: graph.EdgeEmbeds, Evidence: []graph.Location{{File: "service.go", Line: 3, Column: 2, Offset: 35}}},
 	}
 	for _, edge := range edges {
 		if err := addWebEdge(g, edge); err != nil {

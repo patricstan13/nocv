@@ -143,7 +143,9 @@ func presentSignatureImpact(source goanalyzer.SignatureChangeImpact) signatureIm
 	}
 	for _, consequence := range source.Compiler.Consequences {
 		presented := compilerConsequence{
-			Package: consequence.Package, Location: location{File: consequence.Location.File, Offset: consequence.Location.Offset},
+			Package: consequence.Package, Location: location{
+				File: consequence.Location.File, Line: consequence.Location.Line, Column: consequence.Location.Column,
+			},
 			Message: consequence.Message, Classification: consequence.Classification.String(),
 		}
 		if consequence.Symbol != nil {
@@ -154,8 +156,10 @@ func presentSignatureImpact(source goanalyzer.SignatureChangeImpact) signatureIm
 	}
 	for _, site := range source.CallSites {
 		presented := callSiteImpact{
-			Caller:        presentSymbolSummary(site.Caller),
-			Location:      location{File: site.Location.File, Offset: site.Location.Offset},
+			Caller: presentSymbolSummary(site.Caller),
+			Location: location{
+				File: site.Location.File, Line: site.Location.Line, Column: site.Location.Column,
+			},
 			Compatibility: site.Compatibility.String(),
 			Problems:      make([]signatureProblem, 0, len(site.Problems)),
 		}

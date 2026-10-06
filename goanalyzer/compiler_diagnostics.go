@@ -113,6 +113,12 @@ func (a *Analysis) compilerConsequences(diagnostics []classifiedDiagnostic) []Co
 		if left.Location.File != right.Location.File {
 			return left.Location.File < right.Location.File
 		}
+		if left.Location.Line != right.Location.Line {
+			return left.Location.Line < right.Location.Line
+		}
+		if left.Location.Column != right.Location.Column {
+			return left.Location.Column < right.Location.Column
+		}
 		if left.Location.Offset != right.Location.Offset {
 			return left.Location.Offset < right.Location.Offset
 		}

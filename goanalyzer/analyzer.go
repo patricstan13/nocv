@@ -900,5 +900,7 @@ func baseTypeName(expr ast.Expr) string {
 
 func sourceLocation(fset *token.FileSet, pos token.Pos) graph.Location {
 	position := fset.PositionFor(pos, false)
-	return graph.Location{File: position.Filename, Offset: position.Offset}
+	return graph.Location{
+		File: position.Filename, Line: position.Line, Column: position.Column, Offset: position.Offset,
+	}
 }

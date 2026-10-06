@@ -114,8 +114,18 @@ func printForbiddenImportCheck(out io.Writer, g *graph.Graph, from, to graph.Sym
 	fmt.Fprintln(out, "VIOLATION")
 	fmt.Fprintln(out, "\nevidence:")
 	for _, location := range violation.Evidence {
-		fmt.Fprintf(out, "  %s:%d\n", location.File, location.Offset)
+		fmt.Fprintf(out, "  %s\n", formatLocation(location))
 	}
+}
+
+func formatLocation(location graph.Location) string {
+	if location.File == "" {
+		return "(unknown)"
+	}
+	if location.Line == 0 || location.Column == 0 {
+		return location.File
+	}
+	return fmt.Sprintf("%s:%d:%d", location.File, location.Line, location.Column)
 }
 
 func printForbiddenDependencyCheck(out io.Writer, g *graph.Graph, from, to graph.SymbolRef) {
@@ -280,7 +290,7 @@ func printNodeInspection(out io.Writer, g *graph.Graph, id graph.SymbolRef) {
 		if node.Location.File == "" {
 			fmt.Fprintln(out, "  (unknown)")
 		} else {
-			fmt.Fprintf(out, "  %s:%d\n", node.Location.File, node.Location.Offset)
+			fmt.Fprintf(out, "  %s\n", formatLocation(node.Location))
 		}
 	}
 	fmt.Fprintln(out, "\nDocumentation:")

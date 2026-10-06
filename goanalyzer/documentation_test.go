@@ -108,7 +108,7 @@ func TestLoadAttachesDeclarationDocumentation(t *testing.T) {
 			if node.Location != (graph.Location{}) {
 				t.Errorf("documented package %q has declaration location %#v", id, node.Location)
 			}
-		} else if node.Location.File == "" || node.Location.Offset < 0 {
+		} else if node.Location.File == "" || node.Location.Line < 1 || node.Location.Column < 1 {
 			t.Errorf("documented declaration %q has invalid location %#v", id, node.Location)
 		}
 	}

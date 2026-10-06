@@ -39,10 +39,13 @@ func (k NodeKind) String() string {
 	}
 }
 
-// Location identifies the start of a declaration in source.
+// Location identifies a source position. Line and Column are one-based when
+// known. Offset is retained for internal ordering and is never user-facing.
 type Location struct {
-	File   string
-	Offset int
+	File   string `json:"file"`
+	Line   int    `json:"line"`
+	Column int    `json:"column"`
+	Offset int    `json:"-"`
 }
 
 // Node is one declaration in a project's structural hierarchy.

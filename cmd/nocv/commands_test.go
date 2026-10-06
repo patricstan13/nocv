@@ -186,7 +186,7 @@ func TestExecuteCommandsRenderFocusedDeterministicOutput(t *testing.T) {
 		{name: "go.package.importers", values: []string{string(ids.packageB)}, want: []string{"example.com/b", "<- imports example.com/a"}},
 		{name: "go.package.check-import-cycle", values: []string{string(ids.packageB), string(ids.packageA)}, want: []string{"Proposed import:", "example.com/b -> example.com/a", "Would create import cycle.", "existing path 1:", "-> example.com/b"}},
 		{name: "go.package.check-import-cycle", values: []string{string(ids.packageA), string(ids.packageB)}, want: []string{"Proposed import:", "No import cycle would be created."}, unwanted: []string{"existing path"}},
-		{name: "go.package.check-forbidden-import", values: []string{string(ids.packageA), string(ids.packageB)}, want: []string{"Forbidden package import:", "example.com/a -> example.com/b", "VIOLATION", "evidence:", "fixture.go:1"}},
+		{name: "go.package.check-forbidden-import", values: []string{string(ids.packageA), string(ids.packageB)}, want: []string{"Forbidden package import:", "example.com/a -> example.com/b", "VIOLATION", "evidence:", "fixture.go:1:1"}},
 		{name: "go.package.check-forbidden-import", values: []string{string(ids.packageB), string(ids.packageA)}, want: []string{"Forbidden package import:", "No violation."}, unwanted: []string{"VIOLATION", "evidence:"}},
 		{name: "go.package.check-forbidden-dependency", values: []string{string(ids.packageA), string(ids.packageB)}, want: []string{"Forbidden package dependency:", "example.com/a -> example.com/b", "VIOLATION", "path 1:", "evidence:", "calls ->"}},
 		{name: "go.package.check-forbidden-dependency", values: []string{string(ids.packageB), string(ids.packageA)}, want: []string{"Forbidden package dependency:", "No violation."}, unwanted: []string{"VIOLATION", "path 1:"}},
@@ -345,7 +345,7 @@ func cliFixture(t *testing.T) (*graph.Graph, cliIDs) {
 		}
 	}
 	edges := []fixtureEdge{
-		{From: ids.packageA, To: ids.packageB, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "fixture.go", Offset: 1}}},
+		{From: ids.packageA, To: ids.packageB, Kind: graph.EdgeImports, Evidence: []graph.Location{{File: "fixture.go", Line: 1, Column: 1, Offset: 1}}},
 		{From: ids.caller, To: ids.callee, Kind: graph.EdgeCalls, Evidence: []graph.Location{{File: "fixture.go", Offset: 20}, {File: "fixture.go", Offset: 40}}},
 		{From: ids.caller, To: ids.callee, Kind: graph.EdgeImplements, Evidence: []graph.Location{{File: "fixture.go", Offset: 10}}},
 		{From: ids.service, To: ids.repository, Kind: graph.EdgeImplements, Evidence: []graph.Location{{File: "fixture.go", Offset: 5}}},

@@ -34,7 +34,8 @@ func TestAnalyzeSignatureChangeParameterNamedScalarAndUntypedLiteral(t *testing.
 		t.Fatalf("first caller = %q", result.CallSites[0].Caller.Ref)
 	}
 	for index := 1; index < len(result.CallSites); index++ {
-		if result.CallSites[index-1].Location.Offset >= result.CallSites[index].Location.Offset {
+		previous, current := result.CallSites[index-1].Location, result.CallSites[index].Location
+		if previous.Line > current.Line || previous.Line == current.Line && previous.Column >= current.Column {
 			t.Fatalf("call sites are not ordered by location: %+v", result.CallSites)
 		}
 	}

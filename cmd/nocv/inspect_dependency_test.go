@@ -139,13 +139,13 @@ func TestNodeInspectionOmitsPackageLocationButKeepsDeclarationLocations(t *testi
 		t.Fatalf("package inspection rendered a declaration location:\n%s", packageOutput.String())
 	}
 
-	for _, id := range []graph.SymbolRef{
-		"example.com/shop/typeview/service::Service",
-		"example.com/shop/typeview/service::Service::Create",
+	for id, wantLocation := range map[graph.SymbolRef]string{
+		"example.com/shop/typeview/service::Service":         "service.go:5:6",
+		"example.com/shop/typeview/service::Service::Create": "service.go:7:16",
 	} {
 		var declarationOutput bytes.Buffer
 		printNodeInspection(&declarationOutput, g, id)
-		if !strings.Contains(declarationOutput.String(), "Location:") || !strings.Contains(declarationOutput.String(), "service.go:") {
+		if !strings.Contains(declarationOutput.String(), "Location:") || !strings.Contains(declarationOutput.String(), wantLocation) {
 			t.Errorf("declaration inspection %s lacks source location:\n%s", id, declarationOutput.String())
 		}
 	}

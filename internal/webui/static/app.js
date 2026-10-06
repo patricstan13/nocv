@@ -246,7 +246,7 @@
 
   function formatLocation(value) {
     if (!value.file) return "unknown location";
-    return value.file + (value.offset ? ":" + value.offset : "");
+    return value.file + (value.line && value.column ? ":" + value.line + ":" + value.column : "");
   }
 
   function compareText(left, right) {
@@ -787,7 +787,7 @@
   function compactLocation(location) {
     if (!location || !location.file) return "unknown location";
     const components = location.file.split(/[\\/]/);
-    return components[components.length - 1] + (location.offset ? " @ " + location.offset : "");
+    return components[components.length - 1] + (location.line && location.column ? ":" + location.line + ":" + location.column : "");
   }
 
   function renderImpactCallSite(site) {

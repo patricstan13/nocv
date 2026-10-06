@@ -37,7 +37,7 @@ func TestLoadDiscoversRepresentedPackageImports(t *testing.T) {
 			t.Errorf("%s evidence = %#v, want %d locations", edge.To, edge.Evidence, wantEvidence)
 		}
 		for _, evidence := range edge.Evidence {
-			if evidence.File == "" || evidence.Offset < 0 {
+			if evidence.File == "" || evidence.Line < 1 || evidence.Column < 1 {
 				t.Errorf("%s has invalid evidence %#v", edge.To, evidence)
 			}
 		}

@@ -107,7 +107,7 @@ func TestLoadDiscoversStructuralHierarchy(t *testing.T) {
 			if node.Location != (graph.Location{}) {
 				t.Errorf("package node %q has declaration location %#v", id, node.Location)
 			}
-		} else if node.Location.File == "" || node.Location.Offset < 0 {
+		} else if node.Location.File == "" || node.Location.Line < 1 || node.Location.Column < 1 {
 			t.Errorf("declaration node %q has invalid location %#v", id, node.Location)
 		}
 	}
@@ -189,6 +189,38 @@ func TestLoadDiscoversStructuralHierarchy(t *testing.T) {
 	})
 }
 
+func TestLoadReportsSourceLineAndColumn(t *testing.T) {
+	g, err := Load(context.Background(), testutil.GoProjectDir(t), "./typeview/...")
+	if err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+
+	service, exists := nodeByRef(g, "example.com/shop/typeview/service::Service")
+	if !exists {
+		t.Fatal("missing Service node")
+	}
+	if service.Location.Line != 5 || service.Location.Column != 6 || !strings.HasSuffix(service.Location.File, "/typeview/service/service.go") {
+		t.Errorf("Service location = %#v, want service.go:5:6", service.Location)
+	}
+
+	create, exists := nodeByRef(g, "example.com/shop/typeview/service::Service::Create")
+	if !exists {
+		t.Fatal("missing Service.Create node")
+	}
+	if create.Location.Line != 7 || create.Location.Column != 16 || !strings.HasSuffix(create.Location.File, "/typeview/service/service.go") {
+		t.Errorf("Service.Create location = %#v, want service.go:7:16", create.Location)
+	}
+
+	calls := outgoingByRef(g, "example.com/shop/typeview/service::Service::Create", graph.EdgeCalls)
+	if len(calls) != 1 || len(calls[0].Evidence) != 1 {
+		t.Fatalf("Service.Create calls = %#v, want one call with one evidence location", calls)
+	}
+	evidence := calls[0].Evidence[0]
+	if evidence.Line != 8 || evidence.Column != 2 || !strings.HasSuffix(evidence.File, "/typeview/service/service.go") {
+		t.Errorf("Service.Create call evidence = %#v, want service.go:8:2", evidence)
+	}
+}
+
 func TestLoadDiscoversCalls(t *testing.T) {
 	g, err := Load(context.Background(), testutil.GoProjectDir(t), "./app", "./inventory", "./logging", "./orders", "./repository", "./service")
 	if err != nil {
@@ -242,7 +274,7 @@ func TestLoadDiscoversCalls(t *testing.T) {
 	)
 	outerNode, _ := nodeByRef(g, "example.com/shop/orders::Outer")
 	outerCall := outgoingByRef(g, "example.com/shop/orders::Outer", graph.EdgeCalls)[0]
-	if outerCall.Evidence[0] == outerNode.Location || outerCall.Evidence[0].Offset <= outerNode.Location.Offset {
+	if outerCall.Evidence[0] == outerNode.Location || outerCall.Evidence[0].Line <= outerNode.Location.Line {
 		t.Errorf("Outer call evidence = %#v, want the nested Validate() call site after declaration %#v", outerCall.Evidence, outerNode.Location)
 	}
 	assertCall(t, g,
@@ -551,7 +583,7 @@ func assertCall(t *testing.T, g *graph.Graph, from, to graph.SymbolRef, evidence
 			t.Fatalf("call %q -> %q has %d evidence locations, want %d", from, to, len(edge.Evidence), evidenceCount)
 		}
 		for _, evidence := range edge.Evidence {
-			if evidence.File == "" || evidence.Offset < 0 {
+			if evidence.File == "" || evidence.Line < 1 || evidence.Column < 1 {
 				t.Errorf("call %q -> %q has invalid evidence %#v", from, to, evidence)
 			}
 		}
@@ -576,7 +608,7 @@ func assertRelationship(
 			t.Fatalf("%s relationship %q -> %q has %d evidence locations, want %d", kind, from, to, len(edge.Evidence), evidenceCount)
 		}
 		for _, evidence := range edge.Evidence {
-			if evidence.File == "" || evidence.Offset < 0 {
+			if evidence.File == "" || evidence.Line < 1 || evidence.Column < 1 {
 				t.Errorf("%s relationship %q -> %q has invalid evidence %#v", kind, from, to, evidence)
 			}
 		}
@@ -587,7 +619,7 @@ func assertRelationship(
 
 func assertValidEvidence(t *testing.T, edge *symbolEdge) {
 	t.Helper()
-	if len(edge.Evidence) != 1 || edge.Evidence[0].File == "" || edge.Evidence[0].Offset < 0 {
+	if len(edge.Evidence) != 1 || edge.Evidence[0].File == "" || edge.Evidence[0].Line < 1 || edge.Evidence[0].Column < 1 {
 		t.Errorf("edge %q -> %q has invalid evidence %#v", edge.From, edge.To, edge.Evidence)
 	}
 }

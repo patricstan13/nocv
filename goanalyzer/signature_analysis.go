@@ -131,6 +131,12 @@ func (a *Analysis) AnalyzeSignatureChange(callable graph.SymbolRef, proposed Pro
 		if left.Location.File != right.Location.File {
 			return left.Location.File < right.Location.File
 		}
+		if left.Location.Line != right.Location.Line {
+			return left.Location.Line < right.Location.Line
+		}
+		if left.Location.Column != right.Location.Column {
+			return left.Location.Column < right.Location.Column
+		}
 		return left.Location.Offset < right.Location.Offset
 	})
 	return result, nil
