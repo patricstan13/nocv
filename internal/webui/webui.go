@@ -44,10 +44,13 @@ type packageEdge struct {
 }
 
 type nodeInspection struct {
-	Node     nodeInfo            `json:"node"`
-	Package  *packageInspection  `json:"package,omitempty"`
-	Type     *typeInspection     `json:"type,omitempty"`
-	Function *functionInspection `json:"function,omitempty"`
+	Node                      nodeInfo             `json:"node"`
+	Package                   *packageInspection   `json:"package,omitempty"`
+	Type                      *typeInspection      `json:"type,omitempty"`
+	Function                  *functionInspection  `json:"function,omitempty"`
+	DirectDependenciesSummary *relationshipSummary `json:"directDependenciesSummary,omitempty"`
+	DirectDependentsSummary   *relationshipSummary `json:"directDependentsSummary,omitempty"`
+	TransitivePathsSummary    *pathSummary         `json:"transitivePathsSummary,omitempty"`
 }
 
 type nodeInfo struct {
@@ -133,9 +136,54 @@ type relationship struct {
 }
 
 type dependencyInspection struct {
-	Dependency       packageDependency `json:"dependency"`
-	TypeDependencies []typeDependency  `json:"typeDependencies"`
-	ExactOnly        []relationship    `json:"exactOnly"`
+	Dependency       packageDependency  `json:"dependency"`
+	TypeDependencies []typeDependency   `json:"typeDependencies"`
+	ExactOnly        []relationship     `json:"exactOnly"`
+	PathsSummary     packagePathSummary `json:"pathsSummary"`
+}
+
+type relationshipSummary struct {
+	Count  int                        `json:"count"`
+	Groups []relationshipGroupSummary `json:"groups"`
+}
+
+type relationshipGroupSummary struct {
+	Kind        string          `json:"kind"`
+	Certainty   string          `json:"certainty"`
+	Count       int             `json:"count"`
+	ExampleFrom graph.SymbolRef `json:"exampleFrom"`
+	ExampleTo   graph.SymbolRef `json:"exampleTo"`
+}
+
+type pathSummary struct {
+	PathCount          int                 `json:"pathCount"`
+	UncertainPathCount int                 `json:"uncertainPathCount"`
+	TerminalPathCount  int                 `json:"terminalPathCount"`
+	Branches           []pathBranchSummary `json:"branches"`
+}
+
+type pathBranchSummary struct {
+	From               graph.SymbolRef `json:"from"`
+	To                 graph.SymbolRef `json:"to"`
+	Kind               string          `json:"kind"`
+	Certainty          string          `json:"certainty"`
+	PathCount          int             `json:"pathCount"`
+	UncertainPathCount int             `json:"uncertainPathCount"`
+}
+
+type packagePathSummary struct {
+	PathCount          int                        `json:"pathCount"`
+	UncertainPathCount int                        `json:"uncertainPathCount"`
+	TerminalPathCount  int                        `json:"terminalPathCount"`
+	Branches           []packagePathBranchSummary `json:"branches"`
+}
+
+type packagePathBranchSummary struct {
+	From               graph.SymbolRef `json:"from"`
+	To                 graph.SymbolRef `json:"to"`
+	Certainty          string          `json:"certainty"`
+	PathCount          int             `json:"pathCount"`
+	UncertainPathCount int             `json:"uncertainPathCount"`
 }
 
 // Handler returns a self-contained HTTP handler over one retained Go analysis.
@@ -225,7 +273,8 @@ func handler(analysis *goanalyzer.Analysis, g *graph.Graph) http.Handler {
 			writeError(w, http.StatusNotFound, "direct package dependency not found")
 			return
 		}
-		writeJSON(w, http.StatusOK, presentDependencyInspection(query.InspectPackageDependency(g, *direct)))
+		paths := query.PackageDependencyPaths(g, from, to)
+		writeJSON(w, http.StatusOK, presentDependencyInspection(query.InspectPackageDependency(g, *direct), paths))
 	}))
 	mux.HandleFunc("/api/signature-impact", postOnly(func(w http.ResponseWriter, r *http.Request) {
 		handleSignatureImpact(w, r, analysis)
@@ -303,6 +352,7 @@ func presentNodeInspection(g *graph.Graph, source query.NodeInspection, signatur
 		}
 	}
 	if source.Type != nil {
+		presentNodeRelationshipSummaries(g, source.Node.Ref, &result)
 		result.Type = &typeInspection{
 			Methods:            presentSymbolSummaries(source.Type.Methods),
 			Dependencies:       presentTypeDependencies(source.Type.Dependencies),
@@ -312,6 +362,7 @@ func presentNodeInspection(g *graph.Graph, source query.NodeInspection, signatur
 		}
 	}
 	if source.Function != nil {
+		presentNodeRelationshipSummaries(g, source.Node.Ref, &result)
 		result.Function = &functionInspection{
 			Calls:         presentSymbolRelationships(source.Function.Calls),
 			CalledBy:      presentSymbolRelationships(source.Function.CalledBy),
@@ -328,12 +379,68 @@ func presentNodeInspection(g *graph.Graph, source query.NodeInspection, signatur
 	return result
 }
 
-func presentDependencyInspection(source query.PackageDependencyInspection) dependencyInspection {
+func presentNodeRelationshipSummaries(g *graph.Graph, ref graph.SymbolRef, result *nodeInspection) {
+	dependencies := presentRelationshipSummary(query.GroupRelationships(query.DirectDependencies(g, ref)))
+	dependents := presentRelationshipSummary(query.GroupRelationships(query.DirectDependents(g, ref)))
+	paths := make([]query.SemanticPath, 0)
+	for _, dependent := range query.TransitiveDependents(g, ref) {
+		paths = append(paths, dependent.Paths...)
+	}
+	pathLevel := query.GroupPathBranches(paths, nil, 0, query.PathFromEnd)
+	pathSummary := presentPathSummary(pathLevel)
+	result.DirectDependenciesSummary = &dependencies
+	result.DirectDependentsSummary = &dependents
+	result.TransitivePathsSummary = &pathSummary
+}
+
+func presentDependencyInspection(source query.PackageDependencyInspection, paths []query.PackageDependencyPath) dependencyInspection {
 	return dependencyInspection{
 		Dependency:       presentPackageDependency(source.Dependency),
 		TypeDependencies: presentTypeDependencies(source.TypeDependencies),
 		ExactOnly:        presentRelationships(source.ExactOnly),
+		PathsSummary:     presentPackagePathSummary(query.GroupPackagePathBranches(paths, nil, 0)),
 	}
+}
+
+func presentRelationshipSummary(groups []query.RelationshipGroup) relationshipSummary {
+	result := relationshipSummary{Groups: make([]relationshipGroupSummary, 0, len(groups))}
+	for _, group := range groups {
+		result.Count += group.Count
+		result.Groups = append(result.Groups, relationshipGroupSummary{
+			Kind: group.Kind.String(), Certainty: group.Certainty.String(), Count: group.Count,
+			ExampleFrom: group.Example.From, ExampleTo: group.Example.To,
+		})
+	}
+	return result
+}
+
+func presentPathSummary(level query.PathBranchLevel) pathSummary {
+	result := pathSummary{
+		PathCount: level.PathCount, UncertainPathCount: level.UncertainPathCount,
+		TerminalPathCount: len(level.TerminalPathIndexes), Branches: make([]pathBranchSummary, 0, len(level.Branches)),
+	}
+	for _, branch := range level.Branches {
+		result.Branches = append(result.Branches, pathBranchSummary{
+			From: branch.Step.From, To: branch.Step.To, Kind: branch.Step.Kind.String(),
+			Certainty: branch.Step.Certainty.String(), PathCount: branch.PathCount,
+			UncertainPathCount: branch.UncertainPathCount,
+		})
+	}
+	return result
+}
+
+func presentPackagePathSummary(level query.PackagePathBranchLevel) packagePathSummary {
+	result := packagePathSummary{
+		PathCount: level.PathCount, UncertainPathCount: level.UncertainPathCount,
+		TerminalPathCount: len(level.TerminalPathIndexes), Branches: make([]packagePathBranchSummary, 0, len(level.Branches)),
+	}
+	for _, branch := range level.Branches {
+		result.Branches = append(result.Branches, packagePathBranchSummary{
+			From: branch.Step.From, To: branch.Step.To, Certainty: branch.Step.Certainty.String(),
+			PathCount: branch.PathCount, UncertainPathCount: branch.UncertainPathCount,
+		})
+	}
+	return result
 }
 
 func presentNode(g *graph.Graph, source graph.Node) nodeInfo {

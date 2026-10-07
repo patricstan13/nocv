@@ -217,6 +217,29 @@ func TestClientRendersCategorizedFunctionRelationshipsWithEvidenceDisclosure(t *
 	}
 }
 
+func TestClientRendersRelationshipSummariesBeforeExactDetails(t *testing.T) {
+	client := readAsset(t, "static/app.js")
+	for _, required := range []string{
+		`function renderRelationshipSummary(title, summary)`,
+		`relationshipGroupItem`,
+		`result.directDependenciesSummary`,
+		`result.directDependentsSummary`,
+		`renderPathSummary("Transitive paths", result.transitivePathsSummary)`,
+		`function renderPackagePathSummary(summary)`,
+		`renderPackagePathSummary(result.pathsSummary)`,
+		`parts.push(lazyDisclosure("Advanced · Exact relationships", () => {`,
+		`details.addEventListener("toggle", () => {`,
+		`if (summary.uncertainPathCount) parts.push(element("p", summary.uncertainPathCount + " paths include uncertainty."`,
+	} {
+		if !strings.Contains(client, required) {
+			t.Errorf("relationship summary UI source lacks %q", required)
+		}
+	}
+	if strings.Contains(client, "All paths are confirmed") {
+		t.Error("confirmed path summaries should remain visually quiet")
+	}
+}
+
 func TestClientProtectsInspectorFromStaleRequests(t *testing.T) {
 	client := readAsset(t, "static/app.js")
 	for _, required := range []string{
@@ -377,7 +400,7 @@ func TestClientProvidesContextualTypeDrilldown(t *testing.T) {
 		`showTypeDependency(typeEdges.get(params.edges[0]))`,
 		`inspectSymbol(params.nodes[0])`,
 		`getJSON("/api/node?id=" + encodeURIComponent(ref))`,
-		`disclosure("Advanced · Exact relationships", exactParts)`,
+		`lazyDisclosure("Advanced · Exact relationships", () => {`,
 		`backToPackages.addEventListener("click", showPackageGraph)`,
 		`packageSearchControl.setEnabled(false)`,
 		`packageSearchControl.setEnabled(true)`,
@@ -824,6 +847,78 @@ func TestNodeAPISerializesSymbolCentricTypeAndFunctionInspection(t *testing.T) {
 	if detail.Accepts[0].To.Ref != "example.com/repository::Repository" || detail.Accepts[0].To.Kind != "interface" {
 		t.Errorf("accepts relationship = %#v", detail.Accepts[0])
 	}
+	if functionResult.DirectDependenciesSummary == nil || functionResult.DirectDependenciesSummary.Count != 2 ||
+		len(functionResult.DirectDependenciesSummary.Groups) != 2 {
+		t.Errorf("direct dependency summary = %#v", functionResult.DirectDependenciesSummary)
+	}
+	dependencyCount := 0
+	for _, group := range functionResult.DirectDependenciesSummary.Groups {
+		dependencyCount += group.Count
+	}
+	if dependencyCount != len(detail.Calls)+len(detail.Accepts)+len(detail.Returns)+len(detail.Implements) {
+		t.Errorf("direct dependency group count = %d, exact count = %d", dependencyCount, functionResult.DirectDependenciesSummary.Count)
+	}
+	if functionResult.DirectDependentsSummary == nil || functionResult.DirectDependentsSummary.Count != 1 ||
+		len(functionResult.DirectDependentsSummary.Groups) != 1 {
+		t.Errorf("direct dependent summary = %#v", functionResult.DirectDependentsSummary)
+	}
+	if functionResult.TransitivePathsSummary == nil || functionResult.TransitivePathsSummary.PathCount != 1 ||
+		len(functionResult.TransitivePathsSummary.Branches) != 1 ||
+		functionResult.TransitivePathsSummary.Branches[0].From != "example.com/app::Run" {
+		t.Errorf("transitive path summary = %#v", functionResult.TransitivePathsSummary)
+	}
+}
+
+func TestNodePathSummaryKeepsBranchAndWholePathCertaintySeparate(t *testing.T) {
+	g := graph.New()
+	for _, node := range []webNode{
+		{ID: "example.com/p", Kind: graph.NodePackage, Name: "p"},
+		{ID: "example.com/p::Source", Kind: graph.NodeFunction, Name: "Source", Parent: "example.com/p"},
+		{ID: "example.com/p::Middle", Kind: graph.NodeFunction, Name: "Middle", Parent: "example.com/p"},
+		{ID: "example.com/p::Target", Kind: graph.NodeFunction, Name: "Target", Parent: "example.com/p"},
+	} {
+		if err := addWebNode(g, node); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, edge := range []webEdge{
+		{From: "example.com/p::Source", To: "example.com/p::Middle", Kind: graph.EdgeCalls, Certainty: graph.RelationshipUncertain, Evidence: []graph.Location{{File: "p.go", Line: 1}}},
+		{From: "example.com/p::Middle", To: "example.com/p::Target", Kind: graph.EdgeCalls, Evidence: []graph.Location{{File: "p.go", Line: 2}}},
+	} {
+		if err := addWebEdge(g, edge); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	response := request(t, graphHandler(g), http.MethodGet, "/api/node?id=example.com%2Fp%3A%3ATarget")
+	var result nodeInspection
+	decode(t, response, &result)
+	summary := result.TransitivePathsSummary
+	if response.Code != http.StatusOK || summary == nil || summary.PathCount != 2 || summary.UncertainPathCount != 1 || len(summary.Branches) != 1 {
+		t.Fatalf("dependent path summary = status %d, %#v", response.Code, summary)
+	}
+	branch := summary.Branches[0]
+	if branch.Certainty != "confirmed" || branch.PathCount != 2 || branch.UncertainPathCount != 1 {
+		t.Errorf("confirmed final step with uncertain whole path = %#v", branch)
+	}
+}
+
+func TestNodePathSummaryAccountsForEveryExactPath(t *testing.T) {
+	response := request(t, graphHandler(webFixture(t)), http.MethodGet, "/api/node?id=example.com%2Frepository%3A%3ARepository%3A%3ASave")
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var result nodeInspection
+	decode(t, response, &result)
+	summary := result.TransitivePathsSummary
+	if summary == nil || summary.PathCount != 2 || summary.UncertainPathCount != 0 || summary.TerminalPathCount != 0 || len(summary.Branches) != 1 {
+		t.Fatalf("dependent path summary = %#v", summary)
+	}
+	branch := summary.Branches[0]
+	if branch.From != "example.com/service::Service::Create" || branch.To != "example.com/repository::Repository::Save" ||
+		branch.Kind != "calls" || branch.PathCount != 2 || branch.UncertainPathCount != 0 {
+		t.Errorf("dependent path branch = %#v", branch)
+	}
 }
 
 func TestAnalysisBackedNodeAPIIncludesCallableSignature(t *testing.T) {
@@ -980,6 +1075,11 @@ func TestDependencyAPISeparatesTypeAndExactOnlyEvidence(t *testing.T) {
 	if len(typeResult.TypeDependencies) != 1 || len(typeResult.TypeDependencies[0].Evidence) != 2 || len(typeResult.ExactOnly) != 0 {
 		t.Fatalf("type-backed inspection = %#v", typeResult)
 	}
+	if typeResult.PathsSummary.PathCount != 1 || len(typeResult.PathsSummary.Branches) != 1 ||
+		typeResult.PathsSummary.Branches[0].From != "example.com/service" ||
+		typeResult.PathsSummary.Branches[0].To != "example.com/repository" {
+		t.Errorf("package path summary = %#v", typeResult.PathsSummary)
+	}
 	typeDependency := typeResult.TypeDependencies[0]
 	if typeDependency.From != "example.com/service::Service" || typeDependency.To != "example.com/repository::Repository" {
 		t.Errorf("type dependency endpoints = %s -> %s, want full symbol refs", typeDependency.From, typeDependency.To)
@@ -990,6 +1090,50 @@ func TestDependencyAPISeparatesTypeAndExactOnlyEvidence(t *testing.T) {
 	decode(t, exact, &exactResult)
 	if exact.Code != http.StatusOK || len(exactResult.TypeDependencies) != 0 || len(exactResult.ExactOnly) != 1 || exactResult.ExactOnly[0].Kind != "calls" {
 		t.Errorf("exact-only inspection status = %d, result = %#v", exact.Code, exactResult)
+	}
+}
+
+func TestDependencyAPIProjectsPackagePathsWithoutSerializingExactPaths(t *testing.T) {
+	g := graph.New()
+	for _, ref := range []graph.SymbolRef{"example.com/a", "example.com/b", "example.com/c", "example.com/d"} {
+		if err := addWebNode(g, webNode{ID: ref, Kind: graph.NodePackage, Name: string(ref)}); err != nil {
+			t.Fatal(err)
+		}
+		if err := addWebNode(g, webNode{ID: ref + "::F", Kind: graph.NodeFunction, Name: "F", Parent: ref}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, edge := range []webEdge{
+		{From: "example.com/a::F", To: "example.com/d::F", Kind: graph.EdgeCalls, Evidence: []graph.Location{{File: "a.go", Line: 1}}},
+		{From: "example.com/a::F", To: "example.com/b::F", Kind: graph.EdgeCalls, Evidence: []graph.Location{{File: "a.go", Line: 2}}},
+		{From: "example.com/b::F", To: "example.com/d::F", Kind: graph.EdgeCalls, Evidence: []graph.Location{{File: "b.go", Line: 1}}},
+		{From: "example.com/a::F", To: "example.com/c::F", Kind: graph.EdgeCalls, Certainty: graph.RelationshipUncertain, Evidence: []graph.Location{{File: "a.go", Line: 3}}},
+		{From: "example.com/c::F", To: "example.com/d::F", Kind: graph.EdgeCalls, Evidence: []graph.Location{{File: "c.go", Line: 1}}},
+	} {
+		if err := addWebEdge(g, edge); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	response := request(t, graphHandler(g), http.MethodGet, "/api/package-dependency?from=example.com%2Fa&to=example.com%2Fd")
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var result dependencyInspection
+	decode(t, response, &result)
+	if result.PathsSummary.PathCount != 3 || result.PathsSummary.UncertainPathCount != 1 ||
+		result.PathsSummary.TerminalPathCount != 0 || len(result.PathsSummary.Branches) != 3 {
+		t.Fatalf("package path summary = %#v", result.PathsSummary)
+	}
+	accounted := 0
+	for _, branch := range result.PathsSummary.Branches {
+		accounted += branch.PathCount
+	}
+	if accounted != result.PathsSummary.PathCount {
+		t.Errorf("branch path count = %d, want %d", accounted, result.PathsSummary.PathCount)
+	}
+	if strings.Contains(response.Body.String(), `"packages"`) || strings.Contains(response.Body.String(), `"steps"`) {
+		t.Errorf("response eagerly serializes exact paths: %s", response.Body.String())
 	}
 }
 

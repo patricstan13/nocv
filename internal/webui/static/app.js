@@ -113,6 +113,20 @@
     return details;
   }
 
+  function lazyDisclosure(label, renderParts, className) {
+    const details = element("details", undefined, className || "advanced-disclosure");
+    details.appendChild(element("summary", label));
+    let rendered = false;
+    details.addEventListener("toggle", () => {
+      if (!details.open || rendered) return;
+      const body = element("div", undefined, "disclosure-body");
+      body.append(...renderParts());
+      details.appendChild(body);
+      rendered = true;
+    });
+    return details;
+  }
+
   function relationshipItem(value) {
     const item = element("li", undefined, "relationship");
     const summary = element("div");
@@ -238,24 +252,30 @@
 
   function collapsibleRelationships(values, threshold, showLabel) {
     const container = element("div", undefined, "evidence-group");
-    const list = element("ul");
-    values.forEach((value) => list.appendChild(relationshipItem(value)));
     if (values.length <= threshold) {
+      const list = element("ul");
+      values.forEach((value) => list.appendChild(relationshipItem(value)));
       container.appendChild(list);
       return container;
     }
 
-    list.hidden = true;
+    let list = null;
     const toggle = element("button", showLabel, "evidence-toggle");
     toggle.type = "button";
     toggle.setAttribute("aria-expanded", "false");
     toggle.addEventListener("click", () => {
+      if (!list) {
+        list = element("ul");
+        values.forEach((value) => list.appendChild(relationshipItem(value)));
+        list.hidden = true;
+        container.appendChild(list);
+      }
       const expanded = list.hidden;
       list.hidden = !expanded;
       toggle.textContent = expanded ? "Hide evidence" : showLabel;
       toggle.setAttribute("aria-expanded", String(expanded));
     });
-    container.append(toggle, list);
+    container.appendChild(toggle);
     return container;
   }
 
@@ -442,6 +462,7 @@
     );
     parts.push(...section("From", [semanticFrom], packageEndpointItem));
     parts.push(...section("To", [semanticTo], packageEndpointItem));
+    parts.push(...renderPackagePathSummary(result.pathsSummary));
     parts.push(...section("Type relationships", result.typeDependencies, (dependency) => {
       const item = element("li", undefined, "relationship");
       const facts = dependency.evidence || [];
@@ -464,6 +485,68 @@
       parts.push(collapsibleRelationships(exact, 5, "Show relationships"));
     }
     replaceInspector(parts);
+  }
+
+  function summaryCountLabel(count, singular, plural) {
+    return count + " " + (count === 1 ? singular : plural);
+  }
+
+  function relationshipGroupItem(group) {
+    const item = element("li", undefined, "relationship summary-relationship");
+    const heading = element("div", group.kind + " · " + summaryCountLabel(group.count, "relationship", "relationships"), "symbol");
+    appendCertainty(heading, group.certainty);
+    item.append(
+      heading,
+      element("div", "Example: " + group.exampleFrom + " → " + group.exampleTo, "muted summary-example"),
+    );
+    return item;
+  }
+
+  function renderRelationshipSummary(title, summary) {
+    if (!summary || summary.count === 0) return [];
+    return section(title + " (" + summary.count + ")", summary.groups || [], relationshipGroupItem);
+  }
+
+  function pathBranchItem(branch) {
+    const item = element("li", undefined, "relationship summary-relationship");
+    const heading = element("div", branch.from + " → " + branch.to + " · " + branch.kind, "symbol");
+    appendCertainty(heading, branch.certainty);
+    item.appendChild(heading);
+    item.appendChild(element("div", summaryCountLabel(branch.pathCount, "path", "paths") +
+      (branch.uncertainPathCount ? " · " + branch.uncertainPathCount + " uncertain" : ""), "muted"));
+    return item;
+  }
+
+  function renderPathSummary(title, summary) {
+    if (!summary || summary.pathCount === 0) return [];
+    const parts = [element("h3", title + " (" + summary.pathCount + ")")];
+    if (summary.uncertainPathCount) parts.push(element("p", summary.uncertainPathCount + " paths include uncertainty.", "muted"));
+    const list = element("ul");
+    (summary.branches || []).forEach((branch) => list.appendChild(pathBranchItem(branch)));
+    parts.push(list);
+    if (summary.terminalPathCount) parts.push(element("p", summary.terminalPathCount + " terminal paths.", "muted"));
+    return parts;
+  }
+
+  function packagePathBranchItem(branch) {
+    const item = element("li", undefined, "relationship summary-relationship");
+    const heading = element("div", branch.from + " → " + branch.to, "symbol");
+    appendCertainty(heading, branch.certainty);
+    item.appendChild(heading);
+    item.appendChild(element("div", summaryCountLabel(branch.pathCount, "path", "paths") +
+      (branch.uncertainPathCount ? " · " + branch.uncertainPathCount + " uncertain" : ""), "muted"));
+    return item;
+  }
+
+  function renderPackagePathSummary(summary) {
+    if (!summary || summary.pathCount === 0) return [];
+    const parts = [element("h3", "Dependency paths (" + summary.pathCount + ")")];
+    if (summary.uncertainPathCount) parts.push(element("p", summary.uncertainPathCount + " paths include uncertainty.", "muted"));
+    const list = element("ul");
+    (summary.branches || []).forEach((branch) => list.appendChild(packagePathBranchItem(branch)));
+    parts.push(list);
+    if (summary.terminalPathCount) parts.push(element("p", summary.terminalPathCount + " terminal paths.", "muted"));
+    return parts;
   }
 
   async function showDependency(from, to) {
@@ -614,13 +697,19 @@
       element("p", result.node.documentation || "No type documentation.", result.node.documentation ? "documentation" : "muted"),
     ];
     parts.push(...nonEmptySection("Methods", detail.methods, symbolItem));
-    parts.push(...nonEmptySection("Dependencies", detail.dependencies, typeTargetItem));
-    parts.push(...nonEmptySection("Dependents", detail.dependents, typeSourceItem));
+    parts.push(...renderRelationshipSummary("Direct dependencies", result.directDependenciesSummary));
+    parts.push(...renderRelationshipSummary("Direct dependents", result.directDependentsSummary));
+    parts.push(...renderPathSummary("Transitive paths", result.transitivePathsSummary));
 
-    const exactParts = [];
-    exactParts.push(...nonEmptySection("Direct dependencies", detail.directDependencies, (value) => symbolRelationshipItem(value, false, true)));
-    exactParts.push(...nonEmptySection("Direct dependents", detail.directDependents, (value) => symbolRelationshipItem(value, true, true)));
-    if (exactParts.length > 0) parts.push(disclosure("Advanced · Exact relationships", exactParts));
+    const exactCount = detail.dependencies.length + detail.dependents.length + detail.directDependencies.length + detail.directDependents.length;
+    if (exactCount > 0) parts.push(lazyDisclosure("Advanced · Exact relationships", () => {
+      const exactParts = [];
+      exactParts.push(...nonEmptySection("Type dependencies", detail.dependencies, typeTargetItem));
+      exactParts.push(...nonEmptySection("Type dependents", detail.dependents, typeSourceItem));
+      exactParts.push(...nonEmptySection("Direct dependencies", detail.directDependencies, (value) => symbolRelationshipItem(value, false, true)));
+      exactParts.push(...nonEmptySection("Direct dependents", detail.directDependents, (value) => symbolRelationshipItem(value, true, true)));
+      return exactParts;
+    }));
     replaceInspector(parts);
   }
 
@@ -993,17 +1082,24 @@
       element("p", result.node.documentation || "No function documentation.", result.node.documentation ? "documentation" : "muted"),
     );
 
-    const relationshipParts = [];
-    relationshipParts.push(...nonEmptySection("Calls", detail.calls, (value) => symbolRelationshipItem(value, false)));
-    relationshipParts.push(...nonEmptySection("Called by", detail.calledBy, (value) => symbolRelationshipItem(value, true)));
-    relationshipParts.push(...nonEmptySection("Accepts", detail.accepts, (value) => symbolRelationshipItem(value, false)));
-    relationshipParts.push(...nonEmptySection("Returns", detail.returns, (value) => symbolRelationshipItem(value, false)));
-    relationshipParts.push(...nonEmptySection("Implements", detail.implements, (value) => symbolRelationshipItem(value, false)));
-    relationshipParts.push(...nonEmptySection("Implemented by", detail.implementedBy, (value) => symbolRelationshipItem(value, true)));
-    if (relationshipParts.length === 0) {
+    parts.push(...renderRelationshipSummary("Direct dependencies", result.directDependenciesSummary));
+    parts.push(...renderRelationshipSummary("Direct dependents", result.directDependentsSummary));
+    parts.push(...renderPathSummary("Transitive paths", result.transitivePathsSummary));
+
+    const relationshipCount = detail.calls.length + detail.calledBy.length + detail.accepts.length + detail.returns.length + detail.implements.length + detail.implementedBy.length;
+    if (relationshipCount === 0) {
       parts.push(element("p", "No semantic relationships.", "muted semantic-empty"));
     } else {
-      parts.push(...relationshipParts);
+      parts.push(lazyDisclosure("Advanced · Exact relationships", () => {
+        const relationshipParts = [];
+        relationshipParts.push(...nonEmptySection("Calls", detail.calls, (value) => symbolRelationshipItem(value, false)));
+        relationshipParts.push(...nonEmptySection("Called by", detail.calledBy, (value) => symbolRelationshipItem(value, true)));
+        relationshipParts.push(...nonEmptySection("Accepts", detail.accepts, (value) => symbolRelationshipItem(value, false)));
+        relationshipParts.push(...nonEmptySection("Returns", detail.returns, (value) => symbolRelationshipItem(value, false)));
+        relationshipParts.push(...nonEmptySection("Implements", detail.implements, (value) => symbolRelationshipItem(value, false)));
+        relationshipParts.push(...nonEmptySection("Implemented by", detail.implementedBy, (value) => symbolRelationshipItem(value, true)));
+        return relationshipParts;
+      }));
     }
     replaceInspector(parts);
   }
