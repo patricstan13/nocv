@@ -324,6 +324,10 @@ func printNodeInspection(out io.Writer, g *graph.Graph, id graph.SymbolRef) {
 		printRelationshipGroupsForNode(out, "Direct semantic dependencies", query.DirectDependencies(g, id), false, "dependencies", id)
 		printRelationshipGroupsForNode(out, "Direct semantic dependents", query.DirectDependents(g, id), true, "dependents", id)
 	}
+
+	if inspection.Type != nil || inspection.Function != nil {
+		printTransitivePathSummary(out, g, id)
+	}
 }
 
 func printDocumentation(out io.Writer, documentation, indent string) {
@@ -427,6 +431,35 @@ func printRelationshipGroupsForNode(out io.Writer, heading string, relationships
 		fmt.Fprintf(out, "    example: %s\n", example)
 	}
 	fmt.Fprintf(out, "  Full list:\n    nocv node %s <pattern> %s\n", command, id)
+}
+
+func printTransitivePathSummary(out io.Writer, g *graph.Graph, id graph.SymbolRef) {
+	results := query.TransitiveDependents(g, id)
+	var paths []query.SemanticPath
+	for _, result := range results {
+		paths = append(paths, result.Paths...)
+	}
+
+	level := query.GroupPathBranches(paths, nil, 0, query.PathFromEnd)
+	fmt.Fprintf(out, "\nTransitive paths: %d\n", level.PathCount)
+	if level.PathCount == 0 {
+		fmt.Fprintln(out, "  (none)")
+		return
+	}
+	if level.UncertainPathCount > 0 {
+		fmt.Fprintf(out, "  uncertain paths: %d\n", level.UncertainPathCount)
+	}
+	if len(level.TerminalPathIndexes) > 0 {
+		fmt.Fprintf(out, "  terminal paths: %d\n", len(level.TerminalPathIndexes))
+	}
+	for _, branch := range level.Branches {
+		fmt.Fprintf(out, "  %s %s%s -> %s\n", branch.Step.From, branch.Step.Kind, certaintyMarker(branch.Step.Certainty), branch.Step.To)
+		fmt.Fprintf(out, "    paths: %d\n", branch.PathCount)
+		if branch.UncertainPathCount > 0 {
+			fmt.Fprintf(out, "    uncertain paths: %d\n", branch.UncertainPathCount)
+		}
+	}
+	fmt.Fprintf(out, "  Full paths:\n    nocv node transitive-dependents <pattern> %s\n", id)
 }
 
 func certaintyMarker(certainty graph.RelationshipCertainty) string {
