@@ -325,7 +325,7 @@ func executeGoPackageCommand(out io.Writer, g *graph.Graph, invocation invocatio
 		if err := requirePackage(g, to); err != nil {
 			return err
 		}
-		printDependencyInspection(out, g, from, to)
+		printDependencyInspection(out, g, invocation.pattern, from, to)
 	default:
 		return fmt.Errorf("unknown Go package command %q", invocation.name)
 	}

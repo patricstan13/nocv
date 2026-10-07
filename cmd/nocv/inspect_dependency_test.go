@@ -13,7 +13,7 @@ import (
 	"nocv/query"
 )
 
-func TestDependencyInspectionDrillsThroughMixedTransitiveFixture(t *testing.T) {
+func TestDependencyInspectionSummarizesMixedTransitiveFixture(t *testing.T) {
 	g, err := goanalyzer.Load(context.Background(), testutil.GoProjectDir(t), "./typeview/...")
 	if err != nil {
 		t.Fatalf("Load(): %v", err)
@@ -27,37 +27,36 @@ func TestDependencyInspectionDrillsThroughMixedTransitiveFixture(t *testing.T) {
 	beforeExact := query.DirectDependencies(g, "example.com/shop/typeview/service::Service::Create")
 
 	var first bytes.Buffer
-	printDependencyInspection(&first, g, app, repository)
+	printDependencyInspection(&first, g, "./typeview/...", app, repository)
 	output := first.String()
 	for _, want := range []string{
 		"Dependency inspection:",
-		"PACKAGE PATH 1",
-		"PACKAGE PATH 2",
-		"example.com/shop/typeview/app -> example.com/shop/typeview/service",
-		"example.com/shop/typeview/service -> example.com/shop/typeview/repository",
-		"example.com/shop/typeview/app::Run calls -> example.com/shop/typeview/service::Service::Create",
-		"example.com/shop/typeview/service::Service -> example.com/shop/typeview/repository::Repository",
-		"TYPE",
+		"Direct dependency:\n  " + string(app) + " -> " + string(repository),
 		"EXACT ONLY",
+		"example.com/shop/typeview/app::Run accepts -> example.com/shop/typeview/repository::Repository",
+		"Package paths: 2",
+		"example.com/shop/typeview/app -> example.com/shop/typeview/repository",
+		"example.com/shop/typeview/app -> example.com/shop/typeview/service",
+		"paths: 1",
+		"Full paths:",
+		"nocv go package dependency-paths ./typeview/... " + string(app) + " " + string(repository),
 	} {
 		if !strings.Contains(output, want) {
 			t.Errorf("inspection output lacks %q:\n%s", want, output)
 		}
 	}
-	packageOnly := "example.com/shop/typeview/app::Run calls -> example.com/shop/typeview/service::Service::Create"
-	if count := strings.Count(output, packageOnly); count != 1 {
-		t.Errorf("package-function evidence rendered %d times, want only package evidence once:\n%s", count, output)
+	for _, unwanted := range []string{"PACKAGE PATH", "HOP", "typeview/service::Service::Create calls ->"} {
+		if strings.Contains(output, unwanted) {
+			t.Errorf("summary unexpectedly contains %q:\n%s", unwanted, output)
+		}
 	}
-	typeBacked := "example.com/shop/typeview/service::Service::Create calls -> example.com/shop/typeview/repository::Repository::Save"
-	if count := strings.Count(output, typeBacked); count != 1 {
-		t.Errorf("type-backed evidence rendered %d times, want one classified occurrence:\n%s", count, output)
-	}
-	if strings.Contains(output, " imports -> ") {
-		t.Errorf("import leaked into semantic inspection:\n%s", output)
+	summary := output[strings.Index(output, "Package paths:"):]
+	if strings.Contains(summary, "::") || strings.Contains(summary, "evidence:") {
+		t.Errorf("path-family summary dumped exact evidence:\n%s", summary)
 	}
 
 	var second bytes.Buffer
-	printDependencyInspection(&second, g, app, repository)
+	printDependencyInspection(&second, g, "./typeview/...", app, repository)
 	if second.String() != output {
 		t.Fatalf("inspection rendering is not deterministic:\nfirst:\n%s\nsecond:\n%s", output, second.String())
 	}
@@ -90,9 +89,10 @@ func TestDependencyInspectionShowsMultipleTypesInterfaceAndPackageFunctionEviden
 	}
 
 	var out bytes.Buffer
-	printDependencyInspection(&out, g, "service", "repository")
+	printDependencyInspection(&out, g, "./...", "service", "repository")
 	output := out.String()
 	for _, want := range []string{
+		"Direct dependency:",
 		"service::Migrate calls -> repository::Repository::Save",
 		"service::Service -> repository::Repository",
 		"service::Service implements -> repository::Repository",
@@ -102,6 +102,9 @@ func TestDependencyInspectionShowsMultipleTypesInterfaceAndPackageFunctionEviden
 		if !strings.Contains(output, want) {
 			t.Errorf("inspection output lacks %q:\n%s", want, output)
 		}
+	}
+	if !strings.Contains(output, "Package paths: 1") || !strings.Contains(output, "nocv go package dependency-paths ./... service repository") {
+		t.Errorf("inspection lacks package path summary and drill-down:\n%s", output)
 	}
 	if strings.Count(output, "service::Migrate calls -> repository::Repository::Save") != 1 {
 		t.Errorf("package-function fact should remain package-only:\n%s", output)
@@ -114,7 +117,7 @@ func TestDependencyInspectionShowsMultipleTypesInterfaceAndPackageFunctionEviden
 func TestDependencyInspectionStopsWhenNoPackageDependencyExists(t *testing.T) {
 	g, ids := cliFixture(t)
 	var out bytes.Buffer
-	printDependencyInspection(&out, g, ids.packageB, ids.packageA)
+	printDependencyInspection(&out, g, "./...", ids.packageB, ids.packageA)
 	output := out.String()
 	if !strings.Contains(output, "PACKAGE\n  no dependency") {
 		t.Fatalf("missing clean no-dependency result:\n%s", output)

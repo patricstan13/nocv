@@ -239,7 +239,7 @@ func printTypeDependencyPaths(out io.Writer, g *graph.Graph, from, to graph.Symb
 	}
 }
 
-func printDependencyInspection(out io.Writer, g *graph.Graph, from, to graph.SymbolRef) {
+func printDependencyInspection(out io.Writer, g *graph.Graph, pattern string, from, to graph.SymbolRef) {
 	fmt.Fprintf(out, "Dependency inspection:\n  %s -> %s\n", from, to)
 	paths := query.PackageDependencyPaths(g, from, to)
 	if len(paths) == 0 {
@@ -247,38 +247,73 @@ func printDependencyInspection(out io.Writer, g *graph.Graph, from, to graph.Sym
 		return
 	}
 
-	for pathIndex, path := range paths {
-		fmt.Fprintf(out, "\nPACKAGE PATH %d\n", pathIndex+1)
-		fmt.Fprintf(out, "  %s\n", path.Packages[0])
-		for _, packageID := range path.Packages[1:] {
-			fmt.Fprintf(out, "  -> %s\n", packageID)
+	fmt.Fprintln(out, "\nDirect dependency:")
+	direct, exists := directPackageDependency(paths, from, to)
+	if !exists {
+		fmt.Fprintln(out, "  (none)")
+	} else {
+		fmt.Fprintf(out, "  %s ->%s %s\n", direct.From, certaintyMarker(direct.Certainty), direct.To)
+		printPackageDependencyEvidence(out, g, direct)
+	}
+
+	printPackagePathSummary(out, paths, pattern, from, to)
+}
+
+func directPackageDependency(paths []query.PackageDependencyPath, from, to graph.SymbolRef) (query.PackageDependency, bool) {
+	for _, path := range paths {
+		if len(path.Steps) == 1 && path.Steps[0].From == from && path.Steps[0].To == to {
+			return path.Steps[0], true
 		}
+	}
+	return query.PackageDependency{}, false
+}
 
-		for stepIndex, step := range path.Steps {
-			fmt.Fprintf(out, "\nHOP %d\n  %s -> %s\n", stepIndex+1, step.From, step.To)
-			inspection := query.InspectPackageDependency(g, step)
-			fmt.Fprintln(out, "\n  TYPE")
-			if len(inspection.TypeDependencies) == 0 {
-				fmt.Fprintln(out, "    (none)")
-			} else {
-				for _, dependency := range inspection.TypeDependencies {
-					fmt.Fprintf(out, "    %s ->%s %s\n", dependency.From, certaintyMarker(dependency.Certainty), dependency.To)
-					fmt.Fprintln(out, "      evidence:")
-					for _, evidence := range dependency.Evidence {
-						fmt.Fprintf(out, "        %s %s%s -> %s\n", evidence.From, evidence.Kind, certaintyMarker(evidence.Certainty), evidence.To)
-					}
-				}
-			}
-
-			fmt.Fprintln(out, "\n  EXACT ONLY")
-			if len(inspection.ExactOnly) == 0 {
-				fmt.Fprintln(out, "    (none)")
-			}
-			for _, evidence := range inspection.ExactOnly {
-				fmt.Fprintf(out, "    %s %s%s -> %s\n", evidence.From, evidence.Kind, certaintyMarker(evidence.Certainty), evidence.To)
+func printPackageDependencyEvidence(out io.Writer, g *graph.Graph, dependency query.PackageDependency) {
+	inspection := query.InspectPackageDependency(g, dependency)
+	fmt.Fprintln(out, "\n  TYPE")
+	if len(inspection.TypeDependencies) == 0 {
+		fmt.Fprintln(out, "    (none)")
+	} else {
+		for _, dependency := range inspection.TypeDependencies {
+			fmt.Fprintf(out, "    %s ->%s %s\n", dependency.From, certaintyMarker(dependency.Certainty), dependency.To)
+			fmt.Fprintln(out, "      evidence:")
+			for _, evidence := range dependency.Evidence {
+				fmt.Fprintf(out, "        %s %s%s -> %s\n", evidence.From, evidence.Kind, certaintyMarker(evidence.Certainty), evidence.To)
 			}
 		}
 	}
+
+	fmt.Fprintln(out, "\n  EXACT ONLY")
+	if len(inspection.ExactOnly) == 0 {
+		fmt.Fprintln(out, "    (none)")
+	}
+	for _, evidence := range inspection.ExactOnly {
+		fmt.Fprintf(out, "    %s %s%s -> %s\n", evidence.From, evidence.Kind, certaintyMarker(evidence.Certainty), evidence.To)
+	}
+}
+
+func printPackagePathSummary(
+	out io.Writer,
+	paths []query.PackageDependencyPath,
+	pattern string,
+	from, to graph.SymbolRef,
+) {
+	level := query.GroupPackagePathBranches(paths, nil, 0)
+	fmt.Fprintf(out, "\nPackage paths: %d\n", level.PathCount)
+	if level.UncertainPathCount > 0 {
+		fmt.Fprintf(out, "  uncertain paths: %d\n", level.UncertainPathCount)
+	}
+	if len(level.TerminalPathIndexes) > 0 {
+		fmt.Fprintf(out, "  terminal paths: %d\n", len(level.TerminalPathIndexes))
+	}
+	for _, branch := range level.Branches {
+		fmt.Fprintf(out, "  %s ->%s %s\n", branch.Step.From, certaintyMarker(branch.Step.Certainty), branch.Step.To)
+		fmt.Fprintf(out, "    paths: %d\n", branch.PathCount)
+		if branch.UncertainPathCount > 0 {
+			fmt.Fprintf(out, "    uncertain paths: %d\n", branch.UncertainPathCount)
+		}
+	}
+	fmt.Fprintf(out, "  Full paths:\n    nocv go package dependency-paths %s %s %s\n", pattern, from, to)
 }
 
 func printNodeInspection(out io.Writer, g *graph.Graph, id graph.SymbolRef) {
