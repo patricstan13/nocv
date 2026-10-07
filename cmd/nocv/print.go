@@ -317,17 +317,12 @@ func printNodeInspection(out io.Writer, g *graph.Graph, id graph.SymbolRef) {
 		printSymbolSummaryList(out, "Methods", detail.Methods)
 		printTypeDependenciesForNode(out, "Type dependencies", detail.Dependencies, false)
 		printTypeDependenciesForNode(out, "Type dependents", detail.Dependents, true)
-		printSymbolRelationshipsForNode(out, "Direct semantic dependencies", detail.DirectDependencies, false)
-		printSymbolRelationshipsForNode(out, "Direct semantic dependents", detail.DirectDependents, true)
+		printRelationshipGroupsForNode(out, "Direct semantic dependencies", query.DirectDependencies(g, id), false, "dependencies", id)
+		printRelationshipGroupsForNode(out, "Direct semantic dependents", query.DirectDependents(g, id), true, "dependents", id)
 
 	case inspection.Function != nil:
-		detail := inspection.Function
-		printSymbolRelationshipsForNode(out, "Calls", detail.Calls, false)
-		printSymbolRelationshipsForNode(out, "Called by", detail.CalledBy, true)
-		printSymbolRelationshipsForNode(out, "Accepts", detail.Accepts, false)
-		printSymbolRelationshipsForNode(out, "Returns", detail.Returns, false)
-		printSymbolRelationshipsForNode(out, "Implements", detail.Implements, false)
-		printSymbolRelationshipsForNode(out, "Implemented by", detail.ImplementedBy, true)
+		printRelationshipGroupsForNode(out, "Direct semantic dependencies", query.DirectDependencies(g, id), false, "dependencies", id)
+		printRelationshipGroupsForNode(out, "Direct semantic dependents", query.DirectDependents(g, id), true, "dependents", id)
 	}
 }
 
@@ -417,19 +412,21 @@ func printRelationshipsForNode(out io.Writer, heading string, relationships []qu
 	}
 }
 
-func printSymbolRelationshipsForNode(out io.Writer, heading string, relationships []query.SymbolRelationship, incoming bool) {
-	fmt.Fprintf(out, "\n%s:\n", heading)
+func printRelationshipGroupsForNode(out io.Writer, heading string, relationships []query.Relationship, incoming bool, command string, id graph.SymbolRef) {
+	fmt.Fprintf(out, "\n%s: %d\n", heading, len(relationships))
 	if len(relationships) == 0 {
 		fmt.Fprintln(out, "  (none)")
 		return
 	}
-	for _, relationship := range relationships {
+	for _, group := range query.GroupRelationships(relationships) {
+		fmt.Fprintf(out, "  %s%s: %d\n", group.Kind, certaintyMarker(group.Certainty), group.Count)
+		example := group.Example.To
 		if incoming {
-			fmt.Fprintf(out, "  <- %s%s %s\n", relationship.Kind, certaintyMarker(relationship.Certainty), relationship.From.Ref)
-		} else {
-			fmt.Fprintf(out, "  %s%s -> %s\n", relationship.Kind, certaintyMarker(relationship.Certainty), relationship.To.Ref)
+			example = group.Example.From
 		}
+		fmt.Fprintf(out, "    example: %s\n", example)
 	}
+	fmt.Fprintf(out, "  Full list:\n    nocv node %s <pattern> %s\n", command, id)
 }
 
 func certaintyMarker(certainty graph.RelationshipCertainty) string {
